@@ -4,8 +4,10 @@ import helmet from "helmet";
 import morgan from "morgan";
 
 import healthRoutes from "./routes/health.routes";
-import notFoundMiddleware from "./middlewares/notFound.middleware";
-import errorMiddleware from "./middlewares/error.middleware";
+import {
+  errorMiddleware,
+  notFoundMiddleware,
+} from "./shared/middlewares";
 
 import { userRouter } from "./modules/user";
 
@@ -27,11 +29,5 @@ app.use(notFoundMiddleware);
 // Global error middleware
 app.use(errorMiddleware);
 
-app.get("/",(_req,res)=>{
-    res.status(200).json({
-        success:true,
-        message:"CanvasFlow Backend is running"
-    })
-})
 
 export default app;
