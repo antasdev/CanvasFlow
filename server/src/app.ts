@@ -7,6 +7,10 @@ import healthRoutes from "./routes/health.routes";
 import notFoundMiddleware from "./middlewares/notFound.middleware";
 import errorMiddleware from "./middlewares/error.middleware";
 
+import { userRouter } from "./modules/user";
+
+
+
 const app:Application=express();
 
 app.use(express.json());
@@ -15,6 +19,7 @@ app.use(helmet());
 app.use(morgan("dev"));
 
 app.use("/api/v1",healthRoutes)
+app.use("/api/v1/users", userRouter);
 
 //404 middleware
 app.use(notFoundMiddleware);
