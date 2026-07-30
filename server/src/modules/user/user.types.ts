@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { HydratedDocument, Types } from "mongoose";
 
 /**
  * User Roles
@@ -83,3 +83,5 @@ export type User = {
   createdAt: Date;
   updatedAt: Date;
 };
+
+export type UserDocument = HydratedDocument<User>;
