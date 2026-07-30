@@ -10,7 +10,7 @@ import {
 } from "./shared/middlewares";
 
 import { userRouter } from "./modules/user";
-
+import { authRouter } from "./modules/auth";
 
 
 const app:Application=express();
@@ -20,7 +20,10 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan("dev"));
 
-app.use("/api/v1",healthRoutes)
+app.use("/api/v1", healthRoutes);
+
+app.use("/api/v1/auth", authRouter);
+
 app.use("/api/v1/users", userRouter);
 
 //404 middleware
