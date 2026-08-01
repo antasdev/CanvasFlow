@@ -28,4 +28,7 @@ export const Messages = {
   FORBIDDEN: "Access denied.",
   EMAIL_ALREADY_EXISTS: "Email is already registered.",
   EMAIL_VERIFIED: "Email verified successfully.",
+
+  // Board
+  BOARD_NOT_FOUND: "Board not found.",
 };
