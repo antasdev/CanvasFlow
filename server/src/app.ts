@@ -11,7 +11,7 @@ import {
 
 import { userRouter } from "./modules/user";
 import { authRouter } from "./modules/auth";
-
+import { workspaceRouter } from "./modules/workspace";
 
 const app:Application=express();
 
@@ -25,6 +25,8 @@ app.use("/api/v1", healthRoutes);
 app.use("/api/v1/auth", authRouter);
 
 app.use("/api/v1/users", userRouter);
+
+app.use("/api/v1/workspaces", workspaceRouter);
 
 //404 middleware
 app.use(notFoundMiddleware);

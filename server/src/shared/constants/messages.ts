@@ -15,6 +15,13 @@ export const Messages = {
   USER_FOUND: "User fetched successfully.",
   USER_NOT_FOUND: "User not found.",
 
+  // Workspace
+  WORKSPACE_CREATED: "Workspace created successfully.",
+  WORKSPACE_UPDATED: "Workspace updated successfully.",
+  WORKSPACE_DELETED: "Workspace deleted successfully.",
+  WORKSPACE_FOUND: "Workspace fetched successfully.",
+  WORKSPACE_NOT_FOUND: "Workspace not found.",
+
   // Authentication
   INVALID_CREDENTIALS: "Invalid email or password.",
   UNAUTHORIZED: "Unauthorized access.",

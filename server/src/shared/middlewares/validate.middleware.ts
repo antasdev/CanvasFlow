@@ -10,7 +10,11 @@ export const validate =
     res: Response,
     next: NextFunction
   ): void => {
-    const result = schema.safeParse(req.body);
+    const result = schema.safeParse({
+      body: req.body,
+      params: req.params,
+      query: req.query,
+    });
 
     if (!result.success) {
       res.status(HttpStatus.BAD_REQUEST).json({
@@ -22,7 +26,23 @@ export const validate =
       return;
     }
 
-    req.body = result.data;
+    const validated = result.data as {
+      body?: Request["body"];
+      params?: Request["params"];
+      query?: Request["query"];
+    };
+
+    if (validated.body !== undefined) {
+      req.body = validated.body;
+    }
+
+    if (validated.params !== undefined) {
+      req.params = validated.params;
+    }
+
+    if (validated.query !== undefined) {
+      req.query = validated.query;
+    }
 
     next();
   };
