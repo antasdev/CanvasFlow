@@ -31,4 +31,7 @@ export const Messages = {
 
   // Board
   BOARD_NOT_FOUND: "Board not found.",
+
+  // Canvas
+  CANVAS_NOT_FOUND: "Canvas not found.",
 };
