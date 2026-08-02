@@ -14,6 +14,7 @@ import { authRouter } from "./modules/auth";
 import { workspaceRouter } from "./modules/workspace";
 import { boardRouter } from "@/modules/board";
 import { canvasRouter } from "@/modules/canvas";
+import { shapeRouter } from "@/modules/shape";
 
 
 const app:Application=express();
@@ -34,6 +35,8 @@ app.use("/api/v1/workspaces", workspaceRouter);
 app.use("/api/v1/boards", boardRouter);
 
 app.use("/api/v1/canvases", canvasRouter);
+
+app.use("/api/v1/shapes", shapeRouter);
 
 //404 middleware
 app.use(notFoundMiddleware);

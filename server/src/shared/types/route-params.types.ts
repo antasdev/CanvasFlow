@@ -14,3 +14,7 @@ export type CanvasParams = {
   boardId: string;
   canvasId: string;
 };
+
+export type ShapeCanvasParams = {
+  canvasId: string;
+};

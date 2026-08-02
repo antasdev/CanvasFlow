@@ -34,4 +34,8 @@ export const Messages = {
 
   // Canvas
   CANVAS_NOT_FOUND: "Canvas not found.",
+
+  // Shape
+  SHAPE_NOT_FOUND: "Shape not found.",
+  SHAPE_DELETED: "Shape deleted successfully.",
 };

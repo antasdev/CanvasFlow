@@ -1,0 +1,70 @@
+import { HydratedDocument, Types } from "mongoose";
+
+/**
+ * Supported Shape Types
+ */
+export enum ShapeType {
+  RECTANGLE = "RECTANGLE",
+  CIRCLE = "CIRCLE",
+  TEXT = "TEXT",
+  LINE = "LINE",
+  ARROW = "ARROW",
+  IMAGE = "IMAGE",
+  STICKY_NOTE = "STICKY_NOTE",
+}
+
+/**
+ * Shape Entity
+ */
+export type Shape = {
+  _id: Types.ObjectId;
+
+  canvasId: Types.ObjectId;
+
+  type: ShapeType;
+
+  x: number;
+  y: number;
+
+  width: number;
+  height: number;
+
+  rotation: number;
+
+  zIndex: number;
+
+  style: Record<string, unknown>;
+
+  createdBy: Types.ObjectId;
+
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * Data used to create a Shape
+ */
+export type CreateShapeData = {
+  canvasId: Types.ObjectId;
+
+  type: ShapeType;
+
+  x: number;
+  y: number;
+
+  width: number;
+  height: number;
+
+  rotation?: number;
+
+  zIndex: number;
+
+  style?: Record<string, unknown>;
+
+  createdBy: Types.ObjectId;
+};
+
+/**
+ * Shape Document
+ */
+export type ShapeDocument = HydratedDocument<Shape>;
