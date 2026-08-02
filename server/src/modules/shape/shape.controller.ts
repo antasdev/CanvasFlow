@@ -22,7 +22,7 @@ export class ShapeController {
             req.user!.userId
         );
 
-        const shape =
+        const result =
             await shapeService.createShape(
                 createdBy,
                 req.body
@@ -30,7 +30,7 @@ export class ShapeController {
 
         res.status(HttpStatus.CREATED).json({
             success: true,
-            data: shape,
+            data: result.shape,
         });
     }
 
@@ -78,7 +78,7 @@ export class ShapeController {
             req.params.id
         );
 
-        const shape =
+        const result =
             await shapeService.updateShape(
                 id,
                 req.body
@@ -86,7 +86,7 @@ export class ShapeController {
 
         res.status(HttpStatus.OK).json({
             success: true,
-            data: shape,
+            data: result.shape,
         });
     }
 

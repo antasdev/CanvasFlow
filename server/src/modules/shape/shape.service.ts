@@ -38,11 +38,16 @@ export class ShapeService {
       ? highestShape.zIndex + 1
       : 1;
 
-    return shapeRepository.create({
+    const shape = await shapeRepository.create({
       ...dto,
       createdBy,
       zIndex,
     });
+
+    return {
+      shape,
+      boardId: canvas.boardId,
+    };
   }
 
   async getShapeById(id: Types.ObjectId) {
@@ -81,15 +86,40 @@ export class ShapeService {
       );
     }
 
-    return shapeRepository.updateById(
-      id,
-      dto
-    );
+    const updatedShape =
+      await shapeRepository.updateById(
+        id,
+        dto
+      );
+
+    if (!updatedShape) {
+      throw new ApiError(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        "Failed to update shape."
+      );
+    }
+
+    const canvas =
+      await canvasRepository.findById(
+        shape.canvasId
+      );
+
+    if (!canvas) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.CANVAS_NOT_FOUND
+      );
+    }
+
+    return {
+      shape: updatedShape,
+      boardId: canvas.boardId,
+    };
   }
 
   async deleteShape(
     id: Types.ObjectId
-  ): Promise<void> {
+  ) {
     const shape =
       await shapeRepository.findById(id);
 
@@ -100,7 +130,23 @@ export class ShapeService {
       );
     }
 
+    const canvas =
+      await canvasRepository.findById(
+        shape.canvasId
+      );
+
+    if (!canvas) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.CANVAS_NOT_FOUND
+      );
+    }
+
     await shapeRepository.deleteById(id);
+
+    return {
+      boardId: canvas.boardId,
+    };
   }
 }
 

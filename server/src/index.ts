@@ -1,18 +1,29 @@
+import { createServer } from "http";
+
+import mongoose from "mongoose";
+
 import app from "./app";
 import env from "./config/env";
 import connectDatabase from "./config/database";
 
+import { initializeSocket } from "./socket";
 
-const startServer = async ():Promise<void>=>{
+const httpServer = createServer(app);
+
+const startServer = async (): Promise<void> => {
   await connectDatabase();
-  app.listen(env.PORT,()=>{
-    console.log(`server running on http://localhost:${env.PORT}`);
+
+  initializeSocket(httpServer);
+
+  httpServer.listen(env.PORT, () => {
+    console.log(
+      `Server running on http://localhost:${env.PORT}`
+    );
   });
 };
 
 startServer();
 
-import mongoose from "mongoose";
 
 // Listen for the SIGINT signal (triggered when we press Ctrl + C)
 process.on("SIGINT", async () => {
