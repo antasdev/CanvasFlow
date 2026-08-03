@@ -7,6 +7,8 @@ export const SocketEvents = {
 
   CANVAS_JOIN: "canvas:join",
   CANVAS_LEAVE: "canvas:leave",
+  
+  CANVAS_SYNC: "canvas:sync",
 
   SHAPE_CREATE: "shape:create",
   SHAPE_CREATED: "shape:created",
@@ -17,11 +19,13 @@ export const SocketEvents = {
   SHAPE_DELETE: "shape:delete",
   SHAPE_DELETED: "shape:deleted",
 
+  /**
+   * Presence
+   */
   CURSOR_MOVE: "cursor:move",
-  CURSOR_UPDATE: "cursor:update",
+  CURSOR_MOVED: "cursor:moved",
 
   SELECTION_UPDATE: "selection:update",
-
   VIEWPORT_UPDATE: "viewport:update",
 
   USER_JOINED: "user:joined",

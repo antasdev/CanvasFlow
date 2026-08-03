@@ -13,7 +13,7 @@ export class AuthRepository {
         "security.lastLogin": new Date(),
       },
       {
-        new: true,
+         returnDocument: "after",
       }
     );
   }

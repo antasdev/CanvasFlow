@@ -15,6 +15,8 @@ export type SocketData = {
 
 export type JoinBoardPayload = {
     boardId: string;
+
+    canvasId: string;
 };
 
 
@@ -43,13 +45,17 @@ export type ClientToServerEvents = {
     "shape:delete": (
         payload: DeleteShapePayload
     ) => void;
+
+    "cursor:move": (
+        payload: CursorMovePayload
+    ) => void;
 };
 
 
 export type ServerToClientEvents = {
-    "shape:created": (shape: Shape) => void;
-
-    error: (message: string) => void;
+    "shape:created": (
+        shape: Shape
+    ) => void;
 
     "shape:updated": (
         shape: Shape
@@ -57,6 +63,26 @@ export type ServerToClientEvents = {
 
     "shape:deleted": (
         payload: DeleteShapePayload
+    ) => void;
+
+    "cursor:moved": (
+        payload: CursorMovedPayload
+    ) => void;
+
+    "canvas:sync": (
+        payload: CanvasSyncPayload
+    ) => void;
+
+    "user:joined": (
+        payload: UserJoinedPayload
+    ) => void;
+
+    "user:left": (
+        payload: UserLeftPayload
+    ) => void;
+
+    error: (
+        message: string
     ) => void;
 };
 
@@ -87,4 +113,36 @@ export type UpdateShapePayload = {
  */
 export type DeleteShapePayload = {
     shapeId: string;
+};
+
+export type CanvasSyncPayload = {
+    canvasId: string;
+
+    shapes: Shape[];
+};
+
+export type CursorPosition = {
+    x: number;
+    y: number;
+};
+
+export type CursorMovePayload = {
+    boardId: string;
+    position: CursorPosition;
+};
+
+export type CursorMovedPayload = {
+    boardId: string;
+
+    position: CursorPosition;
+
+    userId: string;
+};
+
+export type UserJoinedPayload = {
+    userId: string;
+};
+
+export type UserLeftPayload = {
+    userId: string;
 };

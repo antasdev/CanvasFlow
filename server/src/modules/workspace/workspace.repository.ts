@@ -8,17 +8,17 @@ import {
   WorkspaceDocument,
 } from "./workspace.types";
 export class WorkspaceRepository {
-async create(
-  data: CreateWorkspaceData,
-  session?: ClientSession
-): Promise<WorkspaceDocument> {
-  const [workspace] = await WorkspaceModel.create(
-    [data],
-    { session }
-  );
+  async create(
+    data: CreateWorkspaceData,
+    session?: ClientSession
+  ): Promise<WorkspaceDocument> {
+    const [workspace] = await WorkspaceModel.create(
+      [data],
+      { session }
+    );
 
-  return workspace;
-}
+    return workspace;
+  }
 
   async findById(
     id: Types.ObjectId
@@ -32,31 +32,31 @@ async create(
     return WorkspaceModel.find({ ownerId });
   }
 
- async updateById(
-  id: Types.ObjectId,
-  data: UpdateWorkspaceDto,
-  session?: ClientSession
-): Promise<WorkspaceDocument | null> {
-  return WorkspaceModel.findByIdAndUpdate(
-    id,
-    data,
-    {
-      new: true,
-      runValidators: true,
-      session,
-    }
-  );
-}
+  async updateById(
+    id: Types.ObjectId,
+    data: UpdateWorkspaceDto,
+    session?: ClientSession
+  ): Promise<WorkspaceDocument | null> {
+    return WorkspaceModel.findByIdAndUpdate(
+      id,
+      data,
+      {
+        returnDocument: "after",
+        runValidators: true,
+        session,
+      }
+    );
+  }
 
   async deleteById(
-  id: Types.ObjectId,
-  session?: ClientSession
-): Promise<WorkspaceDocument | null> {
-  return WorkspaceModel.findByIdAndDelete(
-    id,
-    { session }
-  );
-}
+    id: Types.ObjectId,
+    session?: ClientSession
+  ): Promise<WorkspaceDocument | null> {
+    return WorkspaceModel.findByIdAndDelete(
+      id,
+      { session }
+    );
+  }
 }
 
 export const workspaceRepository = new WorkspaceRepository();

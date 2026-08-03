@@ -53,7 +53,7 @@ export class ShapeRepository {
       id,
       data,
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
         session,
       }
