@@ -40,6 +40,14 @@ authRouter.post(
   )
 );
 
+authRouter.get(
+  "/me",
+  authenticate,
+  asyncHandler(
+    authController.me.bind(authController)
+  )
+);
+
 authRouter.post(
   "/logout",
   authenticate,

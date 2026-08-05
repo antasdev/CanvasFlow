@@ -10,6 +10,9 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "production", "test"])
     .default("development"),
+    
+  CLIENT_URL: z.string().url("CLIENT_URL must be a valid URL"),
+  
 
   MONGODB_URI: z.string().min(1, "MONGODB_URI is required."),
 

@@ -23,22 +23,49 @@ export class AuthController {
       req.body as LoginDto
     );
 
+    res.cookie(
+      "refreshToken",
+      result.tokens.refreshToken,
+      {
+        httpOnly: true,
+        secure: false, // development
+        sameSite: "lax",
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+      },
+    );
+
+    res.status(HttpStatus.OK).json({
+      success: true,
+      data: {
+        user: result.user,
+        accessToken: result.tokens.accessToken,
+      },
+    });
+  }
+
+  async me(req: Request, res: Response): Promise<void> {
+    const user = await authService.getCurrentUser(
+      req.user.userId
+    );
+
+    res.status(HttpStatus.OK).json({
+      success: true,
+      data: {
+        user,
+      },
+    });
+  }
+
+  async refreshToken(req: Request, res: Response): Promise<void> {
+    const result = await authService.refreshToken(
+      req.body
+    );
+
     res.status(HttpStatus.OK).json({
       success: true,
       data: result,
     });
   }
-
-  async refreshToken(req: Request, res: Response): Promise<void> {
-  const result = await authService.refreshToken(
-    req.body
-  );
-
-  res.status(HttpStatus.OK).json({
-    success: true,
-    data: result,
-  });
-}
 
   async logout(req: Request, res: Response): Promise<void> {
     await authService.logout(

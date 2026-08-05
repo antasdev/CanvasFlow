@@ -2,6 +2,8 @@ import express,{Application} from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import cookieParser from "cookie-parser";
+import env from "@/config/env";
 
 import healthRoutes from "./routes/health.routes";
 import {
@@ -20,7 +22,15 @@ import { shapeRouter } from "@/modules/shape";
 const app:Application=express();
 
 app.use(express.json());
-app.use(cors());
+
+app.use(cookieParser());
+
+app.use(
+  cors({
+    origin: env.CLIENT_URL,
+    credentials: true,
+  }),
+);
 app.use(helmet());
 app.use(morgan("dev"));
 

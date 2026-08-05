@@ -22,6 +22,8 @@ import {
 
 import { ApiError } from "@/shared/utils/ApiError";
 import { HttpStatus } from "@/shared/constants/http-status";
+import { sanitizeUser } from "@/shared/utils/sanitize-user";
+import type { SanitizedUser } from "./auth.types";
 
 export class AuthService {
     async register(data: RegisterDto): Promise<AuthResponse> {
@@ -47,6 +49,12 @@ export class AuthService {
             password: hashedPassword,
         });
 
+        const updatedUser =
+            await authRepository.updateLastLogin(
+                user._id.toString()
+            );
+
+
         // Generate JWT payload
         const accessPayload: JwtPayload = {
             userId: user._id.toString(),
@@ -65,7 +73,7 @@ export class AuthService {
         };
 
         return {
-            user,
+            user: sanitizeUser(updatedUser ?? user),
             tokens,
         };
     }
@@ -114,11 +122,23 @@ export class AuthService {
         };
 
         return {
-            user: updatedUser ?? user,
+            user: sanitizeUser(updatedUser ?? user),
             tokens,
         };
     }
 
+    async getCurrentUser(userId: string): Promise<SanitizedUser> {
+        const user = await userRepository.findById(userId);
+
+        if (!user) {
+            throw new ApiError(
+                HttpStatus.UNAUTHORIZED,
+                "User not found."
+            );
+        }
+
+        return sanitizeUser(user);
+    }
     async refreshToken(
         data: RefreshTokenDto
     ): Promise<AuthResponse> {
@@ -185,16 +205,16 @@ export class AuthService {
         };
 
         return {
-            user: updatedUser,
+            user: sanitizeUser(updatedUser ?? user),
             tokens,
         };
     }
 
     async logout(userId: string): Promise<void> {
-  await authRepository.incrementRefreshTokenVersion(
-    userId
-  );
-}
+        await authRepository.incrementRefreshTokenVersion(
+            userId
+        );
+    }
 
 }
 

@@ -1,10 +1,5 @@
-import { UserRole } from "../user/user.types";
-import { UserDocument } from "../user/user.types";
+import type { UserRole } from "../user/user.types";
 
-export type LoginCredentials = {
-  email: string;
-  password: string;
-};
 
 export type JwtPayload = {
   userId: string;
@@ -12,18 +7,22 @@ export type JwtPayload = {
   version?: number;
 };
 
+
 export type TokenPair = {
   accessToken: string;
   refreshToken: string;
 };
 
-export type AuthUser = {
-  userId: string;
+
+export type SanitizedUser = {
+  id: string;
+  fullName: string;
   email: string;
   role: UserRole;
+  avatar: string | null;
 };
 
 export type AuthResponse = {
-  user: UserDocument;
+  user: SanitizedUser;
   tokens: TokenPair;
 };
