@@ -1,9 +1,8 @@
 import type { RouteObject } from "react-router-dom";
 
-import DashboardPage from "@/features/dashboard/pages/DashboardPage";
+import { WorkspaceDashboardPage } from "@/features/workspace";
 
 import DashboardLayout from "../layouts/DashboardLayout";
-
 
 import ProtectedRoute from "./ProtectedRoute";
 import { ROUTES } from "./route.constants";
@@ -17,7 +16,7 @@ export const protectedRoutes: RouteObject[] = [
         children: [
           {
             path: ROUTES.DASHBOARD,
-            element: <DashboardPage />,
+            element: <WorkspaceDashboardPage />,
           },
         ],
       },
