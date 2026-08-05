@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { BrowserRouter } from "react-router-dom";
 import { Toaster } from "sonner";
 
 import QueryProvider from "./QueryProvider";
@@ -13,10 +12,8 @@ export default function AppProviders({
 }: AppProvidersProps): React.JSX.Element {
   return (
     <QueryProvider>
-      <BrowserRouter>
-        {children}
-        <Toaster richColors position="top-right" />
-      </BrowserRouter>
+      {children}
+      <Toaster richColors position="top-right" />
     </QueryProvider>
   );
 }
