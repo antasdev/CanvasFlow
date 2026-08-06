@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store";
 import { authApi } from "../api";
 
 export const useAuthSession = (): void => {
+  const setAccessToken = useAuthStore((state) => state.setAccessToken);
   const setUser = useAuthStore((state) => state.setUser);
   const clearUser = useAuthStore((state) => state.clearUser);
   const setLoading = useAuthStore((state) => state.setLoading);
@@ -12,9 +13,22 @@ export const useAuthSession = (): void => {
   useEffect(() => {
     const initializeSession = async (): Promise<void> => {
       try {
-        const response = await authApi.getCurrentUser();
+        const refreshResponse =
+          await authApi.refreshSession();
 
-        setUser(response.data.user);
+        setAccessToken(
+          refreshResponse.data.accessToken
+        );
+
+        const currentUserResponse =
+          await authApi.getCurrentUser();
+
+        setUser(
+          currentUserResponse.data.user
+        );
+        setUser(currentUserResponse.data.user);
+
+console.log(useAuthStore.getState());
       } catch {
         clearUser();
       } finally {
@@ -23,5 +37,5 @@ export const useAuthSession = (): void => {
     };
 
     void initializeSession();
-  }, [setUser, clearUser, setLoading]);
+ }, [setAccessToken, setUser, clearUser, setLoading]);
 };

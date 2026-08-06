@@ -31,7 +31,7 @@ export default function LoginForm(): React.JSX.Element {
     const onSubmit = (data: LoginFormValues): void => {
         mutate(data, {
             onSuccess: () => {
-                navigate(ROUTES.DASHBOARD);
+                navigate(ROUTES.WORKSPACES);
             },
         });
     };
