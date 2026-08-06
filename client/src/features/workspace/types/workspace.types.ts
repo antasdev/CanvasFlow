@@ -31,4 +31,9 @@ export type CreateWorkspaceRequest = {
   description?: string;
 };
 
+export type UpdateWorkspaceRequest = {
+  name?: string;
+  description?: string;
+};
+
 export type CreateWorkspaceResponse = Workspace;
