@@ -1,0 +1,1 @@
+export { WorkspaceBoardsPage } from "./WorkspaceBoardsPage";

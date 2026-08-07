@@ -1,17 +1,16 @@
 import { useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 import {
   EditWorkspaceModal,
   DangerZone,
   DeleteWorkspaceModal,
 } from "../components";
-
 import {
   useDeleteWorkspace,
   useWorkspace,
 } from "../hooks";
 
-import { useNavigate, useParams } from "react-router-dom";
 
 
 export default function WorkspaceSettingsPage(): React.JSX.Element {

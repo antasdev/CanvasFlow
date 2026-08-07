@@ -1,13 +1,15 @@
 import type { RouteObject } from "react-router-dom";
 import { Navigate } from "react-router-dom";
+
+import { WorkspaceBoardsPage } from "@/features/board/pages";
 import { WorkspaceDashboardPage } from "@/features/workspace";
 import {
   WorkspaceActivityPage,
-  WorkspaceBoardsPage,
   WorkspaceDetailPage,
   WorkspaceMembersPage,
   WorkspaceSettingsPage,
 } from "@/features/workspace/pages";
+
 import DashboardLayout from "../layouts/DashboardLayout";
 
 import ProtectedRoute from "./ProtectedRoute";

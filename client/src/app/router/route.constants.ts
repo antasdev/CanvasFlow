@@ -29,3 +29,15 @@ export const ROUTES = {
 
   NOT_FOUND: "*",
 } as const;
+
+export const buildRoutes = {
+  workspaceBoards: (
+    workspaceId: string,
+  ): string =>
+    `/workspaces/${workspaceId}/boards`,
+
+  boardDetails: (
+    boardId: string,
+  ): string =>
+    `/boards/${boardId}`,
+};
