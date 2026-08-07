@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { workspaceApi } from "../api";
 import { workspaceQueryKeys } from "../constants";
-
 import type {
   UpdateWorkspaceRequest,
   Workspace,

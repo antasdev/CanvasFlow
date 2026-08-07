@@ -1,10 +1,11 @@
-import WorkspaceForm from "./WorkspaceForm";
-
+import { useUpdateWorkspace } from "../hooks";
 import type {
     Workspace,
 } from "../types";
 
-import { useUpdateWorkspace } from "../hooks";
+import WorkspaceForm from "./WorkspaceForm";
+
+
 
 
 type EditWorkspaceModalProps = {
