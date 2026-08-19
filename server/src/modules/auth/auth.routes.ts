@@ -34,12 +34,10 @@ authRouter.post(
 
 authRouter.post(
   "/refresh",
-  validate(refreshTokenSchema),
   asyncHandler(
     authController.refreshToken.bind(authController)
   )
 );
-
 authRouter.get(
   "/me",
   authenticate,
