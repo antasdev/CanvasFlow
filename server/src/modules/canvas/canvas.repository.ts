@@ -29,30 +29,47 @@ export class CanvasRepository {
 
 
   async findById(
-    id: Types.ObjectId
+    id: Types.ObjectId,
+    session?: ClientSession
   ): Promise<CanvasDocument | null> {
-    return CanvasModel.findById(id);
+    const query = CanvasModel.findById(id);
+    if (session) {
+      query.session(session);
+    }
+    return query;
   }
 
 
   async findByBoardId(
-    boardId: Types.ObjectId
+    boardId: Types.ObjectId,
+    session?: ClientSession
   ): Promise<CanvasDocument[]> {
-    return CanvasModel
+    const query = CanvasModel
       .find({ boardId })
       .sort({ order: 1 });
+
+    if (session) {
+      query.session(session);
+    }
+
+    return query;
   }
 
 
   async findLastOrder(
-    boardId: Types.ObjectId
+    boardId: Types.ObjectId,
+    session?: ClientSession
   ): Promise<number> {
-    const lastCanvas =
-      await CanvasModel
-        .findOne({ boardId })
-        .sort({ order: -1 })
-        .select("order");
+    const query = CanvasModel
+      .findOne({ boardId })
+      .sort({ order: -1 })
+      .select("order");
 
+    if (session) {
+      query.session(session);
+    }
+
+    const lastCanvas = await query;
 
     return lastCanvas?.order ?? 0;
   }

@@ -1,7 +1,8 @@
 import type { RouteObject } from "react-router-dom";
 import { Navigate } from "react-router-dom";
 
-import { WorkspaceBoardsPage } from "@/features/board/pages";
+import { WorkspaceBoardsPage } from "@/features/board";
+import { BoardCanvasPage } from "@/features/canvas";
 import { WorkspaceDashboardPage } from "@/features/workspace";
 import {
   WorkspaceActivityPage,
@@ -53,6 +54,14 @@ export const protectedRoutes: RouteObject[] = [
             ],
           },
         ],
+      },
+      {
+        path: ROUTES.BOARD_DETAILS,
+        element: <BoardCanvasPage />,
+      },
+      {
+        path: "/board/:boardId",
+        element: <BoardCanvasPage />,
       },
     ],
   },

@@ -1,0 +1,1 @@
+export { default as BoardCanvasPage } from "./pages/BoardCanvasPage";

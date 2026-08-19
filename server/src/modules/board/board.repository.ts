@@ -22,9 +22,14 @@ export class BoardRepository {
   }
 
   async findById(
-    id: Types.ObjectId
+    id: Types.ObjectId,
+    session?: ClientSession
   ): Promise<BoardDocument | null> {
-    return BoardModel.findById(id);
+    const query = BoardModel.findById(id);
+    if (session) {
+      query.session(session);
+    }
+    return query;
   }
 
   async findByWorkspaceId(
