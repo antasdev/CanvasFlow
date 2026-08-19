@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import type { Workspace } from "../types";
 
 
@@ -9,8 +10,11 @@ type WorkspaceCardProps = {
 export function WorkspaceCard({
   workspace,
 }: WorkspaceCardProps) {
+  const navigate = useNavigate();
+
   return (
     <article
+      onClick={() => navigate(`/workspaces/${workspace.id}/boards`)}
       className="
         rounded-lg
         border

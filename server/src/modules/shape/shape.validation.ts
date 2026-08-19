@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { ShapeType } from "./shape.types";
-
 const objectIdSchema = z
   .string()
   .regex(
@@ -9,35 +7,37 @@ const objectIdSchema = z
     "Invalid ID format."
   );
 
-const shapeTypeSchema = z.nativeEnum(
-  ShapeType
-);
+export const shapeStyleValidationSchema = z.object({
+  fill: z.string().trim().optional(),
+  stroke: z.string().trim().optional(),
+  strokeWidth: z.number().min(0, "Stroke width cannot be negative.").max(50).optional(),
+  opacity: z.number().min(0, "Opacity must be at least 0.").max(1, "Opacity cannot exceed 1.").optional(),
+});
 
 export const createShapeSchema = z.object({
   body: z.object({
     canvasId: objectIdSchema,
 
-    type: shapeTypeSchema,
+    type: z.enum(["rectangle", "RECTANGLE"]).transform(() => "RECTANGLE" as const),
 
-    x: z.number(),
+    x: z.number().finite("x must be a finite number."),
 
-    y: z.number(),
+    y: z.number().finite("y must be a finite number."),
 
     width: z
       .number()
-      .positive(),
+      .positive("Width must be greater than 0."),
 
     height: z
       .number()
-      .positive(),
+      .positive("Height must be greater than 0."),
 
     rotation: z
       .number()
+      .finite("Rotation must be a finite number.")
       .optional(),
 
-    style: z
-      .record(z.string(), z.unknown())
-      .optional(),
+    style: shapeStyleValidationSchema.optional(),
   }),
 });
 
@@ -48,30 +48,26 @@ export const updateShapeValidationSchema =
     }),
 
     body: z.object({
-      x: z.number().optional(),
+      x: z.number().finite("x must be a finite number.").optional(),
 
-      y: z.number().optional(),
+      y: z.number().finite("y must be a finite number.").optional(),
 
       width: z
         .number()
-        .positive()
+        .positive("Width must be greater than 0.")
         .optional(),
 
       height: z
         .number()
-        .positive()
+        .positive("Height must be greater than 0.")
         .optional(),
 
       rotation: z
         .number()
+        .finite("Rotation must be a finite number.")
         .optional(),
 
-      style: z
-        .record(
-          z.string(),
-          z.unknown()
-        )
-        .optional(),
+      style: shapeStyleValidationSchema.optional(),
     }),
   });
 

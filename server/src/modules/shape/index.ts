@@ -1,5 +1,6 @@
 export * from "./shape.types";
 export * from "./shape.dto";
+export * from "./shape.mapper";
 
 export * from "./shape.model";
 

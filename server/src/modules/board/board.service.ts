@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 
 import {
   CreateBoardDto,
@@ -7,6 +7,7 @@ import {
 import { boardRepository } from "./board.repository";
 
 import { workspaceRepository } from "../workspace/workspace.repository";
+import { canvasService } from "../canvas/canvas.service";
 
 import {
   CreateBoardData,
@@ -39,14 +40,38 @@ export class BoardService {
       );
     }
 
-    const data: CreateBoardData = {
-      workspaceId: dto.workspaceId,
-      name: dto.name,
-      description: dto.description,
-      createdBy,
-    };
+    const session = await mongoose.startSession();
 
-    return boardRepository.create(data);
+    try {
+      session.startTransaction();
+
+      const data: CreateBoardData = {
+        workspaceId: dto.workspaceId,
+        name: dto.name,
+        description: dto.description,
+        createdBy,
+      };
+
+      const board = await boardRepository.create(data, session);
+
+      await canvasService.createCanvas(
+        {
+          boardId: board._id,
+          name: "Page 1",
+          backgroundColor: "#FFFFFF",
+        },
+        session
+      );
+
+      await session.commitTransaction();
+
+      return board;
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
   }
 
   async getBoardById(

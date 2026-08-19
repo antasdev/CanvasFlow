@@ -1,6 +1,6 @@
 import mongoose, { Types } from "mongoose";
 
-import { CreateWorkspaceDto, UpdateWorkspaceDto } from "./workspace.dto";
+import { CreateWorkspaceDto, UpdateWorkspaceDto, WorkspaceResponseDto, } from "./workspace.dto";
 import { workspaceRepository } from "./workspace.repository";
 import { workspaceMemberRepository } from "./workspaceMember.repository";
 import { WorkspaceRole } from "./workspace.types";
@@ -10,110 +10,160 @@ import { HttpStatus, Messages } from "@/shared/constants";
 
 
 export class WorkspaceService {
-  async createWorkspace(
-  ownerId: Types.ObjectId,
-  dto: CreateWorkspaceDto
-) {
-  const session = await mongoose.startSession();
-
-  try {
-    session.startTransaction();
-
-    const workspace = await workspaceRepository.create(
-      {
-        ...dto,
-        ownerId,
-      },
-      session
-    );
-
-    await workspaceMemberRepository.create(
-      {
-        workspaceId: workspace._id,
-        userId: ownerId,
-        role: WorkspaceRole.OWNER,
-      },
-      session
-    );
-
-    await session.commitTransaction();
-
-    return workspace;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    await session.endSession();
+  private toWorkspaceResponseDto(
+    workspace: {
+      _id: Types.ObjectId;
+      name: string;
+      description?: string;
+      visibility: string;
+      createdAt: Date;
+      updatedAt: Date;
+    },
+    role: WorkspaceRole,
+  ): WorkspaceResponseDto {
+    return {
+      id: workspace._id.toString(),
+      name: workspace.name,
+      description: workspace.description,
+      visibility: workspace.visibility,
+      role,
+      createdAt: workspace.createdAt,
+      updatedAt: workspace.updatedAt,
+    };
   }
-}
+
+  async createWorkspace(
+    ownerId: Types.ObjectId,
+    dto: CreateWorkspaceDto
+  ) {
+    const session = await mongoose.startSession();
+
+    try {
+      session.startTransaction();
+
+      const workspace = await workspaceRepository.create(
+        {
+          ...dto,
+          ownerId,
+        },
+        session
+      );
+
+      await workspaceMemberRepository.create(
+        {
+          workspaceId: workspace._id,
+          userId: ownerId,
+          role: WorkspaceRole.OWNER,
+        },
+        session
+      );
+
+      await session.commitTransaction();
+
+      return this.toWorkspaceResponseDto(
+        workspace,
+        WorkspaceRole.OWNER,
+      );
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
 
   async getWorkspaceById(id: Types.ObjectId) {
-  const workspace = await workspaceRepository.findById(id);
+    const workspace = await workspaceRepository.findById(id);
 
-  if (!workspace) {
-    throw new ApiError(
-      HttpStatus.NOT_FOUND,
-      Messages.WORKSPACE_NOT_FOUND
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND
+      );
+    }
+
+    return this.toWorkspaceResponseDto(
+      workspace,
+      WorkspaceRole.OWNER,
     );
   }
-
-  return workspace;
-}
   async getUserWorkspaces(ownerId: Types.ObjectId) {
-    return workspaceRepository.findByOwnerId(ownerId);
+    const workspaces = await workspaceRepository.findByOwnerId(ownerId);
+
+    return workspaces.map((workspace) =>
+      this.toWorkspaceResponseDto(
+        workspace,
+        WorkspaceRole.OWNER,
+      ),
+    );
   }
 
   async updateWorkspace(
-  id: Types.ObjectId,
-  dto: UpdateWorkspaceDto
-) {
-  const workspace = await workspaceRepository.findById(id);
+    id: Types.ObjectId,
+    dto: UpdateWorkspaceDto
+  ) {
+    const workspace = await workspaceRepository.findById(id);
 
-  if (!workspace) {
-    throw new ApiError(
-      HttpStatus.NOT_FOUND,
-      Messages.WORKSPACE_NOT_FOUND
-    );
-  }
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND
+      );
+    }
 
-  return workspaceRepository.updateById(id, dto);
-}
-
-async deleteWorkspace(
-  id: Types.ObjectId
-): Promise<void> {
-  const workspace = await workspaceRepository.findById(id);
-
-  if (!workspace) {
-    throw new ApiError(
-      HttpStatus.NOT_FOUND,
-      Messages.WORKSPACE_NOT_FOUND
-    );
-  }
-
-  const session = await mongoose.startSession();
-
-  try {
-    session.startTransaction();
-
-    await workspaceMemberRepository.deleteByWorkspaceId(
+    const updatedWorkspace = await workspaceRepository.updateById(
       id,
-      session
+      dto,
     );
 
-    await workspaceRepository.deleteById(
-      id,
-      session
-    );
+    if (!updatedWorkspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND,
+      );
+    }
 
-    await session.commitTransaction();
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    await session.endSession();
+    return this.toWorkspaceResponseDto(
+      updatedWorkspace,
+      WorkspaceRole.OWNER,
+    );
   }
-}
+
+  async deleteWorkspace(
+    id: Types.ObjectId
+  ): Promise<void> {
+    const workspace = await workspaceRepository.findById(id);
+
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND
+      );
+    }
+
+    const session = await mongoose.startSession();
+
+    try {
+      session.startTransaction();
+
+      await workspaceMemberRepository.deleteByWorkspaceId(
+        id,
+        session
+      );
+
+      await workspaceRepository.deleteById(
+        id,
+        session
+      );
+
+      await session.commitTransaction();
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+  }
 }
 
 export const workspaceService = new WorkspaceService();

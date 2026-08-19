@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { Types } from "mongoose";
 
 import { shapeService } from "./shape.service";
+import { ShapeMapper } from "./shape.mapper";
+import { CreateShapeDto, UpdateShapeDto } from "./shape.dto";
 
 import {
     HttpStatus,
@@ -22,15 +24,20 @@ export class ShapeController {
             req.user!.userId
         );
 
+        const dto: CreateShapeDto = {
+            ...req.body,
+            canvasId: new Types.ObjectId(req.body.canvasId),
+        };
+
         const result =
             await shapeService.createShape(
                 createdBy,
-                req.body
+                dto
             );
 
         res.status(HttpStatus.CREATED).json({
             success: true,
-            data: result.shape,
+            data: ShapeMapper.toResponseDto(result.shape),
         });
     }
 
@@ -47,7 +54,7 @@ export class ShapeController {
 
         res.status(HttpStatus.OK).json({
             success: true,
-            data: shape,
+            data: ShapeMapper.toResponseDto(shape),
         });
     }
 
@@ -66,7 +73,7 @@ export class ShapeController {
 
         res.status(HttpStatus.OK).json({
             success: true,
-            data: shapes,
+            data: shapes.map((shape) => ShapeMapper.toResponseDto(shape)),
         });
     }
 
@@ -81,12 +88,12 @@ export class ShapeController {
         const result =
             await shapeService.updateShape(
                 id,
-                req.body
+                req.body as UpdateShapeDto
             );
 
         res.status(HttpStatus.OK).json({
             success: true,
-            data: result.shape,
+            data: ShapeMapper.toResponseDto(result.shape),
         });
     }
 

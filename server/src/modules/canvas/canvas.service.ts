@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { ClientSession, Types } from "mongoose";
 
 import {
   CreateCanvasDto,
@@ -30,12 +30,14 @@ import {
 export class CanvasService {
 
   async createCanvas(
-    dto: CreateCanvasDto
+    dto: CreateCanvasDto,
+    session?: ClientSession
   ) {
 
     const board =
       await boardRepository.findById(
-        dto.boardId
+        dto.boardId,
+        session
       );
 
 
@@ -49,7 +51,8 @@ export class CanvasService {
 
     const lastOrder =
       await canvasRepository.findLastOrder(
-        dto.boardId
+        dto.boardId,
+        session
       );
 
 
@@ -66,7 +69,8 @@ export class CanvasService {
 
 
     return canvasRepository.create(
-      canvasData
+      canvasData,
+      session
     );
   }
 

@@ -140,15 +140,13 @@ export class AuthService {
         return sanitizeUser(user);
     }
     async refreshToken(
-        data: RefreshTokenDto
+        refreshToken: string
     ): Promise<AuthResponse> {
 
         let payload: JwtPayload;
 
         try {
-            payload = verifyRefreshToken(
-                data.refreshToken
-            );
+            payload = verifyRefreshToken(refreshToken);
         } catch {
             throw new ApiError(
                 HttpStatus.UNAUTHORIZED,

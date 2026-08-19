@@ -23,3 +23,13 @@ export type CreateWorkspaceMemberDto = {
   role: WorkspaceRole;
   joinedAt?: Date;
 };
+
+export type WorkspaceResponseDto = {
+  id: string;
+  name: string;
+  description?: string;
+  visibility: string;
+  role: WorkspaceRole;
+  createdAt: Date;
+  updatedAt: Date;
+};
