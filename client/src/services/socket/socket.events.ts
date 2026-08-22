@@ -33,6 +33,9 @@ export const SocketEvents = {
   SHAPE_LOCKED: "shape:locked",
   SHAPE_UNLOCKED: "shape:unlocked",
 
+  SHAPE_TRANSFORMING: "shape:transforming",
+  SHAPE_TRANSFORM_END: "shape:transform-end",
+
   USER_JOINED: "user:joined",
   USER_LEFT: "user:left",
 

@@ -1,5 +1,6 @@
 import { Group, Rect, Text } from "react-konva";
 import type { RemoteShapeLock } from "@/services/socket";
+import { useCanvasStore } from "../store";
 import type { Shape } from "../types";
 
 type CollaboratorShapeLockProps = {
@@ -29,6 +30,7 @@ function getShapeDimensions(shape: Shape): { width: number; height: number } {
 
 /**
  * Renders real-time soft-lock indicators on shapes currently being transformed by collaborators.
+ * Dynamically tracks live ephemeral transformations streamed from peers.
  * Purely presentation overlay with listening={false} to avoid intercepting Konva events.
  */
 export default function CollaboratorShapeLock({
@@ -36,12 +38,26 @@ export default function CollaboratorShapeLock({
   shapes,
 }: CollaboratorShapeLockProps): React.JSX.Element | null {
   const shape = shapes.find((s) => s.id === lock.shapeId);
+  const remoteShapeTransforms = useCanvasStore(
+    (state) => state.remoteShapeTransforms
+  );
 
   if (!shape) {
     return null;
   }
 
-  const { width, height } = getShapeDimensions(shape);
+  const liveTransform = remoteShapeTransforms[lock.shapeId];
+  const isTransformLive =
+    liveTransform && Date.now() - liveTransform.lastUpdatedAt < 3000;
+
+  const { width: defaultWidth, height: defaultHeight } = getShapeDimensions(shape);
+
+  const x = isTransformLive && liveTransform ? liveTransform.x : shape.x;
+  const y = isTransformLive && liveTransform ? liveTransform.y : shape.y;
+  const width = isTransformLive && liveTransform ? liveTransform.width : defaultWidth;
+  const height = isTransformLive && liveTransform ? liveTransform.height : defaultHeight;
+  const rotation = isTransformLive && liveTransform ? liveTransform.rotation : (shape.rotation ?? 0);
+
   const labelText = `🔒 ${lock.fullName || "Collaborator"} editing`;
   const badgeWidth = labelText.length * 6.2 + 10;
 
@@ -49,11 +65,11 @@ export default function CollaboratorShapeLock({
     <Group listening={false}>
       {/* Soft-lock border highlight */}
       <Rect
-        x={shape.x - 3}
-        y={shape.y - 3}
+        x={x - 3}
+        y={y - 3}
         width={width + 6}
         height={height + 6}
-        rotation={shape.rotation ?? 0}
+        rotation={rotation}
         stroke={lock.color}
         strokeWidth={2.5}
         strokeScaleEnabled={false}
@@ -65,9 +81,9 @@ export default function CollaboratorShapeLock({
 
       {/* Editing badge */}
       <Group
-        x={shape.x}
-        y={shape.y - 20}
-        rotation={shape.rotation ?? 0}
+        x={x}
+        y={y - 20}
+        rotation={rotation}
         listening={false}
       >
         <Rect

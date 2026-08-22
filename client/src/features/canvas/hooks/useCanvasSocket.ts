@@ -7,6 +7,8 @@ import type {
   SelectionChangedPayload,
   ShapeLockedPayload,
   ShapeResponseDto,
+  ShapeTransformEndPayload,
+  ShapeTransformingPayload,
   ShapeUnlockedPayload,
   UserJoinedPayload,
   UserLeftPayload,
@@ -63,6 +65,15 @@ export const useCanvasSocket = (
   const clearRemoteShapeLocks = useCanvasStore(
     (state) => state.clearRemoteShapeLocks
   );
+  const setRemoteShapeTransform = useCanvasStore(
+    (state) => state.setRemoteShapeTransform
+  );
+  const removeRemoteShapeTransform = useCanvasStore(
+    (state) => state.removeRemoteShapeTransform
+  );
+  const clearRemoteShapeTransforms = useCanvasStore(
+    (state) => state.clearRemoteShapeTransforms
+  );
 
   const activeBoardIdRef = useRef<string | null>(null);
 
@@ -105,11 +116,13 @@ export const useCanvasSocket = (
     const handleShapeUpdated = (shapeDto: ShapeResponseDto): void => {
       const shape = mapShapeResponseToShape(shapeDto);
       applyRemoteShapeUpdated(shape);
+      removeRemoteShapeTransform(shapeDto.id);
     };
 
     // 5. Handle remote shape deletion
     const handleShapeDeleted = (payload: { shapeId: string }): void => {
       applyRemoteShapeDeleted(payload.shapeId);
+      removeRemoteShapeTransform(payload.shapeId);
     };
 
     // 6. Handle collaborator cursor movement
@@ -136,10 +149,31 @@ export const useCanvasSocket = (
     const handleShapeUnlocked = (payload: ShapeUnlockedPayload): void => {
       if (payload.boardId === boardId) {
         removeRemoteShapeLock(payload.shapeId);
+        removeRemoteShapeTransform(payload.shapeId);
       }
     };
 
-    // 9. Handle presence broadcasts
+    // 9. Handle collaborator live transformation streaming
+    const handleShapeTransforming = (
+      payload: ShapeTransformingPayload
+    ): void => {
+      if (payload.boardId === boardId) {
+        setRemoteShapeTransform({
+          ...payload,
+          lastUpdatedAt: Date.now(),
+        });
+      }
+    };
+
+    const handleShapeTransformEnd = (
+      payload: ShapeTransformEndPayload
+    ): void => {
+      if (payload.boardId === boardId) {
+        removeRemoteShapeTransform(payload.shapeId);
+      }
+    };
+
+    // 10. Handle presence broadcasts
     const handleUserJoined = (payload: UserJoinedPayload): void => {
       console.log(`[Presence] User joined board: ${payload.userId}`);
     };
@@ -156,7 +190,26 @@ export const useCanvasSocket = (
           removeRemoteShapeLock(shapeId);
         }
       }
+
+      // Clean up any transforms held by departing user
+      const transforms = useCanvasStore.getState().remoteShapeTransforms;
+      for (const [shapeId, transform] of Object.entries(transforms)) {
+        if (transform.userId === payload.userId) {
+          removeRemoteShapeTransform(shapeId);
+        }
+      }
     };
+
+    // 11. Periodic Stale Transform Cleanup (3000ms threshold)
+    const staleCleanupInterval = setInterval(() => {
+      const transforms = useCanvasStore.getState().remoteShapeTransforms;
+      const now = Date.now();
+      for (const [shapeId, transform] of Object.entries(transforms)) {
+        if (now - transform.lastUpdatedAt > 3000) {
+          removeRemoteShapeTransform(shapeId);
+        }
+      }
+    }, 1000);
 
     socket.on(SocketEvents.CANVAS_SYNC, handleCanvasSync);
     socket.on(SocketEvents.SHAPE_CREATED, handleShapeCreated);
@@ -166,10 +219,13 @@ export const useCanvasSocket = (
     socket.on(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
     socket.on(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
     socket.on(SocketEvents.SHAPE_UNLOCKED, handleShapeUnlocked);
+    socket.on(SocketEvents.SHAPE_TRANSFORMING, handleShapeTransforming);
+    socket.on(SocketEvents.SHAPE_TRANSFORM_END, handleShapeTransformEnd);
     socket.on(SocketEvents.USER_JOINED, handleUserJoined);
     socket.on(SocketEvents.USER_LEFT, handleUserLeft);
 
     return () => {
+      clearInterval(staleCleanupInterval);
       socket.off(SocketEvents.CANVAS_SYNC, handleCanvasSync);
       socket.off(SocketEvents.SHAPE_CREATED, handleShapeCreated);
       socket.off(SocketEvents.SHAPE_UPDATED, handleShapeUpdated);
@@ -178,19 +234,16 @@ export const useCanvasSocket = (
       socket.off(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
       socket.off(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
       socket.off(SocketEvents.SHAPE_UNLOCKED, handleShapeUnlocked);
+      socket.off(SocketEvents.SHAPE_TRANSFORMING, handleShapeTransforming);
+      socket.off(SocketEvents.SHAPE_TRANSFORM_END, handleShapeTransformEnd);
       socket.off(SocketEvents.USER_JOINED, handleUserJoined);
       socket.off(SocketEvents.USER_LEFT, handleUserLeft);
 
       clearRemoteCursors();
       clearRemoteSelections();
       clearRemoteShapeLocks();
-
-      if (activeBoardIdRef.current) {
-        socketClientService
-          .leaveBoard(activeBoardIdRef.current)
-          .catch(() => {});
-        activeBoardIdRef.current = null;
-      }
+      clearRemoteShapeTransforms();
+      activeBoardIdRef.current = null;
     };
   }, [
     boardId,
@@ -208,5 +261,8 @@ export const useCanvasSocket = (
     setRemoteShapeLock,
     removeRemoteShapeLock,
     clearRemoteShapeLocks,
+    setRemoteShapeTransform,
+    removeRemoteShapeTransform,
+    clearRemoteShapeTransforms,
   ]);
 };

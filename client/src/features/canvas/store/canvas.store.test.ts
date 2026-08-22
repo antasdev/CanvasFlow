@@ -424,4 +424,105 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().past).toHaveLength(0);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });
+
+    it("manages remote shape live transforms without modifying undo/redo history", () => {
+        const transform1 = {
+            shapeId: "shape-101",
+            boardId: "board-1",
+            userId: "user-1",
+            fullName: "Alice Developer",
+            color: "#EF4444",
+            x: 250,
+            y: 350,
+            width: 200,
+            height: 150,
+            rotation: 45,
+            lastUpdatedAt: Date.now(),
+        };
+
+        const transform2 = {
+            shapeId: "shape-102",
+            boardId: "board-1",
+            userId: "user-2",
+            fullName: "Bob Designer",
+            color: "#3B82F6",
+            x: 500,
+            y: 600,
+            width: 180,
+            height: 180,
+            rotation: 0,
+            lastUpdatedAt: Date.now(),
+        };
+
+        // 1. Set remote shape transforms
+        useCanvasStore.getState().setRemoteShapeTransform(transform1);
+        useCanvasStore.getState().setRemoteShapeTransform(transform2);
+
+        expect(Object.keys(useCanvasStore.getState().remoteShapeTransforms)).toHaveLength(2);
+        expect(useCanvasStore.getState().remoteShapeTransforms["shape-101"].x).toBe(250);
+        expect(useCanvasStore.getState().remoteShapeTransforms["shape-102"].y).toBe(600);
+
+        // 2. Remove single shape transform
+        useCanvasStore.getState().removeRemoteShapeTransform("shape-101");
+        expect(useCanvasStore.getState().remoteShapeTransforms["shape-101"]).toBeUndefined();
+        expect(useCanvasStore.getState().remoteShapeTransforms["shape-102"]).toBeDefined();
+
+        // 3. Clear all transforms
+        useCanvasStore.getState().clearRemoteShapeTransforms();
+        expect(Object.keys(useCanvasStore.getState().remoteShapeTransforms)).toHaveLength(0);
+
+        // Verify undo/redo stacks were NEVER modified by ephemeral transform frames
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
+
+    it("cleans up remote transform and lock state when shape is remotely deleted", () => {
+        const shape = {
+            id: "shape-delete-test",
+            type: "rectangle" as const,
+            x: 100,
+            y: 100,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            fill: "#ffffff",
+            stroke: "#000000",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().setShapes([shape]);
+        useCanvasStore.getState().setRemoteShapeLock({
+            shapeId: "shape-delete-test",
+            boardId: "board-1",
+            userId: "user-1",
+            fullName: "Alice",
+            color: "#EF4444",
+        });
+        useCanvasStore.getState().setRemoteShapeTransform({
+            shapeId: "shape-delete-test",
+            boardId: "board-1",
+            userId: "user-1",
+            fullName: "Alice",
+            color: "#EF4444",
+            x: 150,
+            y: 150,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            lastUpdatedAt: Date.now(),
+        });
+
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().remoteShapeLocks["shape-delete-test"]).toBeDefined();
+        expect(useCanvasStore.getState().remoteShapeTransforms["shape-delete-test"]).toBeDefined();
+
+        // Delete shape
+        useCanvasStore.getState().applyRemoteShapeDeleted("shape-delete-test");
+
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+        expect(useCanvasStore.getState().remoteShapeLocks["shape-delete-test"]).toBeUndefined();
+        expect(useCanvasStore.getState().remoteShapeTransforms["shape-delete-test"]).toBeUndefined();
+    });
 });

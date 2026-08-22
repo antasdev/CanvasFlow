@@ -337,12 +337,53 @@ When a network drop, page refresh, or tab closure triggers Socket.IO `disconnect
 | `shape:lock` | `shape:locked` | Exclusive soft-lock acquisition before shape editing/transform | On edit start | None (Ephemeral) |
 | `shape:unlock` | `shape:unlocked` | Release shape soft-lock after editing/transform completes | On edit end | None (Ephemeral) |
 | `shape:lock-refresh` | | Extend soft-lock timeout heartbeat during active editing | ~1.5s during edit | None (Ephemeral) |
+| `shape:transforming` | `shape:transforming` | Live ephemeral transform streaming (30–60 FPS) during drag/resize/rotate | High (~30-60/s) | None (Ephemeral) |
+| `shape:transform-end` | `shape:transform-end` | Transform completion notification to peer collaborators | On transform end | None (Ephemeral) |
 | | `user:left` | User departure notification | On exit | None |
 | | `error` | Error notifications and status | On failure | None |
 
 ---
 
-## 15. Security & Hardening
+## 15. Real-Time Shape Transform Streaming (Slice 8)
+
+### Architecture Overview
+
+When a user drags, resizes, or rotates a shape, collaborators observe the transformation live at 30–60 FPS without overloading the database.
+
+```text
+LOCAL POINTER / TRANSFORM
+         ↓ (requestAnimationFrame)
+  SocketClientService.transformShape()
+         ↓ (shape:transforming)
+    Socket.IO Server
+         ↓ (lock ownership check & broadcast)
+  socket.to(boardRoom).emit(shape:transforming)
+         ↓
+  REMOTE COLLABORATORS (setRemoteShapeTransform)
+         ↓
+  ShapeRenderer (effectiveTransform)
+```
+
+### Key Engineering Principles:
+
+1. **Zero Database Write Amplification**:
+   - Intermediate transform frames are purely in-memory and ephemeral.
+   - Only the final position/dimension is persisted to MongoDB via `shape:update` upon mouse release / transform end.
+2. **Soft-Lock Ownership Verification**:
+   - The server verifies `shapeLockManager.getLock(boardId, shapeId)?.socketId === socket.id` before broadcasting `shape:transforming`. Non-owners cannot stream transforms.
+3. **Undo/Redo Stack Purity**:
+   - Remote transforms only update `remoteShapeTransforms` in Zustand, completely isolated from `past` and `future` stacks.
+   - Local user produces exactly **one** undo snapshot per drag/transform operation upon release.
+4. **Effective Transform Rendering**:
+   - Renderers compute `effectiveTransform = (isLockedByOther && remoteShapeTransforms[shape.id]) ?? shape`.
+   - Outlines and lock badges follow `effectiveTransform` in real time.
+5. **Stale Transform Garbage Collection**:
+   - Stale transforms older than 3000ms are automatically purged every 1000ms.
+   - Transforms are also cleaned up on `shape:unlocked`, `shape:updated`, `shape:deleted`, and `user:left`.
+
+---
+
+## 16. Security & Hardening
 
 1. **Authentication**: All connections require a valid JWT access token verified against `JWT_ACCESS_SECRET`.
 2. **Authorization Boundary**: Board access authorization is verified server-side through `boardService.authorizeBoardAccess` before room entry or data sync.
@@ -354,7 +395,7 @@ When a network drop, page refresh, or tab closure triggers Socket.IO `disconnect
 
 ---
 
-## 16. Interview Concepts
+## 17. Interview Concepts
 
 ### 1. Discriminated Unions in Real-Time Systems
 Using a literal discriminator field (`type: "rectangle" | "text" | "sticky_note"`) enables TypeScript to perform exhaustive pattern matching and type narrowing. This eliminates optional-property soup and ensures component renderers receive guaranteed, non-null properties for specific shape types.

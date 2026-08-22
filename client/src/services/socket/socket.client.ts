@@ -13,6 +13,7 @@ import type {
   SelectionChangePayload,
   ShapeLockedPayload,
   ShapeResponseDto,
+  TransformingShapePayload,
   TypedSocket,
   UpdateShapePayload,
 } from "./socket.types";
@@ -412,6 +413,33 @@ export class SocketClientService {
         }
       );
     });
+  }
+
+  /**
+   * Emits ephemeral shape transform stream frame to collaborators over Socket.IO.
+   * High-frequency fire-and-forget event without Promise/acknowledgement overhead.
+   *
+   * @param payload - Ephemeral transform properties (x, y, width, height, rotation)
+   */
+  public transformShape(payload: TransformingShapePayload): void {
+    if (!this.socket?.connected) {
+      return;
+    }
+    this.socket.emit(SocketEvents.SHAPE_TRANSFORMING, payload);
+  }
+
+  /**
+   * Emits shape transform end notification to collaborators over Socket.IO.
+   * High-frequency fire-and-forget event notifying peers that active transformation has concluded.
+   *
+   * @param boardId - Target board identifier
+   * @param shapeId - Target shape identifier
+   */
+  public endShapeTransform(boardId: string, shapeId: string): void {
+    if (!this.socket?.connected) {
+      return;
+    }
+    this.socket.emit(SocketEvents.SHAPE_TRANSFORM_END, { boardId, shapeId });
   }
 
   /**

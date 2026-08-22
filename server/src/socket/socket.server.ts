@@ -9,6 +9,7 @@ import { registerShapeHandlers } from "./handlers/shape.handler";
 import { registerCursorHandlers } from "./handlers/cursor.handler";
 import { registerSelectionHandlers } from "./handlers/selection.handler";
 import { registerLockHandlers } from "./handlers/lock.handler";
+import { registerTransformHandlers } from "./handlers/transform.handler";
 import { presenceManager } from "./presence/presence.manager";
 import { shapeLockManager } from "./locks/shape-lock.manager";
 import { getBoardRoom } from "./socket.rooms";
@@ -66,6 +67,9 @@ export class SocketServer {
 
       // Register Slice 6 Collaborative Selection Conflict & Lock Handlers
       registerLockHandlers(socket);
+
+      // Register Slice 8 Real-Time Shape Transform Streaming Handlers
+      registerTransformHandlers(socket);
 
       // Handle Socket Disconnection Lifecycle, Lock Release & Presence Cleanup
       socket.on(SocketEvents.DISCONNECT, (reason) => {

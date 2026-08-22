@@ -9,9 +9,15 @@ import type {
   RemoteCursor,
   RemoteSelection,
   RemoteShapeLock,
+  RemoteShapeTransform,
 } from "@/services/socket";
 
-export type { RemoteCursor, RemoteSelection, RemoteShapeLock };
+export type {
+  RemoteCursor,
+  RemoteSelection,
+  RemoteShapeLock,
+  RemoteShapeTransform,
+};
 
 type ShapePositionUpdate = {
   x: number;
@@ -103,6 +109,8 @@ type CanvasStore = {
 
   remoteShapeLocks: Record<string, RemoteShapeLock>;
 
+  remoteShapeTransforms: Record<string, RemoteShapeTransform>;
+
   applyRemoteShapeCreated: (shape: Shape) => void;
 
   applyRemoteShapeUpdated: (shape: Shape) => void;
@@ -127,6 +135,12 @@ type CanvasStore = {
 
   clearRemoteShapeLocks: () => void;
 
+  setRemoteShapeTransform: (transform: RemoteShapeTransform) => void;
+
+  removeRemoteShapeTransform: (shapeId: string) => void;
+
+  clearRemoteShapeTransforms: () => void;
+
   undo: () => void;
 
   redo: () => void;
@@ -149,6 +163,8 @@ export const useCanvasStore = create<CanvasStore>(
     remoteSelections: {},
 
     remoteShapeLocks: {},
+
+    remoteShapeTransforms: {},
 
     zoom: 1,
 
@@ -320,6 +336,8 @@ export const useCanvasStore = create<CanvasStore>(
         selectedShapeIds: [],
         remoteCursors: {},
         remoteSelections: {},
+        remoteShapeLocks: {},
+        remoteShapeTransforms: {},
         past: [],
         future: [],
       });
@@ -433,10 +451,19 @@ export const useCanvasStore = create<CanvasStore>(
     },
 
     applyRemoteShapeDeleted: (shapeId: string): void => {
-      set((state) => ({
-        shapes: state.shapes.filter((s) => s.id !== shapeId),
-        selectedShapeIds: state.selectedShapeIds.filter((id) => id !== shapeId),
-      }));
+      set((state) => {
+        const nextTransforms = { ...state.remoteShapeTransforms };
+        delete nextTransforms[shapeId];
+        const nextLocks = { ...state.remoteShapeLocks };
+        delete nextLocks[shapeId];
+
+        return {
+          shapes: state.shapes.filter((s) => s.id !== shapeId),
+          selectedShapeIds: state.selectedShapeIds.filter((id) => id !== shapeId),
+          remoteShapeTransforms: nextTransforms,
+          remoteShapeLocks: nextLocks,
+        };
+      });
     },
 
     setRemoteCursor: (cursor: RemoteCursor): void => {
@@ -517,6 +544,34 @@ export const useCanvasStore = create<CanvasStore>(
     clearRemoteShapeLocks: (): void => {
       set({
         remoteShapeLocks: {},
+      });
+    },
+
+    setRemoteShapeTransform: (transform: RemoteShapeTransform): void => {
+      set((state) => ({
+        remoteShapeTransforms: {
+          ...state.remoteShapeTransforms,
+          [transform.shapeId]: transform,
+        },
+      }));
+    },
+
+    removeRemoteShapeTransform: (shapeId: string): void => {
+      set((state) => {
+        if (!state.remoteShapeTransforms[shapeId]) {
+          return state;
+        }
+        const nextTransforms = { ...state.remoteShapeTransforms };
+        delete nextTransforms[shapeId];
+        return {
+          remoteShapeTransforms: nextTransforms,
+        };
+      });
+    },
+
+    clearRemoteShapeTransforms: (): void => {
+      set({
+        remoteShapeTransforms: {},
       });
     },
 

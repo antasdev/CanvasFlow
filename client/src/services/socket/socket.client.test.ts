@@ -50,6 +50,8 @@ describe("SocketClientService", () => {
     expect(SocketEvents.USER_LEFT).toBe("user:left");
     expect(SocketEvents.CURSOR_MOVE).toBe("cursor:move");
     expect(SocketEvents.CURSOR_MOVED).toBe("cursor:moved");
+    expect(SocketEvents.SHAPE_TRANSFORMING).toBe("shape:transforming");
+    expect(SocketEvents.SHAPE_TRANSFORM_END).toBe("shape:transform-end");
     expect(SocketEvents.ERROR).toBe("error");
   });
 
@@ -398,6 +400,46 @@ describe("SocketClientService", () => {
       SocketEvents.SHAPE_LOCK_REFRESH,
       { boardId: "board-123", shapeId: "shape-1" },
       expect.any(Function)
+    );
+  });
+
+  it("emits shape:transforming fire-and-forget", () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn(),
+    };
+
+    (service as any).socket = mockSocket;
+
+    const payload = {
+      boardId: "board-123",
+      shapeId: "shape-1",
+      x: 100,
+      y: 200,
+      width: 150,
+      height: 120,
+      rotation: 45,
+    };
+
+    service.transformShape(payload);
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.SHAPE_TRANSFORMING,
+      payload
+    );
+  });
+
+  it("emits shape:transform-end fire-and-forget", () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn(),
+    };
+
+    (service as any).socket = mockSocket;
+
+    service.endShapeTransform("board-123", "shape-1");
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.SHAPE_TRANSFORM_END,
+      { boardId: "board-123", shapeId: "shape-1" }
     );
   });
 });

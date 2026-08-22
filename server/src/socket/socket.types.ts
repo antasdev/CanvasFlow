@@ -174,6 +174,39 @@ export type ShapeUnlockedPayload = {
   shapeId: string;
 };
 
+export type TransformingShapePayload = {
+  boardId: string;
+  shapeId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
+
+export type TransformEndPayload = {
+  boardId: string;
+  shapeId: string;
+};
+
+export type ShapeTransformingPayload = {
+  boardId: string;
+  shapeId: string;
+  userId: string;
+  fullName: string;
+  color: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
+
+export type ShapeTransformEndPayload = {
+  boardId: string;
+  shapeId: string;
+};
+
 export type UserJoinedPayload = {
   userId: string;
   activeUsers: ActiveUser[];
@@ -231,6 +264,10 @@ export interface ClientToServerEvents {
     payload: RefreshShapeLockPayload,
     callback?: (response: SocketAck) => void
   ) => void;
+
+  "shape:transforming": (payload: TransformingShapePayload) => void;
+
+  "shape:transform-end": (payload: TransformEndPayload) => void;
 }
 
 /**
@@ -245,6 +282,8 @@ export interface ServerToClientEvents {
   "selection:changed": (payload: SelectionChangedPayload) => void;
   "shape:locked": (payload: ShapeLockedPayload) => void;
   "shape:unlocked": (payload: ShapeUnlockedPayload) => void;
+  "shape:transforming": (payload: ShapeTransformingPayload) => void;
+  "shape:transform-end": (payload: ShapeTransformEndPayload) => void;
   "user:joined": (payload: UserJoinedPayload) => void;
   "user:left": (payload: UserLeftPayload) => void;
   error: (message: string) => void;

@@ -4,7 +4,7 @@ import { Text, Transformer } from "react-konva";
 import { toast } from "sonner";
 
 import { CANVAS_TOOLS } from "../constants";
-import { socketClientService } from "@/services/socket";
+import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { TextShape } from "../types";
 
@@ -21,23 +21,23 @@ export default function TextNode({
 }: TextNodeProps): React.JSX.Element {
   const textRef = useRef<Konva.Text | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const dragStartRef = useRef<{
-    x: number;
-    y: number;
-  } | null>(null);
-
-  const activeTool = useCanvasStore((state) => state.activeTool);
   const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
-  const remoteShapeLocks = useCanvasStore((state) => state.remoteShapeLocks);
-  const selectShape = useCanvasStore((state) => state.selectShape);
-  const toggleShapeSelection = useCanvasStore((state) => state.toggleShapeSelection);
-  const updateShapeTransform = useCanvasStore((state) => state.updateShapeTransform);
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
 
-  const isSelected = selectedShapeIds.includes(shape.id);
-  const remoteLock = remoteShapeLocks[shape.id];
-  const isLockedByOther = Boolean(remoteLock);
+  const {
+    activeTool,
+    isSelected,
+    isLockedByOther,
+    remoteLock,
+    displayTransform,
+    selectShape,
+    toggleShapeSelection,
+    acquireLock,
+    emitTransformFrame,
+    endTransform,
+  } = useShapeTransform({ shape, boardId });
 
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -64,22 +64,14 @@ export default function TextNode({
 
     if (isLockedByOther) {
       toast.info(
-        `${remoteLock.fullName || "Another collaborator"} is currently editing this shape.`
+        `${remoteLock?.fullName || "Another collaborator"} is currently editing this shape.`
       );
       return;
     }
 
-    if (boardId) {
-      try {
-        await socketClientService.lockShape(boardId, shape.id);
-      } catch (err) {
-        toast.info(
-          err instanceof Error
-            ? err.message
-            : "Shape is currently being edited by another collaborator."
-        );
-        return;
-      }
+    const lockAcquired = await acquireLock();
+    if (!lockAcquired) {
+      return;
     }
 
     onStartEditing(shape);
@@ -89,11 +81,11 @@ export default function TextNode({
     <>
       <Text
         ref={textRef}
-        x={shape.x}
-        y={shape.y}
-        width={shape.width > 0 ? shape.width : undefined}
-        height={shape.height > 0 ? shape.height : undefined}
-        rotation={shape.rotation}
+        x={displayTransform.x}
+        y={displayTransform.y}
+        width={displayTransform.width > 0 ? displayTransform.width : undefined}
+        height={displayTransform.height > 0 ? displayTransform.height : undefined}
+        rotation={displayTransform.rotation}
         text={shape.text || "Type something..."}
         fontSize={shape.fontSize}
         fontFamily={shape.fontFamily || "Inter, sans-serif"}
@@ -109,7 +101,7 @@ export default function TextNode({
 
           if (isLockedByOther) {
             toast.info(
-              `${remoteLock.fullName || "Another collaborator"} is currently editing this shape.`
+              `${remoteLock?.fullName || "Another collaborator"} is currently editing this shape.`
             );
             return;
           }
@@ -127,7 +119,7 @@ export default function TextNode({
             selectShape(shape.id);
           }
         }}
-        onDragStart={(event) => {
+        onDragStart={async (event) => {
           event.cancelBubble = true;
 
           if (activeTool !== CANVAS_TOOLS.SELECT) {
@@ -137,7 +129,7 @@ export default function TextNode({
           if (isLockedByOther) {
             event.target.stopDrag();
             toast.info(
-              `${remoteLock.fullName || "Another collaborator"} is currently editing this shape.`
+              `${remoteLock?.fullName || "Another collaborator"} is currently editing this shape.`
             );
             return;
           }
@@ -152,98 +144,85 @@ export default function TextNode({
             y: event.target.y(),
           };
 
-          if (boardId) {
-            socketClientService.lockShape(boardId, shape.id).catch((err) => {
-              event.target.stopDrag();
-              toast.info(
-                err instanceof Error
-                  ? err.message
-                  : "Shape is currently being edited by another collaborator."
-              );
-            });
+          const lockAcquired = await acquireLock();
+          if (!lockAcquired) {
+            event.target.stopDrag();
           }
         }}
         onDragMove={(event) => {
           event.cancelBubble = true;
 
-          if (selectedShapeIds.length <= 1) {
-            return;
-          }
-
-          if (!dragStartRef.current) {
-            return;
-          }
-
           const currentX = event.target.x();
           const currentY = event.target.y();
 
-          const deltaX = currentX - dragStartRef.current.x;
-          const deltaY = currentY - dragStartRef.current.y;
+          if (selectedShapeIds.length > 1 && dragStartRef.current) {
+            const deltaX = currentX - dragStartRef.current.x;
+            const deltaY = currentY - dragStartRef.current.y;
 
-          dragStartRef.current = {
+            dragStartRef.current = {
+              x: currentX,
+              y: currentY,
+            };
+
+            moveSelectedShapes(deltaX, deltaY);
+          }
+
+          emitTransformFrame({
             x: currentX,
             y: currentY,
-          };
-
-          moveSelectedShapes(deltaX, deltaY);
+            width: shape.width,
+            height: shape.height,
+            rotation: shape.rotation,
+          });
         }}
         onDragEnd={(event) => {
           event.cancelBubble = true;
 
-          const targetX = event.target.x();
-          const targetY = event.target.y();
+          const currentX = event.target.x();
+          const currentY = event.target.y();
 
-          if (selectedShapeIds.length <= 1) {
-            updateShapeTransform(shape.id, {
-              x: targetX,
-              y: targetY,
+          const dragStart = dragStartRef.current;
+          dragStartRef.current = null;
+
+          const delta = dragStart
+            ? { x: currentX - dragStart.x, y: currentY - dragStart.y }
+            : undefined;
+
+          endTransform(
+            {
+              x: currentX,
+              y: currentY,
               width: shape.width,
               height: shape.height,
               rotation: shape.rotation,
-            });
-
-            if (boardId) {
-              socketClientService
-                .updateShape(shape.id, {
-                  x: targetX,
-                  y: targetY,
-                })
-                .catch((err) => {
-                  toast.error(
-                    err instanceof Error
-                      ? err.message
-                      : "Failed to persist text move."
-                  );
-                })
-                .finally(() => {
-                  socketClientService
-                    .unlockShape(boardId, shape.id)
-                    .catch(() => {});
-                });
-            }
-          } else {
-            if (boardId) {
-              socketClientService
-                .unlockShape(boardId, shape.id)
-                .catch(() => {});
-            }
-          }
-
-          dragStartRef.current = null;
+            },
+            delta
+          );
         }}
         onTransformStart={async (event) => {
           event.cancelBubble = true;
-          if (boardId) {
-            try {
-              await socketClientService.lockShape(boardId, shape.id);
-            } catch (err) {
-              toast.info(
-                err instanceof Error
-                  ? err.message
-                  : "Shape is currently locked by another collaborator."
-              );
-            }
+          await acquireLock();
+        }}
+        onTransform={(event) => {
+          event.cancelBubble = true;
+          const node = textRef.current;
+          if (!node) {
+            return;
           }
+
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+
+          const nextWidth = Math.max(5, node.width() * scaleX);
+          const nextHeight = Math.max(5, node.height() * scaleY);
+
+          emitTransformFrame({
+            x: node.x(),
+            y: node.y(),
+            width: nextWidth,
+            height: nextHeight,
+            rotation: node.rotation(),
+          });
         }}
         onTransformEnd={(event) => {
           event.cancelBubble = true;
@@ -265,36 +244,13 @@ export default function TextNode({
           const nextX = node.x();
           const nextY = node.y();
 
-          updateShapeTransform(shape.id, {
+          endTransform({
             x: nextX,
             y: nextY,
             width: nextWidth,
             height: nextHeight,
             rotation: nextRotation,
           });
-
-          if (boardId) {
-            socketClientService
-              .updateShape(shape.id, {
-                x: nextX,
-                y: nextY,
-                width: nextWidth,
-                height: nextHeight,
-                rotation: nextRotation,
-              })
-              .catch((err) => {
-                toast.error(
-                  err instanceof Error
-                    ? err.message
-                    : "Failed to persist text transform."
-                );
-              })
-              .finally(() => {
-                socketClientService
-                  .unlockShape(boardId, shape.id)
-                  .catch(() => {});
-              });
-          }
         }}
       />
 

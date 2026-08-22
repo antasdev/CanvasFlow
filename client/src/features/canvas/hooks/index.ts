@@ -5,3 +5,4 @@ export * from "./useCreateShape";
 export * from "./useUpdateShape";
 export * from "./useDeleteShape";
 export * from "./useCanvasSocket";
+export * from "./useShapeTransform";
