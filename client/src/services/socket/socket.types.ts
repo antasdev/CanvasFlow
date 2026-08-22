@@ -1,12 +1,28 @@
 import type { Socket } from "socket.io-client";
 
 /**
+ * Safe representation of an active user exposed via presence.
+ */
+export type ActiveUser = {
+  userId: string;
+  role: string;
+};
+
+/**
+ * Structured socket acknowledgement error details.
+ */
+export type SocketAckError = {
+  code?: string;
+  message: string;
+};
+
+/**
  * Generic socket acknowledgement callback payload.
  */
 export type SocketAck<T = void> = {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: SocketAckError | string;
 };
 
 /**
@@ -48,10 +64,11 @@ export type LeaveBoardPayload = {
 export type BoardJoinAckData = {
   boardId: string;
   canvasId: string;
+  activeUsers: ActiveUser[];
 };
 
 /**
- * Shape Event Payloads
+ * Shape Event Payloads (Foundation Contracts)
  */
 export type CreateShapePayload = {
   canvasId: string;
@@ -94,6 +111,7 @@ export type DeleteShapePayload = {
  * Canvas Synchronization & Presence Payloads
  */
 export type CanvasSyncPayload = {
+  boardId: string;
   canvasId: string;
   shapes: ShapeResponseDto[];
 };
@@ -116,10 +134,12 @@ export type CursorMovedPayload = {
 
 export type UserJoinedPayload = {
   userId: string;
+  activeUsers: ActiveUser[];
 };
 
 export type UserLeftPayload = {
   userId: string;
+  activeUsers: ActiveUser[];
 };
 
 /**

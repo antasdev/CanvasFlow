@@ -4,7 +4,11 @@ import { Server } from "socket.io";
 import env from "@/config/env";
 import { SocketEvents } from "./socket.events";
 import { socketAuthMiddleware } from "./socket.middleware";
+import { registerBoardHandlers } from "./handlers/board.handler";
+import { presenceManager } from "./presence/presence.manager";
+import { getBoardRoom } from "./socket.rooms";
 import {
+  AuthSocket,
   ClientToServerEvents,
   ServerToClientEvents,
   InterServerEvents,
@@ -38,12 +42,30 @@ export class SocketServer {
   }
 
   private registerConnection(): void {
-    this.io.on(SocketEvents.CONNECTION, (socket) => {
+    this.io.on(SocketEvents.CONNECTION, (socket: AuthSocket) => {
       console.log(
         `[Socket] Authenticated connection established: ${socket.id} (User: ${socket.data.user.userId})`
       );
 
+      // Register Slice 2 Board Room Handlers
+      registerBoardHandlers(socket);
+
+      // Handle Socket Disconnection Lifecycle & Multi-Tab Presence Cleanup
       socket.on(SocketEvents.DISCONNECT, (reason) => {
+        const removeResult = presenceManager.removeSocket(socket.id);
+
+        if (
+          removeResult.boardId &&
+          removeResult.isLastSocketForUser &&
+          removeResult.removedUserId
+        ) {
+          const room = getBoardRoom(removeResult.boardId);
+          this.io.to(room).emit(SocketEvents.USER_LEFT, {
+            userId: removeResult.removedUserId,
+            activeUsers: removeResult.activeUsers,
+          });
+        }
+
         console.log(
           `[Socket] Connection disconnected: ${socket.id} (Reason: ${reason})`
         );

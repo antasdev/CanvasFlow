@@ -34,3 +34,5 @@ export * from "./socket.types";
 export * from "./socket.rooms";
 export * from "./socket.middleware";
 export * from "./socket.server";
+export * from "./presence/presence.manager";
+export * from "./handlers/board.handler";

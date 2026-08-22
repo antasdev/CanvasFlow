@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SocketClientService } from "./socket.client";
 import { SocketEvents } from "./socket.events";
 
-describe("SocketClientService Foundation", () => {
+describe("SocketClientService", () => {
   let service: SocketClientService;
 
   beforeEach(() => {
@@ -33,7 +33,6 @@ describe("SocketClientService Foundation", () => {
   });
 
   it("updates auth token format cleanly", () => {
-    // Calling updateToken when socket is null should not throw
     expect(() => service.updateToken("test-jwt-token")).not.toThrow();
   });
 
@@ -52,5 +51,73 @@ describe("SocketClientService Foundation", () => {
     expect(SocketEvents.CURSOR_MOVE).toBe("cursor:move");
     expect(SocketEvents.CURSOR_MOVED).toBe("cursor:moved");
     expect(SocketEvents.ERROR).toBe("error");
+  });
+
+  it("handles joinBoard success acknowledgement", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((event: string, payload: any, callback: (res: any) => void) => {
+        if (event === SocketEvents.BOARD_JOIN) {
+          callback({
+            success: true,
+            data: {
+              boardId: payload.boardId,
+              canvasId: "canvas-1",
+              activeUsers: [{ userId: "user-1", role: "USER" }],
+            },
+          });
+        }
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    const result = await service.joinBoard("board-123");
+    expect(result.boardId).toBe("board-123");
+    expect(result.canvasId).toBe("canvas-1");
+    expect(result.activeUsers).toHaveLength(1);
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.BOARD_JOIN,
+      { boardId: "board-123" },
+      expect.any(Function)
+    );
+  });
+
+  it("handles joinBoard failure acknowledgement", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+        if (event === SocketEvents.BOARD_JOIN) {
+          callback({
+            success: false,
+            error: { code: "FORBIDDEN", message: "Access denied." },
+          });
+        }
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    await expect(service.joinBoard("forbidden-board")).rejects.toThrow("Access denied.");
+  });
+
+  it("handles leaveBoard success acknowledgement", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+        if (event === SocketEvents.BOARD_LEAVE) {
+          callback({ success: true });
+        }
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    await expect(service.leaveBoard("board-123")).resolves.toBeUndefined();
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.BOARD_LEAVE,
+      { boardId: "board-123" },
+      expect.any(Function)
+    );
   });
 });

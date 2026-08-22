@@ -19,16 +19,32 @@ export type SocketData = {
 };
 
 /**
+ * Safe representation of an active user exposed via presence.
+ */
+export type ActiveUser = {
+  userId: string;
+  role: string;
+};
+
+/**
+ * Structured socket acknowledgement error details.
+ */
+export type SocketAckError = {
+  code?: string;
+  message: string;
+};
+
+/**
  * Standard socket acknowledgement response payload.
  */
 export type SocketAck<T = void> = {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: SocketAckError | string;
 };
 
 /**
- * Board Room Lifecycle Payloads (Foundation)
+ * Board Room Lifecycle Payloads
  */
 export type JoinBoardPayload = {
   boardId: string;
@@ -42,6 +58,7 @@ export type LeaveBoardPayload = {
 export type BoardJoinAckData = {
   boardId: string;
   canvasId: string;
+  activeUsers: ActiveUser[];
 };
 
 /**
@@ -85,9 +102,10 @@ export type DeleteShapePayload = {
 };
 
 /**
- * Canvas Synchronization & Presence Payloads (Foundation Contracts)
+ * Canvas Synchronization & Presence Payloads
  */
 export type CanvasSyncPayload = {
+  boardId: string;
   canvasId: string;
   shapes: ShapeResponseDto[];
 };
@@ -110,10 +128,12 @@ export type CursorMovedPayload = {
 
 export type UserJoinedPayload = {
   userId: string;
+  activeUsers: ActiveUser[];
 };
 
 export type UserLeftPayload = {
   userId: string;
+  activeUsers: ActiveUser[];
 };
 
 /**

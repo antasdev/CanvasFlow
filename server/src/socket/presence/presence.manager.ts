@@ -1,123 +1,192 @@
-import { SocketUser } from "../socket.types";
+import { ActiveUser, SocketUser } from "../socket.types";
 
+export type JoinBoardResult = {
+  isFirstSocketForUser: boolean;
+  activeUsers: ActiveUser[];
+};
+
+export type LeaveBoardResult = {
+  isLastSocketForUser: boolean;
+  removedUserId?: string;
+  activeUsers: ActiveUser[];
+};
+
+export type RemoveSocketResult = LeaveBoardResult & {
+  boardId?: string;
+};
+
+/**
+ * In-memory manager tracking active user presence per board.
+ * Supports multi-tab sessions per user and handles graceful disconnection.
+ */
 export class PresenceManager {
   /**
-   * boardId -> socketId -> user
+   * boardId -> socketId -> SocketUser
    */
-  private readonly boards = new Map<
-    string,
-    Map<string, SocketUser>
-  >();
+  private readonly boards = new Map<string, Map<string, SocketUser>>();
 
   /**
    * socketId -> boardId
    */
-  private readonly socketBoards = new Map<
-    string,
-    string
-  >();
+  private readonly socketBoards = new Map<string, string>();
 
   /**
-   * Join a board
+   * Registers a socket joining a board room.
+   *
+   * @param boardId - The target board identifier
+   * @param socketId - The joining socket identifier
+   * @param user - The authenticated user attached to the socket
+   * @returns Whether this is the user's first socket and the updated active users list
    */
   joinBoard(
     boardId: string,
     socketId: string,
     user: SocketUser
-  ): void {
+  ): JoinBoardResult {
     let board = this.boards.get(boardId);
 
     if (!board) {
-      board = new Map();
-
-      this.boards.set(
-        boardId,
-        board
-      );
+      board = new Map<string, SocketUser>();
+      this.boards.set(boardId, board);
     }
 
-    board.set(
-      socketId,
-      user
-    );
+    const userIdStr = user.userId.toString();
+    const isFirstSocketForUser = !this.isUserPresentInBoard(board, userIdStr);
 
-    this.socketBoards.set(
-      socketId,
-      boardId
-    );
+    board.set(socketId, user);
+    this.socketBoards.set(socketId, boardId);
+
+    return {
+      isFirstSocketForUser,
+      activeUsers: this.getActiveUsers(boardId),
+    };
   }
 
   /**
-   * Leave a board
+   * Removes a socket from a board room.
+   *
+   * @param boardId - The target board identifier
+   * @param socketId - The leaving socket identifier
+   * @returns Departure status, removed user ID if last tab, and remaining active users
    */
   leaveBoard(
     boardId: string,
     socketId: string
-  ): void {
-    const board =
-      this.boards.get(boardId);
+  ): LeaveBoardResult {
+    const board = this.boards.get(boardId);
 
     if (!board) {
-      return;
+      return {
+        isLastSocketForUser: false,
+        activeUsers: [],
+      };
     }
 
-    board.delete(socketId);
+    const user = board.get(socketId);
 
-    this.socketBoards.delete(
-      socketId
-    );
+    if (!user) {
+      return {
+        isLastSocketForUser: false,
+        activeUsers: this.getActiveUsers(boardId),
+      };
+    }
+
+    const userIdStr = user.userId.toString();
+
+    board.delete(socketId);
+    this.socketBoards.delete(socketId);
 
     if (board.size === 0) {
       this.boards.delete(boardId);
     }
+
+    const isLastSocketForUser = !this.isUserPresentInBoard(board, userIdStr);
+
+    return {
+      isLastSocketForUser,
+      removedUserId: isLastSocketForUser ? userIdStr : undefined,
+      activeUsers: this.getActiveUsers(boardId),
+    };
   }
 
   /**
-   * Remove socket
+   * Removes a socket across all boards based on socketId (disconnect event).
+   *
+   * @param socketId - The disconnected socket identifier
+   * @returns Complete departure result including the board ID
    */
-  removeSocket(
-    socketId: string
-  ): void {
-    const boardId =
-      this.socketBoards.get(socketId);
+  removeSocket(socketId: string): RemoveSocketResult {
+    const boardId = this.socketBoards.get(socketId);
 
     if (!boardId) {
-      return;
+      return {
+        isLastSocketForUser: false,
+        activeUsers: [],
+      };
     }
 
-    this.leaveBoard(
+    const leaveResult = this.leaveBoard(boardId, socketId);
+
+    return {
       boardId,
-      socketId
-    );
+      ...leaveResult,
+    };
   }
 
   /**
-   * Active users
+   * Retrieves unique active users currently present in a board.
+   *
+   * @param boardId - The board identifier
+   * @returns Array of deduplicated safe ActiveUser objects
    */
-  getUsers(
-    boardId: string
-  ): SocketUser[] {
-    const board =
-      this.boards.get(boardId);
+  getActiveUsers(boardId: string): ActiveUser[] {
+    const board = this.boards.get(boardId);
 
     if (!board) {
       return [];
     }
 
-    return [...board.values()];
+    const uniqueUsers = new Map<string, ActiveUser>();
+
+    for (const socketUser of board.values()) {
+      const idStr = socketUser.userId.toString();
+      if (!uniqueUsers.has(idStr)) {
+        uniqueUsers.set(idStr, {
+          userId: idStr,
+          role: socketUser.role,
+        });
+      }
+    }
+
+    return Array.from(uniqueUsers.values());
   }
 
   /**
-   * Board lookup
+   * Looks up the boardId associated with a socket.
    */
-  getBoardId(
-    socketId: string
-  ): string | undefined {
-    return this.socketBoards.get(
-      socketId
-    );
+  getBoardId(socketId: string): string | undefined {
+    return this.socketBoards.get(socketId);
+  }
+
+  /**
+   * Clears internal state (primarily for test isolation).
+   */
+  clear(): void {
+    this.boards.clear();
+    this.socketBoards.clear();
+  }
+
+  private isUserPresentInBoard(
+    board: Map<string, SocketUser>,
+    userIdStr: string
+  ): boolean {
+    for (const socketUser of board.values()) {
+      if (socketUser.userId.toString() === userIdStr) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 
-export const presenceManager =
-  new PresenceManager();
+export const presenceManager = new PresenceManager();

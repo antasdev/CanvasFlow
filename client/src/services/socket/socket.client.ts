@@ -1,14 +1,18 @@
 import { io } from "socket.io-client";
 import { appConfig } from "@/config";
 import { useAuthStore } from "@/store";
+import { SocketEvents } from "./socket.events";
 import type {
+  BoardJoinAckData,
   ConnectionState,
+  JoinBoardPayload,
+  LeaveBoardPayload,
   TypedSocket,
 } from "./socket.types";
 
 /**
  * Encapsulated service managing Socket.IO client connections,
- * authentication handshake, and connection state transitions.
+ * authentication handshake, board room lifecycle, and connection state transitions.
  */
 export class SocketClientService {
   private socket: TypedSocket | null = null;
@@ -99,6 +103,70 @@ export class SocketClientService {
         this.socket.disconnect().connect();
       }
     }
+  }
+
+  /**
+   * Joins a collaborative board room and retrieves canonical canvas state.
+   *
+   * @param boardId - Target board identifier
+   * @param canvasId - Optional canvas page identifier
+   * @returns Promise resolving with initial board join acknowledgement data
+   */
+  public joinBoard(
+    boardId: string,
+    canvasId?: string
+  ): Promise<BoardJoinAckData> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: JoinBoardPayload = {
+        boardId,
+        ...(canvasId ? { canvasId } : {}),
+      };
+
+      socket.emit(SocketEvents.BOARD_JOIN, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to join board room.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Leaves a collaborative board room.
+   *
+   * @param boardId - Target board identifier
+   * @returns Promise resolving when leave acknowledgement is received
+   */
+  public leaveBoard(boardId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!this.socket) {
+        resolve();
+        return;
+      }
+
+      const payload: LeaveBoardPayload = {
+        boardId,
+      };
+
+      this.socket.emit(SocketEvents.BOARD_LEAVE, payload, (response) => {
+        if (response.success) {
+          resolve();
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to leave board room.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
   }
 
   /**
