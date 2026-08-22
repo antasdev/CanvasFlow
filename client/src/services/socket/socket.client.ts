@@ -6,6 +6,7 @@ import type {
   BoardJoinAckData,
   ConnectionState,
   CreateShapePayload,
+  CursorMovePayload,
   DeleteShapePayload,
   JoinBoardPayload,
   LeaveBoardPayload,
@@ -258,6 +259,33 @@ export class SocketClientService {
         }
       });
     });
+  }
+
+  /**
+   * Emits live collaborator cursor movement over Socket.IO.
+   * Ephemeral fire-and-forget event with zero acknowledgement overhead.
+   *
+   * @param boardId - Target board identifier
+   * @param position - Canvas world coordinates (x, y)
+   */
+  public moveCursor(
+    boardId: string,
+    position: {
+      x: number;
+      y: number;
+    }
+  ): void {
+    if (!this.socket?.connected) {
+      return;
+    }
+
+    const payload: CursorMovePayload = {
+      boardId,
+      x: position.x,
+      y: position.y,
+    };
+
+    this.socket.emit(SocketEvents.CURSOR_MOVE, payload);
   }
 
   /**

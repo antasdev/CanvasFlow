@@ -123,13 +123,22 @@ export type CursorPosition = {
 
 export type CursorMovePayload = {
   boardId: string;
-  position: CursorPosition;
+  x: number;
+  y: number;
 };
 
 export type CursorMovedPayload = {
-  boardId: string;
-  position: CursorPosition;
   userId: string;
+  boardId: string;
+  x: number;
+  y: number;
+};
+
+export type RemoteCursor = {
+  userId: string;
+  boardId: string;
+  x: number;
+  y: number;
 };
 
 export type UserJoinedPayload = {

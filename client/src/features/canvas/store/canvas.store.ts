@@ -5,6 +5,9 @@ import {
   type CanvasTool,
 } from "../constants";
 import type { Shape } from "../types";
+import type { RemoteCursor } from "@/services/socket";
+
+export type { RemoteCursor };
 
 type ShapePositionUpdate = {
   x: number;
@@ -78,11 +81,19 @@ type CanvasStore = {
 
   setPan: (x: number, y: number) => void;
 
+  remoteCursors: Record<string, RemoteCursor>;
+
   applyRemoteShapeCreated: (shape: Shape) => void;
 
   applyRemoteShapeUpdated: (shape: Shape) => void;
 
   applyRemoteShapeDeleted: (shapeId: string) => void;
+
+  setRemoteCursor: (cursor: RemoteCursor) => void;
+
+  removeRemoteCursor: (userId: string) => void;
+
+  clearRemoteCursors: () => void;
 
   undo: () => void;
 
@@ -100,6 +111,8 @@ export const useCanvasStore = create<CanvasStore>(
     shapes: [],
 
     selectedShapeIds: [],
+
+    remoteCursors: {},
 
     zoom: 1,
 
@@ -232,6 +245,7 @@ export const useCanvasStore = create<CanvasStore>(
       set({
         shapes: [],
         selectedShapeIds: [],
+        remoteCursors: {},
         past: [],
         future: [],
       });
@@ -349,6 +363,34 @@ export const useCanvasStore = create<CanvasStore>(
         shapes: state.shapes.filter((s) => s.id !== shapeId),
         selectedShapeIds: state.selectedShapeIds.filter((id) => id !== shapeId),
       }));
+    },
+
+    setRemoteCursor: (cursor: RemoteCursor): void => {
+      set((state) => ({
+        remoteCursors: {
+          ...state.remoteCursors,
+          [cursor.userId]: cursor,
+        },
+      }));
+    },
+
+    removeRemoteCursor: (userId: string): void => {
+      set((state) => {
+        if (!state.remoteCursors[userId]) {
+          return state;
+        }
+        const nextCursors = { ...state.remoteCursors };
+        delete nextCursors[userId];
+        return {
+          remoteCursors: nextCursors,
+        };
+      });
+    },
+
+    clearRemoteCursors: (): void => {
+      set({
+        remoteCursors: {},
+      });
     },
 
     undo: (): void => {

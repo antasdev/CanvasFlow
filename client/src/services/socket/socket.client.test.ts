@@ -276,4 +276,24 @@ describe("SocketClientService", () => {
       expect.any(Function)
     );
   });
+
+  it("handles moveCursor emitting cursor:move fire-and-forget", () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn(),
+    };
+
+    (service as any).socket = mockSocket;
+
+    service.moveCursor("board-123", { x: 150, y: 250 });
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.CURSOR_MOVE,
+      {
+        boardId: "board-123",
+        x: 150,
+        y: 250,
+      }
+    );
+  });
 });

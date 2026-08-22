@@ -37,3 +37,4 @@ export * from "./socket.server";
 export * from "./presence/presence.manager";
 export * from "./handlers/board.handler";
 export * from "./handlers/shape.handler";
+export * from "./handlers/cursor.handler";

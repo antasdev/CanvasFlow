@@ -225,4 +225,49 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().past).toHaveLength(0);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });
+
+    it("manages remote cursors without modifying undo/redo history", () => {
+        const cursor1 = {
+            userId: "user-1",
+            boardId: "board-1",
+            x: 100,
+            y: 200,
+        };
+
+        const cursor2 = {
+            userId: "user-2",
+            boardId: "board-1",
+            x: 300,
+            y: 400,
+        };
+
+        // 1. Set remote cursors
+        useCanvasStore.getState().setRemoteCursor(cursor1);
+        useCanvasStore.getState().setRemoteCursor(cursor2);
+
+        expect(Object.keys(useCanvasStore.getState().remoteCursors)).toHaveLength(2);
+        expect(useCanvasStore.getState().remoteCursors["user-1"].x).toBe(100);
+        expect(useCanvasStore.getState().remoteCursors["user-2"].x).toBe(300);
+
+        // 2. Update existing cursor
+        useCanvasStore.getState().setRemoteCursor({
+            ...cursor1,
+            x: 150,
+            y: 250,
+        });
+        expect(useCanvasStore.getState().remoteCursors["user-1"].x).toBe(150);
+
+        // 3. Remove single cursor
+        useCanvasStore.getState().removeRemoteCursor("user-1");
+        expect(useCanvasStore.getState().remoteCursors["user-1"]).toBeUndefined();
+        expect(useCanvasStore.getState().remoteCursors["user-2"]).toBeDefined();
+
+        // 4. Clear all cursors
+        useCanvasStore.getState().clearRemoteCursors();
+        expect(Object.keys(useCanvasStore.getState().remoteCursors)).toHaveLength(0);
+
+        // Verify undo/redo stacks were NEVER modified by cursor state
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
 });

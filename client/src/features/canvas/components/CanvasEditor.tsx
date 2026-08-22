@@ -15,6 +15,7 @@ import { useCanvasStore } from "../store";
 import { screenToWorld } from "../utils/canvas.coordinates";
 
 import CanvasGrid from "./CanvasGrid";
+import CollaboratorCursor from "./CollaboratorCursor";
 import ShapeRenderer from "./ShapeRenderer";
 
 type CanvasEditorProps = {
@@ -63,10 +64,17 @@ export default function CanvasEditor({
     const hydratedCanvasIdRef =
         useRef<string | null>(null);
 
+    const lastCursorEmitTimeRef =
+        useRef<number>(0);
+
     const { data: serverShapes } = useShapes(canvasId);
 
     const setShapes = useCanvasStore(
         (state) => state.setShapes,
+    );
+
+    const remoteCursors = useCanvasStore(
+        (state) => state.remoteCursors,
     );
 
     const [size, setSize] = useState<CanvasSize>({
@@ -417,6 +425,16 @@ export default function CanvasEditor({
             zoom,
         });
 
+        // Throttle cursor:move emissions to ~30 fps (~33ms)
+        const now = Date.now();
+        if (boardId && now - lastCursorEmitTimeRef.current >= 33) {
+            lastCursorEmitTimeRef.current = now;
+            socketClientService.moveCursor(boardId, {
+                x: worldPoint.x,
+                y: worldPoint.y,
+            });
+        }
+
         if (selectionBox) {
             setSelectionBox((current) => {
                 if (!current) {
@@ -680,6 +698,16 @@ export default function CanvasEditor({
                                 opacity={0.7}
                             />
                         ) : null}
+                    </Layer>
+
+                    {/* Dedicated Collaborator Cursor Overlay Layer */}
+                    <Layer listening={false}>
+                        {Object.values(remoteCursors).map((cursor) => (
+                            <CollaboratorCursor
+                                key={cursor.userId}
+                                cursor={cursor}
+                            />
+                        ))}
                     </Layer>
                 </Stage>
             ) : null}
