@@ -63,10 +63,12 @@ async function runTests() {
   assert(responseDto.height === 150, "DTO height must match");
   assert(responseDto.rotation === 45, "DTO rotation must match");
   assert(responseDto.zIndex === 3, "DTO zIndex must match");
-  assert(responseDto.style.fill === "#ff0000", "DTO style.fill must match");
-  assert(responseDto.style.stroke === "#000000", "DTO style.stroke must match");
-  assert(responseDto.style.strokeWidth === 4, "DTO style.strokeWidth must match");
-  assert(responseDto.style.opacity === 0.8, "DTO style.opacity must match");
+  if (responseDto.type === "rectangle") {
+    assert(responseDto.style.fill === "#ff0000", "DTO style.fill must match");
+    assert(responseDto.style.stroke === "#000000", "DTO style.stroke must match");
+    assert(responseDto.style.strokeWidth === 4, "DTO style.strokeWidth must match");
+    assert(responseDto.style.opacity === 0.8, "DTO style.opacity must match");
+  }
   assert(
     responseDto.createdAt === mockDate.toISOString(),
     "DTO createdAt must be ISO string"
@@ -92,10 +94,12 @@ async function runTests() {
   };
 
   const minimalDto = ShapeMapper.toResponseDto(mockMinimalDoc);
-  assert(minimalDto.style.fill === "#ffffff", "Default fill should be #ffffff");
-  assert(minimalDto.style.stroke === "#1f2937", "Default stroke should be #1f2937");
-  assert(minimalDto.style.strokeWidth === 2, "Default strokeWidth should be 2");
-  assert(minimalDto.style.opacity === 1, "Default opacity should be 1");
+  if (minimalDto.type === "rectangle") {
+    assert(minimalDto.style.fill === "#ffffff", "Default fill should be #ffffff");
+    assert(minimalDto.style.stroke === "#1f2937", "Default stroke should be #1f2937");
+    assert(minimalDto.style.strokeWidth === 2, "Default strokeWidth should be 2");
+    assert(minimalDto.style.opacity === 1, "Default opacity should be 1");
+  }
   console.log("✓ Default style mapping passed.");
 
   // 3. Validation: Valid Create Shape

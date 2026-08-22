@@ -351,4 +351,77 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().past).toHaveLength(0);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });
+
+    it("handles updateShapeText with undo/redo recording", () => {
+        const textShape = {
+            id: "text-1",
+            type: "text" as const,
+            x: 100,
+            y: 100,
+            width: 150,
+            height: 40,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            text: "Initial Text",
+            fontSize: 24,
+            fontFamily: "Inter",
+            fontWeight: "normal",
+            fontStyle: "normal",
+            textAlign: "left" as const,
+            fill: "#1f2937",
+        };
+
+        useCanvasStore.getState().addShape(textShape);
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+
+        // Update text
+        useCanvasStore.getState().updateShapeText("text-1", "Updated Text Content");
+        const currentShape = useCanvasStore.getState().shapes[0];
+        expect((currentShape as any).text).toBe("Updated Text Content");
+
+        // Undo
+        useCanvasStore.getState().undo();
+        const undoneShape = useCanvasStore.getState().shapes[0];
+        expect((undoneShape as any).text).toBe("Initial Text");
+
+        // Redo
+        useCanvasStore.getState().redo();
+        const redoneShape = useCanvasStore.getState().shapes[0];
+        expect((redoneShape as any).text).toBe("Updated Text Content");
+    });
+
+    it("handles applyRemoteShapeUpdated for text shapes without modifying undo/redo history", () => {
+        const stickyShape = {
+            id: "sticky-1",
+            type: "sticky_note" as const,
+            x: 200,
+            y: 200,
+            width: 180,
+            height: 180,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            text: "Original Sticky",
+            fontSize: 18,
+            backgroundColor: "#fef08a",
+            textColor: "#1f2937",
+        };
+
+        useCanvasStore.getState().setShapes([stickyShape]);
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+
+        // Remote collaborator updates text
+        const remoteUpdatedSticky = {
+            ...stickyShape,
+            text: "Remote update from collaborator",
+            backgroundColor: "#bbf7d0",
+        };
+
+        useCanvasStore.getState().applyRemoteShapeUpdated(remoteUpdatedSticky);
+
+        expect(useCanvasStore.getState().shapes[0]).toEqual(remoteUpdatedSticky);
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
 });

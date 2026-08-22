@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Layer, Rect, Stage } from "react-konva";
 import { toast } from "sonner";
 
-import { mapShapeResponseToRectangleShape, shapeApi } from "../api";
+import { mapShapeResponseToShape, shapeApi } from "../api";
 import { CANVAS_TOOLS } from "../constants";
 import {
     useCanvasHistory,
@@ -12,12 +12,14 @@ import {
 } from "../hooks";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
+import type { TextShape, StickyNoteShape } from "../types";
 import { screenToWorld } from "../utils/canvas.coordinates";
 
 import CanvasGrid from "./CanvasGrid";
 import CollaboratorCursor from "./CollaboratorCursor";
 import CollaboratorSelection from "./CollaboratorSelection";
 import CollaboratorShapeLock from "./CollaboratorShapeLock";
+import InlineTextEditor from "./InlineTextEditor";
 import ShapeRenderer from "./ShapeRenderer";
 
 type CanvasEditorProps = {
@@ -54,9 +56,6 @@ export default function CanvasEditor({
     boardId,
     className,
 }: CanvasEditorProps): React.JSX.Element {
-    useCanvasHistory();
-    useCanvasSocket(boardId, canvasId);
-
     const containerRef =
         useRef<HTMLDivElement | null>(null);
 
@@ -72,10 +71,25 @@ export default function CanvasEditor({
     const lastBroadcastSelectionRef =
         useRef<string>("");
 
-    const { data: serverShapes } = useShapes(canvasId);
+    const [editingShape, setEditingShape] =
+        useState<TextShape | StickyNoteShape | null>(null);
+
+    // Initialize real-time WebSocket room subscriptions and synchronization
+    useCanvasSocket(boardId, canvasId);
+
+    // Initialize keyboard undo/redo shortcuts
+    useCanvasHistory();
+
+    const {
+        data: serverShapes,
+    } = useShapes(canvasId);
 
     const setShapes = useCanvasStore(
         (state) => state.setShapes,
+    );
+
+    const selectedShapeIds = useCanvasStore(
+        (state) => state.selectedShapeIds,
     );
 
     const remoteCursors = useCanvasStore(
@@ -90,11 +104,15 @@ export default function CanvasEditor({
         (state) => state.remoteShapeLocks,
     );
 
-    const selectedShapeIds = useCanvasStore(
-        (state) => state.selectedShapeIds,
+    const setActiveTool = useCanvasStore(
+        (state) => state.setActiveTool,
     );
 
-    // Broadcast local selection changes to collaborators
+    const updateShapeText = useCanvasStore(
+        (state) => state.updateShapeText,
+    );
+
+    // Broadcast selection changes to other collaborators over Socket.IO
     useEffect(() => {
         if (!boardId) {
             return;
@@ -177,7 +195,7 @@ export default function CanvasEditor({
         ) {
             hydratedCanvasIdRef.current = canvasId;
             const mapped = serverShapes.map(
-                mapShapeResponseToRectangleShape,
+                mapShapeResponseToShape,
             );
             setShapes(mapped);
         }
@@ -256,7 +274,7 @@ export default function CanvasEditor({
                                     );
                                 setShapes(
                                     canonical.map(
-                                        mapShapeResponseToRectangleShape,
+                                        mapShapeResponseToShape,
                                     ),
                                 );
                             } catch {
@@ -407,6 +425,94 @@ export default function CanvasEditor({
             clearSelection();
         }
 
+        if (activeTool === CANVAS_TOOLS.TEXT && isEmptyCanvas) {
+            if (!canvasId) {
+                toast.error("No active canvas available.");
+                return;
+            }
+
+            const pointer = stage.getPointerPosition();
+            if (!pointer) return;
+
+            const worldPoint = screenToWorld(pointer, { pan, zoom });
+
+            socketClientService
+                .createShape({
+                    canvasId,
+                    type: "text",
+                    x: worldPoint.x,
+                    y: worldPoint.y,
+                    width: 160,
+                    height: 36,
+                    rotation: 0,
+                    style: {
+                        text: "Type something...",
+                        fontSize: 24,
+                        fontFamily: "Inter",
+                        fill: "#1f2937",
+                        opacity: 1,
+                    },
+                })
+                .then((savedShape) => {
+                    const shape = mapShapeResponseToShape(savedShape);
+                    addShape(shape);
+                    setSelectedShapeIds([shape.id]);
+                    setActiveTool(CANVAS_TOOLS.SELECT);
+                })
+                .catch((err) => {
+                    toast.error(
+                        err instanceof Error
+                            ? err.message
+                            : "Failed to create text shape."
+                    );
+                });
+            return;
+        }
+
+        if (activeTool === CANVAS_TOOLS.STICKY_NOTE && isEmptyCanvas) {
+            if (!canvasId) {
+                toast.error("No active canvas available.");
+                return;
+            }
+
+            const pointer = stage.getPointerPosition();
+            if (!pointer) return;
+
+            const worldPoint = screenToWorld(pointer, { pan, zoom });
+
+            socketClientService
+                .createShape({
+                    canvasId,
+                    type: "sticky_note",
+                    x: worldPoint.x,
+                    y: worldPoint.y,
+                    width: 180,
+                    height: 180,
+                    rotation: 0,
+                    style: {
+                        text: "New note",
+                        fontSize: 18,
+                        backgroundColor: "#fef08a",
+                        textColor: "#1f2937",
+                        opacity: 1,
+                    },
+                })
+                .then((savedShape) => {
+                    const shape = mapShapeResponseToShape(savedShape);
+                    addShape(shape);
+                    setSelectedShapeIds([shape.id]);
+                    setActiveTool(CANVAS_TOOLS.SELECT);
+                })
+                .catch((err) => {
+                    toast.error(
+                        err instanceof Error
+                            ? err.message
+                            : "Failed to create sticky note."
+                    );
+                });
+            return;
+        }
+
         if (activeTool !== CANVAS_TOOLS.RECTANGLE) {
             return;
         }
@@ -526,15 +632,10 @@ export default function CanvasEditor({
 
             const selectedIds = shapes
                 .filter((shape) => {
-                    if (shape.type !== "rectangle") {
-                        return false;
-                    }
-
-                    const shapeRight =
-                        shape.x + shape.width;
-
-                    const shapeBottom =
-                        shape.y + shape.height;
+                    const shapeWidth = shape.width || 100;
+                    const shapeHeight = shape.height || 40;
+                    const shapeRight = shape.x + shapeWidth;
+                    const shapeBottom = shape.y + shapeHeight;
 
                     return (
                         shape.x >= selectionLeft &&
@@ -608,7 +709,7 @@ export default function CanvasEditor({
             })
             .then((savedShape) => {
                 const rectangle =
-                    mapShapeResponseToRectangleShape(
+                    mapShapeResponseToShape(
                         savedShape,
                     );
                 addShape(rectangle);
@@ -627,9 +728,23 @@ export default function CanvasEditor({
     return (
         <div
             ref={containerRef}
-            className={`h-full w-full overflow-hidden ${className ?? ""
+            className={`h-full w-full overflow-hidden relative ${className ?? ""
                 }`}
         >
+            {editingShape && (
+                <InlineTextEditor
+                    shape={editingShape}
+                    pan={pan}
+                    zoom={zoom}
+                    boardId={boardId}
+                    onCommit={(shapeId, text) => {
+                        updateShapeText(shapeId, text);
+                        setEditingShape(null);
+                    }}
+                    onClose={() => setEditingShape(null)}
+                />
+            )}
+
             {size.width > 0 &&
                 size.height > 0 ? (
                 <Stage
@@ -672,6 +787,9 @@ export default function CanvasEditor({
                                 key={shape.id}
                                 shape={shape}
                                 boardId={boardId}
+                                onStartEditing={(targetShape) =>
+                                    setEditingShape(targetShape)
+                                }
                             />
                         ))}
 

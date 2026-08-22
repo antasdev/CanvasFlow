@@ -18,13 +18,15 @@ type ShapePositionUpdate = {
   y: number;
 };
 
-type RectangleTransformUpdate = {
+type ShapeTransformUpdate = {
   x: number;
   y: number;
   width: number;
   height: number;
   rotation: number;
 };
+
+type RectangleTransformUpdate = ShapeTransformUpdate;
 
 type ShapeSnapshot = Shape[];
 
@@ -62,9 +64,19 @@ type CanvasStore = {
     deltaY: number,
   ) => void;
 
+  updateShapeTransform: (
+    shapeId: string,
+    transform: ShapeTransformUpdate,
+  ) => void;
+
   updateRectangleTransform: (
     shapeId: string,
     transform: RectangleTransformUpdate,
+  ) => void;
+
+  updateShapeText: (
+    shapeId: string,
+    text: string,
   ) => void;
 
   resetCanvas: () => void;
@@ -233,17 +245,14 @@ export const useCanvasStore = create<CanvasStore>(
       });
     },
 
-    updateRectangleTransform: (
+    updateShapeTransform: (
       shapeId: string,
-      transform: RectangleTransformUpdate,
+      transform: ShapeTransformUpdate,
     ): void => {
       set((state) => {
         const nextShapes = state.shapes.map(
           (shape) => {
-            if (
-              shape.id !== shapeId ||
-              shape.type !== "rectangle"
-            ) {
+            if (shape.id !== shapeId) {
               return shape;
             }
 
@@ -251,6 +260,46 @@ export const useCanvasStore = create<CanvasStore>(
               ...shape,
               ...transform,
             };
+          },
+        );
+
+        return {
+          past: [
+            ...state.past,
+            state.shapes,
+          ],
+          future: [],
+          shapes: nextShapes,
+        };
+      });
+    },
+
+    updateRectangleTransform: (
+      shapeId: string,
+      transform: RectangleTransformUpdate,
+    ): void => {
+      get().updateShapeTransform(shapeId, transform);
+    },
+
+    updateShapeText: (
+      shapeId: string,
+      text: string,
+    ): void => {
+      set((state) => {
+        const nextShapes = state.shapes.map(
+          (shape) => {
+            if (shape.id !== shapeId) {
+              return shape;
+            }
+
+            if (shape.type === "text" || shape.type === "sticky_note") {
+              return {
+                ...shape,
+                text,
+              };
+            }
+
+            return shape;
           },
         );
 

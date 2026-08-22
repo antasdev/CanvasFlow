@@ -66,20 +66,30 @@ export type BoardJoinAckData = {
 /**
  * Shape Event Payloads (Foundation Contracts)
  */
+export type ShapeStylePayload = {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: string;
+  textAlign?: "left" | "center" | "right";
+  backgroundColor?: string;
+  textColor?: string;
+};
+
 export type CreateShapePayload = {
   canvasId: string;
-  type: "rectangle";
+  type: "rectangle" | "text" | "sticky_note";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
-  style?: {
-    fill?: string;
-    stroke?: string;
-    strokeWidth?: number;
-    opacity?: number;
-  };
+  style?: ShapeStylePayload;
 };
 
 export type UpdateShapePayload = {
@@ -90,12 +100,7 @@ export type UpdateShapePayload = {
     width?: number;
     height?: number;
     rotation?: number;
-    style?: {
-      fill?: string;
-      stroke?: string;
-      strokeWidth?: number;
-      opacity?: number;
-    };
+    style?: ShapeStylePayload;
   };
 };
 

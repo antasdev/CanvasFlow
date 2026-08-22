@@ -8,17 +8,35 @@ const objectIdSchema = z
   );
 
 export const shapeStyleValidationSchema = z.object({
+  // Rectangle / Shared styles
   fill: z.string().trim().optional(),
   stroke: z.string().trim().optional(),
   strokeWidth: z.number().min(0, "Stroke width cannot be negative.").max(50).optional(),
   opacity: z.number().min(0, "Opacity must be at least 0.").max(1, "Opacity cannot exceed 1.").optional(),
+
+  // Text / Sticky Note styles
+  text: z.string().max(5000, "Text cannot exceed 5000 characters.").optional(),
+  fontSize: z.number().min(8, "Font size must be at least 8.").max(200, "Font size cannot exceed 200.").optional(),
+  fontFamily: z.string().trim().max(100).optional(),
+  fontWeight: z.union([z.string().trim().max(20), z.number()]).optional(),
+  fontStyle: z.string().trim().max(20).optional(),
+  textAlign: z.enum(["left", "center", "right"]).optional(),
+  backgroundColor: z.string().trim().optional(),
+  textColor: z.string().trim().optional(),
 });
 
 export const createShapeSchema = z.object({
   body: z.object({
     canvasId: objectIdSchema,
 
-    type: z.enum(["rectangle", "RECTANGLE"]).transform(() => "RECTANGLE" as const),
+    type: z
+      .enum(["rectangle", "RECTANGLE", "text", "TEXT", "sticky_note", "STICKY_NOTE"])
+      .transform((val) => {
+        const upper = val.toUpperCase();
+        if (upper === "TEXT") return "TEXT" as const;
+        if (upper === "STICKY_NOTE") return "STICKY_NOTE" as const;
+        return "RECTANGLE" as const;
+      }),
 
     x: z.number().finite("x must be a finite number."),
 

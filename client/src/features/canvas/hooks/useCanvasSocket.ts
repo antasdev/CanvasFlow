@@ -11,7 +11,7 @@ import type {
   UserJoinedPayload,
   UserLeftPayload,
 } from "@/services/socket";
-import { mapShapeResponseToRectangleShape } from "../api";
+import { mapShapeResponseToShape } from "../api";
 import { useCanvasStore } from "../store";
 
 /**
@@ -89,7 +89,7 @@ export const useCanvasSocket = (
     const handleCanvasSync = (payload: CanvasSyncPayload): void => {
       if (payload.boardId === boardId) {
         const mapped = payload.shapes.map(
-          mapShapeResponseToRectangleShape
+          mapShapeResponseToShape
         );
         setShapes(mapped);
       }
@@ -97,13 +97,13 @@ export const useCanvasSocket = (
 
     // 3. Handle remote shape creation
     const handleShapeCreated = (shapeDto: ShapeResponseDto): void => {
-      const shape = mapShapeResponseToRectangleShape(shapeDto);
+      const shape = mapShapeResponseToShape(shapeDto);
       applyRemoteShapeCreated(shape);
     };
 
-    // 4. Handle remote shape update (transform, move, resize, rotate)
+    // 4. Handle remote shape update (transform, move, resize, rotate, text edit)
     const handleShapeUpdated = (shapeDto: ShapeResponseDto): void => {
-      const shape = mapShapeResponseToRectangleShape(shapeDto);
+      const shape = mapShapeResponseToShape(shapeDto);
       applyRemoteShapeUpdated(shape);
     };
 

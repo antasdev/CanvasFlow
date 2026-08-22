@@ -5,7 +5,7 @@
 CanvasFlow uses Socket.IO for real-time collaboration.
 
 - **REST APIs** are responsible for initial workspace loading, authentication, and read-heavy views.
-- **Socket.IO** is responsible for establishing real-time communication channels, authenticating sockets, managing board room collaboration lifecycles, broadcasting live canvas shape events, synchronizing collaborator cursors, synchronizing collaborator shape selections, and managing collaborative shape soft-locks.
+- **Socket.IO** is responsible for establishing real-time communication channels, authenticating sockets, managing board room collaboration lifecycles, broadcasting live canvas shape events, synchronizing collaborator cursors, synchronizing collaborator shape selections, managing collaborative shape soft-locks, and synchronizing rich shape mutations (Text Shapes & Sticky Notes).
 
 ---
 
@@ -190,16 +190,16 @@ User A (Selects Shape locally)                Server (Authoritative Transport)  
 
 ## 8. Collaborative Selection Conflict Resolution & Soft-Locking (Slice 6)
 
-### Problem & Soft-Lock Rationale
-When multiple collaborators view a shared whiteboard, concurrent edits on the same shape (e.g. User A dragging while User B resizes) lead to visual jumping, conflicting mutations, and race conditions in document persistence.
+### Soft-Lock Rationale
+When multiple collaborators view a shared whiteboard, concurrent edits on the same shape lead to visual jumping and race conditions in document persistence.
 
-- **Hard-Locking (Anti-Pattern)**: Completely restricts multiple users from selecting, reading, or inspecting a shape, which ruins the fluid feel of a modern whiteboard.
-- **Soft-Locking (CanvasFlow Pattern)**: Multiple users may freely select the same shape. However, the instant User A begins actively transforming (dragging, resizing, rotating) a shape, User A acquires an exclusive, ephemeral **soft-lock**. Peer collaborators see a non-blocking "User A editing" lock badge with User A's collaborator color and cannot drag or transform that specific shape until the transformation ends.
+- **Hard-Locking (Anti-Pattern)**: Completely restricts multiple users from selecting, reading, or inspecting a shape, ruining whiteboard fluidity.
+- **Soft-Locking (CanvasFlow Pattern)**: Multiple users may freely select the same shape. However, the instant User A begins actively transforming or editing a shape, User A acquires an exclusive, ephemeral **soft-lock**. Peer collaborators see a non-blocking "User A editing" lock badge and cannot transform or edit that specific shape until released.
 
 ```text
-User A (Starts Drag/Transform)                   Server (Authoritative Lock Layer)            User B (Peer Collaborator)
+User A (Starts Drag/Transform/Edit)              Server (Authoritative Lock Layer)            User B (Peer Collaborator)
        │                                                       │                                         │
-       ├── 1. onDragStart / onTransformStart                   │                                         │
+       ├── 1. onDragStart / onDoubleClick                      │                                         │
        ├── 2. socketClientService.lockShape(boardId, shapeId) ─►│                                         │
        │                                                       ├── 3. Zod validation                     │
        │                                                       ├── 4. Verify board room membership       │
@@ -212,7 +212,7 @@ User A (Starts Drag/Transform)                   Server (Authoritative Lock Laye
        │                                                       │                                         ├── 10. setRemoteShapeLock()
        │                                                       │                                         └── 11. CollaboratorShapeLock renders
        │                                                       │                                         │
-       ├── 12. Finishes drag/transform (onDragEnd)             │                                         │
+       ├── 12. Finishes editing / dragging (onBlur / onDragEnd)│                                         │
        ├── 13. socketClientService.updateShape(...)            │                                         │
        ├── 14. socketClientService.unlockShape(...) ──────────►│                                         │
        │                                                       ├── 15. shapeLockManager.releaseLock()    │
@@ -222,21 +222,54 @@ User A (Starts Drag/Transform)                   Server (Authoritative Lock Laye
        │                                                       │                                         └── 19. CollaboratorShapeLock unmounts
 ```
 
-### Key Principles of Soft-Locking:
-1. **Ephemeral Collaboration State**: Locks exist strictly in server memory (`ShapeLockManager`) and client memory (`remoteShapeLocks`). They are **never written to MongoDB**, avoiding disk I/O bottlenecks.
-2. **Single Owner & Concurrency Guarantees**: Acquisition decisions are executed synchronously within the Node.js event loop. If User A and User B request a lock simultaneously, exactly one request succeeds. The other receives a structured `SHAPE_LOCKED` error response and cancels the local drag immediately.
-3. **Safety Timeout (`LOCK_TIMEOUT_MS = 10_000`)**: If a client crashes, drops connection silently, or halts mid-drag, stale locks automatically expire after 10 seconds.
-4. **Socket-Owned Multi-Tab Isolation**: In multi-tab workflows, locks are owned by specific socket connections (`socketId`). If User A has Tab 1 and Tab 2, closing Tab 2 does not release a lock actively held by Tab 1.
-5. **Disconnect Cleanup**: When a socket disconnects, all locks held by that socket are released immediately and `shape:unlocked` is broadcast to remaining collaborators.
-6. **Zero-Trust Identity**: `userId` is strictly extracted from `socket.data.user.userId`. Peer badges display the verified collaborator name and deterministic color palette.
-7. **Undo/Redo Stack Purity**: Lock acquisition, refresh, and release never append snapshots to `past` or mutate `future`.
+---
+
+## 9. Real-Time Text Shapes & Sticky Notes (Slice 7)
+
+### Discriminated Union Shape Model
+CanvasFlow enforces a strict TypeScript discriminated union across backend entities, DTOs, mappers, and frontend Zustand state:
+
+```typescript
+type Shape =
+  | RectangleShape
+  | TextShape
+  | StickyNoteShape;
+```
+
+Each shape type defines its unique visual attributes while sharing fundamental canvas geometry (`id`, `x`, `y`, `width`, `height`, `rotation`, `opacity`, `zIndex`).
+
+### Inline HTML Overlay Text Editing Architecture
+Konva `<Text>` is rendered on an HTML5 `<canvas>` element and does not support native text carets, spellchecking, or multi-line selection.
+
+When a user double-clicks or triggers text editing:
+1. **Soft-Lock Acquisition**: Client emits `shape:lock`. If rejected (`SHAPE_LOCKED`), editing is prevented and a non-blocking toast alerts the user.
+2. **Projected HTML `<textarea>`**: If lock succeeds, an `<InlineTextEditor>` is mounted directly over the shape.
+3. **Screen Projection Math**:
+   ```typescript
+   screenX = shape.x * zoom + pan.x;
+   screenY = shape.y * zoom + pan.y;
+   screenWidth = shape.width * zoom;
+   screenHeight = shape.height * zoom;
+   screenFontSize = shape.fontSize * zoom;
+   ```
+4. **Lock Heartbeat**: During long drafting sessions, a 1500ms interval calls `refreshShapeLock(boardId, shapeId)` to prevent the 10-second safety timeout from prematurely releasing the lock.
+5. **Idempotent Commit / Cancel**:
+   - `Blur` / `Ctrl+Enter`: Calls `onCommit()`, emits `shape:update`, emits `shape:unlock`, unmounts overlay.
+   - `Escape`: Reverts changes, emits `shape:unlock`, unmounts overlay.
+
+### Architectural Decision: Local Editing + Commit vs. Keystroke Synchronization
+**Why CanvasFlow does NOT synchronize every keystroke to MongoDB:**
+- Typing at 60 words per minute across 10 collaborators generates ~300 write operations per minute per user.
+- Emitting every keystroke through MongoDB causes severe database write amplification, oplog saturation, lock contention, and network churn.
+- **CanvasFlow Solution**: Keystrokes remain local to the active client. The shape soft-lock guarantees zero collisions. When editing concludes, the authoritative final text is committed in a single, atomic `shape:update` transaction.
+- **Future Roadmap**: Character-level collaborative editing (Google Docs style) will introduce CRDTs (e.g. Yjs / Automerge) over WebSockets without persisting intermediary keystrokes to MongoDB.
 
 ---
 
-## 9. Remote State & Undo/Redo Isolation
+## 10. Remote State & Undo/Redo Isolation
 
 To prevent infinite feedback loops and avoid polluting local undo/redo history:
-- **Local User Actions**: Mutate Zustand store via `addShape`, `moveSelectedShapes`, `updateRectangleTransform`, or `deleteShape`, which append snapshots to `past` and clear `future`.
+- **Local User Actions**: Mutate Zustand store via `addShape`, `moveSelectedShapes`, `updateShapeTransform`, `updateShapeText`, or `deleteShape`, which append snapshots to `past` and clear `future`.
 - **Remote Collaborator Actions**: Dispatched via dedicated remote store actions:
   - `applyRemoteShapeCreated(shape)`
   - `applyRemoteShapeUpdated(shape)`
@@ -254,7 +287,7 @@ To prevent infinite feedback loops and avoid polluting local undo/redo history:
 
 ---
 
-## 10. Sender Exclusion
+## 11. Sender Exclusion
 
 Socket broadcasts use `socket.to(getBoardRoom(boardId)).emit(...)` rather than `io.to(...).emit(...)`.
 - The originating client is acknowledged directly via the Socket.IO acknowledgement callback (or skipped for ephemeral events like cursors).
@@ -262,7 +295,7 @@ Socket broadcasts use `socket.to(getBoardRoom(boardId)).emit(...)` rather than `
 
 ---
 
-## 11. In-Memory Presence & Multi-Tab Model
+## 12. In-Memory Presence & Multi-Tab Model
 
 `PresenceManager` tracks active connections in memory without writing temporary presence state to MongoDB.
 
@@ -279,7 +312,7 @@ A user may open multiple tabs (multiple socket connections) for the same board:
 
 ---
 
-## 12. Disconnect Cleanup
+## 13. Disconnect Cleanup
 
 When a network drop, page refresh, or tab closure triggers Socket.IO `disconnect`:
 1. `socket.server.ts` catches `SocketEvents.DISCONNECT`.
@@ -290,50 +323,22 @@ When a network drop, page refresh, or tab closure triggers Socket.IO `disconnect
 
 ---
 
-## 13. Supported Events
+## 14. Supported Events
 
 | Client → Server | Server → Client | Description | Frequency | Persistence |
 |---|---|---|---|---|
 | `board:join` | `canvas:sync` | Validates access, joins room, delivers initial canonical shapes | On load | None |
 | `board:leave` | `user:joined` | Leaves room, updates presence, notifies remaining collaborators | On exit | None |
-| `shape:create` | `shape:created` | Authoritative shape creation broadcast | Low | MongoDB |
-| `shape:update` | `shape:updated` | Authoritative shape transform/position update broadcast | Low/Med | MongoDB |
+| `shape:create` | `shape:created` | Authoritative shape creation broadcast (Rectangle, Text, Sticky) | Low | MongoDB |
+| `shape:update` | `shape:updated` | Authoritative shape transform/position/text update broadcast | Low/Med | MongoDB |
 | `shape:delete` | `shape:deleted` | Authoritative shape deletion broadcast | Low | MongoDB |
 | `cursor:move` | `cursor:moved` | Live collaborator cursor synchronization | High (~30/s) | None (Ephemeral) |
 | `selection:change` | `selection:changed` | Live collaborator shape selection synchronization | On change | None (Ephemeral) |
-| `shape:lock` | `shape:locked` | Exclusive soft-lock acquisition before shape transformation | On transform start | None (Ephemeral) |
-| `shape:unlock` | `shape:unlocked` | Release shape soft-lock after shape transformation ends | On transform end | None (Ephemeral) |
-| `shape:lock-refresh` | | Extend soft-lock timeout during ongoing active transformation | ~1-2s during drag | None (Ephemeral) |
+| `shape:lock` | `shape:locked` | Exclusive soft-lock acquisition before shape editing/transform | On edit start | None (Ephemeral) |
+| `shape:unlock` | `shape:unlocked` | Release shape soft-lock after editing/transform completes | On edit end | None (Ephemeral) |
+| `shape:lock-refresh` | | Extend soft-lock timeout heartbeat during active editing | ~1.5s during edit | None (Ephemeral) |
 | | `user:left` | User departure notification | On exit | None |
 | | `error` | Error notifications and status | On failure | None |
-
----
-
-## 14. Folder Structure
-
-```text
-server/src/socket/
-├── handlers/
-│   ├── board.handler.ts        # Board room lifecycle & authorization orchestration
-│   ├── shape.handler.ts        # Shape collaboration & persistence orchestration
-│   ├── cursor.handler.ts       # Live collaborator cursor synchronization
-│   ├── selection.handler.ts    # Live collaborator selection synchronization
-│   └── lock.handler.ts         # Live collaborator soft-lock synchronization
-├── presence/
-│   └── presence.manager.ts     # Multi-tab in-memory presence tracking
-├── locks/
-│   └── shape-lock.manager.ts   # In-memory atomic shape soft-lock manager
-├── validation/
-│   ├── cursor.validation.ts    # Zod validation for cursor payloads
-│   ├── selection.validation.ts # Zod validation for selection payloads
-│   └── lock.validation.ts      # Zod validation for lock payloads
-├── socket.events.ts            # Strongly typed event constants
-├── socket.middleware.ts        # JWT authentication middleware
-├── socket.rooms.ts             # Deterministic room naming helpers
-├── socket.server.ts            # Socket.IO HTTP server attachment & disconnect lifecycle
-├── socket.types.ts             # TypeScript generic event and payload contracts
-└── index.ts                    # Public exports & initializers
-```
 
 ---
 
@@ -343,49 +348,24 @@ server/src/socket/
 2. **Authorization Boundary**: Board access authorization is verified server-side through `boardService.authorizeBoardAccess` before room entry or data sync.
 3. **Persisted Boundary Resolution**: Sockets cannot supply arbitrary `boardId` or `userId` values; the server derives `boardId` strictly from `Shape` → `Canvas` → `Board`.
 4. **Room Membership Enforcement**: Shape, cursor, selection, and lock handlers verify `socket.rooms.has(getBoardRoom(boardId))` before allowing actions.
-5. **Shape Ownership Verification**: For selection and lock requests, `shapeService.verifyShapesBelongToBoard` guarantees that foreign shapes cannot be locked or selected across boards.
-6. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all shape entities pass through `ShapeMapper.toResponseDto()`.
-7. **Structured Error Handling**: All handler errors return structured `SocketAckError` payloads with specific error codes (`NOT_FOUND`, `FORBIDDEN`, `BAD_REQUEST`, `SHAPE_LOCKED`, `INTERNAL_ERROR`).
+5. **Shape Ownership Verification**: For selection and lock requests, `shapeService.verifyShapesBelongToBoard` guarantees foreign shapes cannot be locked or selected across boards.
+6. **Payload Bounds & Validation**: Zod validates all shape properties (`text` length $\le 5000$, `fontSize` 8–200, valid text alignment, finite coordinates).
+7. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all shape entities pass through `ShapeMapper.toResponseDto()`.
 
 ---
 
-## 16. Future Redis Architecture & Scaling
+## 16. Interview Concepts
 
-When scaling beyond a single Node.js instance:
-1. **Redis Adapter (`@socket.io/redis-adapter`)**: Replaces the in-memory pub/sub adapter to broadcast room events across all server nodes.
-2. **Distributed Presence**: `PresenceManager` will transition from local JavaScript `Map` structures to Redis Sets/Hashes with key expiration (`EXPIRE`) for distributed heartbeat and presence tracking.
-3. **Distributed Soft-Locking**: `ShapeLockManager` will transition to atomic Redis key operations (`SET shape:lock:<boardId>:<shapeId> <socketId> NX EX 10`). Releasing uses Lua scripts to guarantee safe release only by the owning socket.
-4. **Sticky Sessions**: Load balancers (e.g. NGINX, AWS ALB) will configure sticky cookies for HTTP long-polling fallback during WebSocket handshakes.
+### 1. Discriminated Unions in Real-Time Systems
+Using a literal discriminator field (`type: "rectangle" | "text" | "sticky_note"`) enables TypeScript to perform exhaustive pattern matching and type narrowing. This eliminates optional-property soup and ensures component renderers receive guaranteed, non-null properties for specific shape types.
 
----
+### 2. Ephemeral vs. Durable Collaboration State
+- **Durable State**: Shapes, text content, colors, z-indexes, board settings. Persisted authoritatively in MongoDB.
+- **Ephemeral State**: Cursor coordinates, shape selections, soft-locks, heartbeat refresh timers. Managed in-memory to prevent database write amplification.
 
-## 17. Interview Concepts
+### 3. Write Amplification Mitigation
+Writing every text keystroke to MongoDB generates unsustainable I/O load. CanvasFlow uses the **Local Editing + Soft Lock + Authoritative Commit** pattern to provide instant local typing feedback, conflict prevention via ephemeral locks, and efficient, single-transaction database persistence upon completion.
 
-### 1. Durable vs. Ephemeral State
-- **Durable State**: Whiteboard entities (rectangles, text, colors, z-indexes, board settings) that must survive server restarts, page refreshes, and long-term storage. Stored authoritatively in database collections (MongoDB).
-- **Ephemeral State**: High-frequency, transient collaboration signals (cursor positions, shape selections, soft-locks, typing indicators, selection outlines, online presence heartbeats). Lost state has zero consequence after a fraction of a second; writing to durable storage introduces fatal disk I/O bottlenecks. Handled purely in memory and broadcast via pub/sub.
-
-### 2. Soft-Locking vs. Hard-Locking
-- **Hard-Locking**: Blocks other users from selecting or interacting with an element at all times, making multi-user collaboration rigid.
-- **Soft-Locking**: Allows multi-user selection, but establishes an exclusive lock only during the active transformation lifecycle (drag/resize/rotate). Communicates clear visual ownership ("User B editing") without impeding peer visibility.
-
-### 3. Socket.IO Rooms
-A logical grouping mechanism on the Socket.IO server. By joining `socket.join("board:<boardId>")`, broadcasts sent to that room are partitioned exclusively to clients connected to the same whiteboard, preventing cross-tenant message leakage and unnecessary client processing.
-
-### 4. Broadcast vs. Emit
-- `io.to(room).emit(event, data)`: Sends the message to *all* sockets in the room, including the originating socket.
-- `socket.to(room).emit(event, data)`: Sends the message to all *other* sockets in the room, excluding the sender.
-- `socket.emit(event, data)`: Sends the message *only* to the sender.
-
-### 5. Server-Derived Identity
-Never trusting client-supplied identity fields in message payloads (e.g., `{ userId: "attacker_id" }`). The server extracts identity exclusively from `socket.data.user.userId` attached during authentication, making spoofing mathematically impossible.
-
-### 6. Event Throttling
-Without throttling, `mousemove` triggers 120–240 times per second on high-refresh displays. In a board with 10 collaborators, unthrottled emissions generate 2,400 messages/sec. Throttling to 30 fps reduces traffic by 87% without perceptible degradation in visual fluidity.
-
-### 7. Coordinate Systems (Screen vs. Canvas World)
-- **Screen / Stage Coordinates**: Pixel offsets relative to the browser viewport or canvas DOM element. Changes when panning or zooming.
-- **Canvas World Coordinates**: The invariant whiteboard space where a shape at `(100, 100)` remains at `(100, 100)` regardless of whether a user is zoomed at 50% or 200%. Cursors and shapes are synchronized exclusively in world coordinates.
-
-### 8. Why Selection & Lock Data Should NOT Be Stored in MongoDB
-At high frequencies across many concurrent users, storing ephemeral collaboration signals in MongoDB would require thousands of disk write ops/sec. This causes massive write amplification, oplog churn, database lock contention, and storage bloat for data that becomes completely obsolete within seconds.
+### 4. Screen vs. World Coordinate Projection
+- **World Space**: The invariant infinite canvas coordinates where a shape lives at `(x, y)`.
+- **Screen Space**: The pixel position on the viewport computed via `screenX = worldX * zoom + pan.x`. HTML overlays like `<InlineTextEditor>` dynamically compute screen projections so editing controls match the visual canvas perfectly during pan and zoom.

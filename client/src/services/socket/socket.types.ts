@@ -26,28 +26,64 @@ export type SocketAck<T = void> = {
 };
 
 /**
- * Shape response data transfer object matching API & socket broadcasts.
+ * Base Shape response DTO
  */
-export type ShapeResponseDto = {
+export type BaseShapeResponseDto = {
   id: string;
   canvasId: string;
-  type: "rectangle";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation: number;
   zIndex: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RectangleShapeResponseDto = BaseShapeResponseDto & {
+  type: "rectangle";
   style: {
     fill: string;
     stroke: string;
     strokeWidth: number;
     opacity: number;
   };
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
 };
+
+export type TextShapeResponseDto = BaseShapeResponseDto & {
+  type: "text";
+  style: {
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: string | number;
+    fontStyle: string;
+    textAlign: "left" | "center" | "right";
+    fill: string;
+    opacity: number;
+  };
+};
+
+export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
+  type: "sticky_note";
+  style: {
+    text: string;
+    fontSize: number;
+    backgroundColor: string;
+    textColor: string;
+    opacity: number;
+  };
+};
+
+/**
+ * Shape response data transfer object matching API & socket broadcasts.
+ */
+export type ShapeResponseDto =
+  | RectangleShapeResponseDto
+  | TextShapeResponseDto
+  | StickyNoteShapeResponseDto;
 
 /**
  * Board Room Lifecycle Payloads
@@ -70,20 +106,30 @@ export type BoardJoinAckData = {
 /**
  * Shape Event Payloads (Foundation Contracts)
  */
+export type ShapeStylePayload = {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: string;
+  textAlign?: "left" | "center" | "right";
+  backgroundColor?: string;
+  textColor?: string;
+};
+
 export type CreateShapePayload = {
   canvasId: string;
-  type: "rectangle";
+  type: "rectangle" | "text" | "sticky_note";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
-  style?: {
-    fill?: string;
-    stroke?: string;
-    strokeWidth?: number;
-    opacity?: number;
-  };
+  style?: ShapeStylePayload;
 };
 
 export type UpdateShapePayload = {
@@ -94,12 +140,7 @@ export type UpdateShapePayload = {
     width?: number;
     height?: number;
     rotation?: number;
-    style?: {
-      fill?: string;
-      stroke?: string;
-      strokeWidth?: number;
-      opacity?: number;
-    };
+    style?: ShapeStylePayload;
   };
 };
 

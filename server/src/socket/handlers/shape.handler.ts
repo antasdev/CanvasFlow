@@ -35,11 +35,25 @@ const shapeStyleSocketSchema = z.object({
     .min(0, "Opacity must be at least 0.")
     .max(1, "Opacity cannot exceed 1.")
     .optional(),
+  text: z.string().max(5000, "Text cannot exceed 5000 characters.").optional(),
+  fontSize: z
+    .number()
+    .min(8, "Font size must be at least 8.")
+    .max(200, "Font size cannot exceed 200.")
+    .optional(),
+  fontFamily: z.string().trim().max(100).optional(),
+  fontWeight: z.union([z.string().trim().max(20), z.number()]).optional(),
+  fontStyle: z.string().trim().max(20).optional(),
+  textAlign: z.enum(["left", "center", "right"]).optional(),
+  backgroundColor: z.string().trim().optional(),
+  textColor: z.string().trim().optional(),
 });
 
 const createShapeSocketSchema = z.object({
   canvasId: objectIdSchema,
-  type: z.enum(["rectangle", "RECTANGLE"]).default("rectangle"),
+  type: z
+    .enum(["rectangle", "RECTANGLE", "text", "TEXT", "sticky_note", "STICKY_NOTE"])
+    .default("rectangle"),
   x: z.number().finite("x must be a finite number."),
   y: z.number().finite("y must be a finite number."),
   width: z.number().positive("Width must be greater than 0."),
@@ -119,10 +133,19 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 4. Authoritative persistence via ShapeService
+        // 4. Determine ShapeType
+        const rawType = parsed.data.type.toUpperCase();
+        let shapeType: ShapeType = ShapeType.RECTANGLE;
+        if (rawType === "TEXT") {
+          shapeType = ShapeType.TEXT;
+        } else if (rawType === "STICKY_NOTE") {
+          shapeType = ShapeType.STICKY_NOTE;
+        }
+
+        // 5. Authoritative persistence via ShapeService
         const result = await shapeService.createShape(userId, {
           canvasId: canvasObjectId,
-          type: ShapeType.RECTANGLE,
+          type: shapeType,
           x: parsed.data.x,
           y: parsed.data.y,
           width: parsed.data.width,

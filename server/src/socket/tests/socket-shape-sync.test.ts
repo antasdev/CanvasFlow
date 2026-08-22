@@ -350,7 +350,9 @@ async function runSocketShapeSyncTests(): Promise<void> {
     assert(createAck.data!.width === 300, "width must match");
     assert(createAck.data!.height === 150, "height must match");
     assert(createAck.data!.rotation === 45, "rotation must match");
-    assert(createAck.data!.style.fill === "#3b82f6", "fill style must match");
+    if (createAck.data!.type === "rectangle") {
+      assert(createAck.data!.style.fill === "#3b82f6", "fill style must match");
+    }
 
     // Verify DB persistence
     const targetShapeId = createdShapeId as string;
