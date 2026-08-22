@@ -1,25 +1,7 @@
-import { Types } from "mongoose";
-import { Socket } from "socket.io";
-import type { UserRole } from "@/modules/user/user.types";
-import type { ShapeResponseDto } from "@/modules/shape/shape.dto";
+import type { Socket } from "socket.io-client";
 
 /**
- * Authenticated user data attached to Socket.IO instances.
- */
-export type SocketUser = {
-  userId: Types.ObjectId;
-  role: UserRole;
-};
-
-/**
- * Custom data payload persisted on each Socket instance.
- */
-export type SocketData = {
-  user: SocketUser;
-};
-
-/**
- * Standard socket acknowledgement response payload.
+ * Generic socket acknowledgement callback payload.
  */
 export type SocketAck<T = void> = {
   success: boolean;
@@ -28,7 +10,31 @@ export type SocketAck<T = void> = {
 };
 
 /**
- * Board Room Lifecycle Payloads (Foundation)
+ * Shape response data transfer object matching API & socket broadcasts.
+ */
+export type ShapeResponseDto = {
+  id: string;
+  canvasId: string;
+  type: "rectangle";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  zIndex: number;
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Board Room Lifecycle Payloads
  */
 export type JoinBoardPayload = {
   boardId: string;
@@ -45,7 +51,7 @@ export type BoardJoinAckData = {
 };
 
 /**
- * Shape Event Payloads (Foundation Contracts)
+ * Shape Event Payloads
  */
 export type CreateShapePayload = {
   canvasId: string;
@@ -85,7 +91,7 @@ export type DeleteShapePayload = {
 };
 
 /**
- * Canvas Synchronization & Presence Payloads (Foundation Contracts)
+ * Canvas Synchronization & Presence Payloads
  */
 export type CanvasSyncPayload = {
   canvasId: string;
@@ -163,16 +169,15 @@ export interface ServerToClientEvents {
 }
 
 /**
- * Inter-server event contracts for multi-instance communication.
+ * Fully typed frontend Socket instance.
  */
-export interface InterServerEvents {}
+export type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 /**
- * Authenticated Socket type alias with full generic event signatures.
+ * High-level connection state representation.
  */
-export type AuthSocket = Socket<
-  ClientToServerEvents,
-  ServerToClientEvents,
-  InterServerEvents,
-  SocketData
->;
+export type ConnectionState =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error";

@@ -1,35 +1,24 @@
 import { Server } from "socket.io";
-
-import { SocketEvents } from "../socket.events";
-import { getBoardRoom } from "../socket.rooms";
-
 import {
-    AuthSocket,
-    CursorMovePayload,
-    ClientToServerEvents,
-    ServerToClientEvents,
-    SocketData,
+  AuthSocket,
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData,
 } from "../socket.types";
 
+/**
+ * Register presence event handlers (cursor movement, active users).
+ * Implementation reserved for Presence slice.
+ */
 export const registerPresenceHandlers = (
-    io: Server<
-        ClientToServerEvents,
-        ServerToClientEvents,
-        {},
-        SocketData
-    >,
-    socket: AuthSocket
+  _io: Server<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  >,
+  _socket: AuthSocket
 ): void => {
-    socket.on(
-        SocketEvents.CURSOR_MOVE,
-        (payload: CursorMovePayload) => {
-            socket.to(getBoardRoom(payload.boardId)).emit(
-                SocketEvents.CURSOR_MOVED,
-                {
-                    ...payload,
-                    userId: socket.data.user.userId.toString(),
-                }
-            );
-        }
-    );
+  // Handlers will be attached in Presence slice
 };

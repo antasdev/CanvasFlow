@@ -1,10 +1,11 @@
 /**
- * Authoritative Socket.IO event name constants.
- * Kept consistent between backend and frontend.
+ * Authoritative Socket.IO event constants on frontend.
+ * Kept strictly synchronized with backend SocketEvents.
  */
 export const SocketEvents = {
-  CONNECTION: "connection",
+  CONNECT: "connect",
   DISCONNECT: "disconnect",
+  CONNECT_ERROR: "connect_error",
 
   BOARD_JOIN: "board:join",
   BOARD_LEAVE: "board:leave",

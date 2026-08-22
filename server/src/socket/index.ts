@@ -1,24 +1,36 @@
 import { Server as HttpServer } from "http";
 import { Server } from "socket.io";
-
 import { SocketServer } from "./socket.server";
+import {
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData,
+} from "./socket.types";
 
-let socketServer: SocketServer | null = null;
+let socketServerInstance: SocketServer | null = null;
 
-export const initializeSocket = (
+export const initializeSocketServer = (
   httpServer: HttpServer
-): Server => {
-  socketServer = new SocketServer(httpServer);
-
-  return socketServer.getIO();
+): SocketServer => {
+  socketServerInstance = new SocketServer(httpServer);
+  return socketServerInstance;
 };
 
-export const getIO = (): Server => {
-  if (!socketServer) {
-    throw new Error(
-      "Socket.IO has not been initialized."
-    );
+export const getIO = (): Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  InterServerEvents,
+  SocketData
+> => {
+  if (!socketServerInstance) {
+    throw new Error("Socket.IO has not been initialized.");
   }
-
-  return socketServer.getIO();
+  return socketServerInstance.getIO();
 };
+
+export * from "./socket.events";
+export * from "./socket.types";
+export * from "./socket.rooms";
+export * from "./socket.middleware";
+export * from "./socket.server";

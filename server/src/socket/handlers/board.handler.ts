@@ -1,92 +1,11 @@
-import { Server } from "socket.io";
-import { Types } from "mongoose";
+import { AuthSocket } from "../socket.types";
 
-import { shapeService } from "@/modules/shape";
-
-import {
-  AuthSocket,
-  JoinBoardPayload,
-  LeaveBoardPayload,
-} from "../socket.types";
-
-import { SocketEvents } from "../socket.events";
-import { getBoardRoom } from "../socket.rooms";
-import { presenceManager } from "../presence/presence.manager";
-
+/**
+ * Register board room lifecycle event handlers.
+ * Implementation reserved for Slice 2: Board Rooms + Board Access Authorization.
+ */
 export const registerBoardHandlers = (
-  socket: AuthSocket
+  _socket: AuthSocket
 ): void => {
-
-  socket.on(
-    SocketEvents.BOARD_JOIN,
-    async ({
-      boardId,
-      canvasId,
-    }: JoinBoardPayload) => {
-      const shapes =
-        await shapeService.getCanvasShapes(
-          new Types.ObjectId(canvasId)
-        );
-
-      socket.emit(
-        SocketEvents.CANVAS_SYNC,
-        {
-          canvasId,
-          shapes,
-        }
-      );
-
-      presenceManager.joinBoard(
-        boardId,
-        socket.id,
-        socket.data.user
-      );
-      console.log(
-        "Users in board:",
-        presenceManager.getUsers(boardId)
-      );
-      socket.to(
-        getBoardRoom(boardId)
-      ).emit(
-        SocketEvents.USER_JOINED,
-        {
-          userId:
-            socket.data.user.userId.toString(),
-        }
-      );
-
-      console.log(
-        `User ${socket.data.user.userId} joined board ${boardId}`
-      );
-    }
-  );
-
-
-  socket.on(
-    SocketEvents.BOARD_LEAVE,
-    ({ boardId }: LeaveBoardPayload) => {
-      socket.leave(
-        getBoardRoom(boardId)
-      );
-
-      presenceManager.leaveBoard(
-        boardId,
-        socket.id
-      );
-
-      socket.to(
-        getBoardRoom(boardId)
-      ).emit(
-        SocketEvents.USER_LEFT,
-        {
-          userId:
-            socket.data.user.userId.toString(),
-        }
-      );
-
-      console.log(
-        `User ${socket.data.user.userId} left board ${boardId}`
-      );
-    }
-  );
+  // Handlers will be attached in Slice 2
 };
