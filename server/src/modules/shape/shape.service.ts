@@ -148,6 +148,28 @@ export class ShapeService {
       boardId: canvas.boardId,
     };
   }
+
+  async verifyShapesBelongToBoard(
+    boardId: Types.ObjectId,
+    shapeIds: Types.ObjectId[]
+  ): Promise<boolean> {
+    if (shapeIds.length === 0) {
+      return true;
+    }
+
+    const canvases = await canvasRepository.findByBoardId(boardId);
+    if (canvases.length === 0) {
+      return false;
+    }
+
+    const canvasIds = canvases.map((c) => c._id as Types.ObjectId);
+    const count = await shapeRepository.countByShapeIdsAndCanvasIds(
+      shapeIds,
+      canvasIds
+    );
+
+    return count === shapeIds.length;
+  }
 }
 
 export const shapeService =

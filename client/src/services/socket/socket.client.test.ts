@@ -296,4 +296,23 @@ describe("SocketClientService", () => {
       }
     );
   });
+
+  it("handles changeSelection emitting selection:change fire-and-forget", () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn(),
+    };
+
+    (service as any).socket = mockSocket;
+
+    service.changeSelection("board-123", ["shape-1", "shape-2"]);
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.SELECTION_CHANGE,
+      {
+        boardId: "board-123",
+        shapeIds: ["shape-1", "shape-2"],
+      }
+    );
+  });
 });

@@ -5,9 +5,9 @@ import {
   type CanvasTool,
 } from "../constants";
 import type { Shape } from "../types";
-import type { RemoteCursor } from "@/services/socket";
+import type { RemoteCursor, RemoteSelection } from "@/services/socket";
 
-export type { RemoteCursor };
+export type { RemoteCursor, RemoteSelection };
 
 type ShapePositionUpdate = {
   x: number;
@@ -83,6 +83,8 @@ type CanvasStore = {
 
   remoteCursors: Record<string, RemoteCursor>;
 
+  remoteSelections: Record<string, RemoteSelection>;
+
   applyRemoteShapeCreated: (shape: Shape) => void;
 
   applyRemoteShapeUpdated: (shape: Shape) => void;
@@ -94,6 +96,12 @@ type CanvasStore = {
   removeRemoteCursor: (userId: string) => void;
 
   clearRemoteCursors: () => void;
+
+  setRemoteSelection: (selection: RemoteSelection) => void;
+
+  removeRemoteSelection: (userId: string) => void;
+
+  clearRemoteSelections: () => void;
 
   undo: () => void;
 
@@ -113,6 +121,8 @@ export const useCanvasStore = create<CanvasStore>(
     selectedShapeIds: [],
 
     remoteCursors: {},
+
+    remoteSelections: {},
 
     zoom: 1,
 
@@ -246,6 +256,7 @@ export const useCanvasStore = create<CanvasStore>(
         shapes: [],
         selectedShapeIds: [],
         remoteCursors: {},
+        remoteSelections: {},
         past: [],
         future: [],
       });
@@ -390,6 +401,34 @@ export const useCanvasStore = create<CanvasStore>(
     clearRemoteCursors: (): void => {
       set({
         remoteCursors: {},
+      });
+    },
+
+    setRemoteSelection: (selection: RemoteSelection): void => {
+      set((state) => ({
+        remoteSelections: {
+          ...state.remoteSelections,
+          [selection.userId]: selection,
+        },
+      }));
+    },
+
+    removeRemoteSelection: (userId: string): void => {
+      set((state) => {
+        if (!state.remoteSelections[userId]) {
+          return state;
+        }
+        const nextSelections = { ...state.remoteSelections };
+        delete nextSelections[userId];
+        return {
+          remoteSelections: nextSelections,
+        };
+      });
+    },
+
+    clearRemoteSelections: (): void => {
+      set({
+        remoteSelections: {},
       });
     },
 

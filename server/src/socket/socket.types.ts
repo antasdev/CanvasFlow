@@ -130,6 +130,17 @@ export type CursorMovedPayload = {
   y: number;
 };
 
+export type SelectionChangePayload = {
+  boardId: string;
+  shapeIds: string[];
+};
+
+export type SelectionChangedPayload = {
+  userId: string;
+  boardId: string;
+  shapeIds: string[];
+};
+
 export type UserJoinedPayload = {
   userId: string;
   activeUsers: ActiveUser[];
@@ -170,6 +181,8 @@ export interface ClientToServerEvents {
   ) => void;
 
   "cursor:move": (payload: CursorMovePayload) => void;
+
+  "selection:change": (payload: SelectionChangePayload) => void;
 }
 
 /**
@@ -181,6 +194,7 @@ export interface ServerToClientEvents {
   "shape:updated": (shape: ShapeResponseDto) => void;
   "shape:deleted": (payload: DeleteShapePayload) => void;
   "cursor:moved": (payload: CursorMovedPayload) => void;
+  "selection:changed": (payload: SelectionChangedPayload) => void;
   "user:joined": (payload: UserJoinedPayload) => void;
   "user:left": (payload: UserLeftPayload) => void;
   error: (message: string) => void;

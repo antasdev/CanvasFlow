@@ -4,6 +4,7 @@ import { socketClientService, SocketEvents } from "@/services/socket";
 import type {
   CanvasSyncPayload,
   CursorMovedPayload,
+  SelectionChangedPayload,
   ShapeResponseDto,
   UserJoinedPayload,
   UserLeftPayload,
@@ -41,6 +42,15 @@ export const useCanvasSocket = (
   );
   const clearRemoteCursors = useCanvasStore(
     (state) => state.clearRemoteCursors
+  );
+  const setRemoteSelection = useCanvasStore(
+    (state) => state.setRemoteSelection
+  );
+  const removeRemoteSelection = useCanvasStore(
+    (state) => state.removeRemoteSelection
+  );
+  const clearRemoteSelections = useCanvasStore(
+    (state) => state.clearRemoteSelections
   );
 
   const activeBoardIdRef = useRef<string | null>(null);
@@ -98,7 +108,14 @@ export const useCanvasSocket = (
       }
     };
 
-    // 7. Handle presence broadcasts
+    // 7. Handle collaborator selection changes
+    const handleSelectionChanged = (payload: SelectionChangedPayload): void => {
+      if (payload.boardId === boardId) {
+        setRemoteSelection(payload);
+      }
+    };
+
+    // 8. Handle presence broadcasts
     const handleUserJoined = (payload: UserJoinedPayload): void => {
       console.log(`[Presence] User joined board: ${payload.userId}`);
     };
@@ -106,6 +123,7 @@ export const useCanvasSocket = (
     const handleUserLeft = (payload: UserLeftPayload): void => {
       console.log(`[Presence] User left board: ${payload.userId}`);
       removeRemoteCursor(payload.userId);
+      removeRemoteSelection(payload.userId);
     };
 
     socket.on(SocketEvents.CANVAS_SYNC, handleCanvasSync);
@@ -113,6 +131,7 @@ export const useCanvasSocket = (
     socket.on(SocketEvents.SHAPE_UPDATED, handleShapeUpdated);
     socket.on(SocketEvents.SHAPE_DELETED, handleShapeDeleted);
     socket.on(SocketEvents.CURSOR_MOVED, handleCursorMoved);
+    socket.on(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
     socket.on(SocketEvents.USER_JOINED, handleUserJoined);
     socket.on(SocketEvents.USER_LEFT, handleUserLeft);
 
@@ -122,10 +141,12 @@ export const useCanvasSocket = (
       socket.off(SocketEvents.SHAPE_UPDATED, handleShapeUpdated);
       socket.off(SocketEvents.SHAPE_DELETED, handleShapeDeleted);
       socket.off(SocketEvents.CURSOR_MOVED, handleCursorMoved);
+      socket.off(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
       socket.off(SocketEvents.USER_JOINED, handleUserJoined);
       socket.off(SocketEvents.USER_LEFT, handleUserLeft);
 
       clearRemoteCursors();
+      clearRemoteSelections();
 
       if (activeBoardIdRef.current) {
         socketClientService
@@ -144,5 +165,8 @@ export const useCanvasSocket = (
     setRemoteCursor,
     removeRemoteCursor,
     clearRemoteCursors,
+    setRemoteSelection,
+    removeRemoteSelection,
+    clearRemoteSelections,
   ]);
 };

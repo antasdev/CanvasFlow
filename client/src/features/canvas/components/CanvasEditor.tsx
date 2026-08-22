@@ -16,6 +16,7 @@ import { screenToWorld } from "../utils/canvas.coordinates";
 
 import CanvasGrid from "./CanvasGrid";
 import CollaboratorCursor from "./CollaboratorCursor";
+import CollaboratorSelection from "./CollaboratorSelection";
 import ShapeRenderer from "./ShapeRenderer";
 
 type CanvasEditorProps = {
@@ -67,6 +68,9 @@ export default function CanvasEditor({
     const lastCursorEmitTimeRef =
         useRef<number>(0);
 
+    const lastBroadcastSelectionRef =
+        useRef<string>("");
+
     const { data: serverShapes } = useShapes(canvasId);
 
     const setShapes = useCanvasStore(
@@ -76,6 +80,27 @@ export default function CanvasEditor({
     const remoteCursors = useCanvasStore(
         (state) => state.remoteCursors,
     );
+
+    const remoteSelections = useCanvasStore(
+        (state) => state.remoteSelections,
+    );
+
+    const selectedShapeIds = useCanvasStore(
+        (state) => state.selectedShapeIds,
+    );
+
+    // Broadcast local selection changes to collaborators
+    useEffect(() => {
+        if (!boardId) {
+            return;
+        }
+
+        const currentKey = selectedShapeIds.slice().sort().join(",");
+        if (currentKey !== lastBroadcastSelectionRef.current) {
+            lastBroadcastSelectionRef.current = currentKey;
+            socketClientService.changeSelection(boardId, selectedShapeIds);
+        }
+    }, [boardId, selectedShapeIds]);
 
     const [size, setSize] = useState<CanvasSize>({
         width: 0,
@@ -111,10 +136,6 @@ export default function CanvasEditor({
 
     const setPan = useCanvasStore(
         (state) => state.setPan,
-    );
-
-    const selectedShapeIds = useCanvasStore(
-        (state) => state.selectedShapeIds,
     );
 
     const deleteShape = useCanvasStore(
@@ -700,8 +721,16 @@ export default function CanvasEditor({
                         ) : null}
                     </Layer>
 
-                    {/* Dedicated Collaborator Cursor Overlay Layer */}
+                    {/* Dedicated Collaborator Overlay Layer */}
                     <Layer listening={false}>
+                        {Object.values(remoteSelections).map((selection) => (
+                            <CollaboratorSelection
+                                key={selection.userId}
+                                selection={selection}
+                                shapes={shapes}
+                            />
+                        ))}
+
                         {Object.values(remoteCursors).map((cursor) => (
                             <CollaboratorCursor
                                 key={cursor.userId}

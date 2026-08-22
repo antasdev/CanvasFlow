@@ -270,4 +270,46 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().past).toHaveLength(0);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });
+
+    it("manages remote selections without modifying undo/redo history", () => {
+        const selection1 = {
+            userId: "user-1",
+            boardId: "board-1",
+            shapeIds: ["shape-101", "shape-102"],
+        };
+
+        const selection2 = {
+            userId: "user-2",
+            boardId: "board-1",
+            shapeIds: ["shape-201"],
+        };
+
+        // 1. Set remote selections
+        useCanvasStore.getState().setRemoteSelection(selection1);
+        useCanvasStore.getState().setRemoteSelection(selection2);
+
+        expect(Object.keys(useCanvasStore.getState().remoteSelections)).toHaveLength(2);
+        expect(useCanvasStore.getState().remoteSelections["user-1"].shapeIds).toEqual(["shape-101", "shape-102"]);
+        expect(useCanvasStore.getState().remoteSelections["user-2"].shapeIds).toEqual(["shape-201"]);
+
+        // 2. Update existing selection
+        useCanvasStore.getState().setRemoteSelection({
+            ...selection1,
+            shapeIds: ["shape-101"],
+        });
+        expect(useCanvasStore.getState().remoteSelections["user-1"].shapeIds).toEqual(["shape-101"]);
+
+        // 3. Remove single user selection
+        useCanvasStore.getState().removeRemoteSelection("user-1");
+        expect(useCanvasStore.getState().remoteSelections["user-1"]).toBeUndefined();
+        expect(useCanvasStore.getState().remoteSelections["user-2"]).toBeDefined();
+
+        // 4. Clear all selections
+        useCanvasStore.getState().clearRemoteSelections();
+        expect(Object.keys(useCanvasStore.getState().remoteSelections)).toHaveLength(0);
+
+        // Verify undo/redo stacks were NEVER modified by selection state
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
 });

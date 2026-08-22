@@ -10,6 +10,7 @@ import type {
   DeleteShapePayload,
   JoinBoardPayload,
   LeaveBoardPayload,
+  SelectionChangePayload,
   ShapeResponseDto,
   TypedSocket,
   UpdateShapePayload,
@@ -286,6 +287,26 @@ export class SocketClientService {
     };
 
     this.socket.emit(SocketEvents.CURSOR_MOVE, payload);
+  }
+
+  /**
+   * Emits live collaborator selection change over Socket.IO.
+   * Ephemeral fire-and-forget event with zero acknowledgement overhead.
+   *
+   * @param boardId - Target board identifier
+   * @param shapeIds - Array of currently selected shape IDs
+   */
+  public changeSelection(boardId: string, shapeIds: string[]): void {
+    if (!this.socket?.connected) {
+      return;
+    }
+
+    const payload: SelectionChangePayload = {
+      boardId,
+      shapeIds,
+    };
+
+    this.socket.emit(SocketEvents.SELECTION_CHANGE, payload);
   }
 
   /**

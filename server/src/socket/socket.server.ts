@@ -7,6 +7,7 @@ import { socketAuthMiddleware } from "./socket.middleware";
 import { registerBoardHandlers } from "./handlers/board.handler";
 import { registerShapeHandlers } from "./handlers/shape.handler";
 import { registerCursorHandlers } from "./handlers/cursor.handler";
+import { registerSelectionHandlers } from "./handlers/selection.handler";
 import { presenceManager } from "./presence/presence.manager";
 import { getBoardRoom } from "./socket.rooms";
 import {
@@ -57,6 +58,9 @@ export class SocketServer {
 
       // Register Slice 4 Live Collaborator Cursor Handlers
       registerCursorHandlers(socket);
+
+      // Register Slice 5 Live Collaborator Selection Handlers
+      registerSelectionHandlers(socket);
 
       // Handle Socket Disconnection Lifecycle & Multi-Tab Presence Cleanup
       socket.on(SocketEvents.DISCONNECT, (reason) => {

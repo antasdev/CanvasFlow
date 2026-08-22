@@ -24,6 +24,9 @@ export const SocketEvents = {
   CURSOR_MOVE: "cursor:move",
   CURSOR_MOVED: "cursor:moved",
 
+  SELECTION_CHANGE: "selection:change",
+  SELECTION_CHANGED: "selection:changed",
+
   USER_JOINED: "user:joined",
   USER_LEFT: "user:left",
 

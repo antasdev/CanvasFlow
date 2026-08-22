@@ -5,3 +5,4 @@ export { default as CanvasToolbar } from "./CanvasToolbar";
 export { default as RectangleNode } from "./RectangleNode";
 export { default as ShapeRenderer } from "./ShapeRenderer";
 export { default as CollaboratorCursor } from "./CollaboratorCursor";
+export { default as CollaboratorSelection } from "./CollaboratorSelection";

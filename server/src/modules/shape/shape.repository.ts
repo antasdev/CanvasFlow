@@ -69,6 +69,19 @@ export class ShapeRepository {
       { session }
     );
   }
+
+  async countByShapeIdsAndCanvasIds(
+    shapeIds: Types.ObjectId[],
+    canvasIds: Types.ObjectId[]
+  ): Promise<number> {
+    if (shapeIds.length === 0 || canvasIds.length === 0) {
+      return 0;
+    }
+    return ShapeModel.countDocuments({
+      _id: { $in: shapeIds },
+      canvasId: { $in: canvasIds },
+    });
+  }
 }
 
 export const shapeRepository =
