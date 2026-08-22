@@ -4,8 +4,8 @@
 
 CanvasFlow uses Socket.IO for real-time collaboration.
 
-- **REST APIs** are responsible for persistence-oriented CRUD operations and queries.
-- **Socket.IO** is responsible for establishing real-time communication channels, authenticating sockets, managing board room collaboration lifecycles, and broadcasting live canvas events.
+- **REST APIs** are responsible for initial workspace loading, authentication, and read-heavy views.
+- **Socket.IO** is responsible for establishing real-time communication channels, authenticating sockets, managing board room collaboration lifecycles, and broadcasting live canvas shape events.
 
 ---
 
@@ -14,7 +14,7 @@ CanvasFlow uses Socket.IO for real-time collaboration.
 The socket layer adheres strictly to the project's layered architectural pattern:
 
 ```text
-Client (React + Zustand + Socket.IO Client)
+Client (React + Konva + Zustand + SocketClientService)
        ↓
 Socket.IO Transport & Middleware (Authentication)
        ↓
@@ -49,7 +49,8 @@ Socket Auth Middleware (socket.middleware.ts)
 Socket Server (socket.server.ts)
     │
     ├── Authenticated connection registered
-    └── Lifecycle handlers attached (board, shape, presence)
+    ├── registerBoardHandlers(socket)
+    └── registerShapeHandlers(socket)
 ```
 
 - **Zero Client Identity Trust**: Client payloads cannot provide or forge `userId` or `role`. The server extracts user identity exclusively from the verified JWT in `socket.data.user`.
@@ -109,7 +110,81 @@ Client                              Server
 
 ---
 
-## 5. In-Memory Presence & Multi-Tab Model
+## 5. Shape Synchronization (Slice 3)
+
+Real-time shape manipulation uses authoritative backend synchronization over Socket.IO.
+
+```text
+User A (Initiator)                   Backend Authoritative Server             User B (Collaborator)
+       │                                         │                                      │
+       ├─── 1. Local action (draw/move/resize)  │                                      │
+       ├─── 2. Update local Zustand store        │                                      │
+       │       (records undo snapshot)           │                                      │
+       │                                         │                                      │
+       ├─── 3. Emit shape:create/update/delete ─►│                                      │
+       │                                         ├── 4. Validate transport payload     │
+       │                                         ├── 5. Derive canvasId & boardId       │
+       │                                         ├── 6. Authorize board access          │
+       │                                         ├── 7. Verify socket room membership   │
+       │                                         ├── 8. ShapeService persistence in DB │
+       │                                         ├── 9. ShapeMapper.toResponseDto()     │
+       │                                         │                                      │
+       │◄── 10. Ack { success: true, data } ─────┤                                      │
+       │                                         ├── 11. Broadcast to room (excludes A)►│
+       │                                         │   (shape:created/updated/deleted)    ├── 12. useCanvasSocket catches event
+       │                                         │                                      └── 13. applyRemoteShape* (NO undo snapshot)
+```
+
+### A. Shape Creation (`shape:create`)
+- **Payload**: `{ canvasId, type, x, y, width, height, rotation?, style? }`
+- **Resolution**: `canvasId` → `Canvas` → `boardId` → `boardService.authorizeBoardAccess(boardId, userId)`
+- **Room Check**: `socket.rooms.has(getBoardRoom(boardId))`
+- **Persistence**: `shapeService.createShape(...)` computes next `zIndex` and saves in MongoDB
+- **Delivery**:
+  - Creator receives Ack with canonical `ShapeResponseDto`.
+  - Collaborators receive `shape:created` broadcast with `ShapeResponseDto`.
+
+### B. Shape Update (`shape:update`)
+- **Payload**: `{ shapeId, data: { x?, y?, width?, height?, rotation?, style? } }`
+- **Resolution**: `shapeId` → `Shape` → `canvasId` → `Canvas` → `boardId` → `boardService.authorizeBoardAccess(boardId, userId)`
+- **Room Check**: `socket.rooms.has(getBoardRoom(boardId))`
+- **Persistence**: `shapeService.updateShape(shapeId, data)` validates and updates MongoDB
+- **Delivery**:
+  - Sender receives Ack with updated `ShapeResponseDto`.
+  - Collaborators receive `shape:updated` broadcast with updated `ShapeResponseDto`.
+
+### C. Shape Deletion (`shape:delete`)
+- **Payload**: `{ shapeId }`
+- **Resolution**: `shapeId` → `Shape` → `canvasId` → `Canvas` → `boardId` → `boardService.authorizeBoardAccess(boardId, userId)`
+- **Room Check**: `socket.rooms.has(getBoardRoom(boardId))`
+- **Persistence**: `shapeService.deleteShape(shapeId)` removes document from MongoDB
+- **Delivery**:
+  - Sender receives Ack `{ success: true }`.
+  - Collaborators receive `shape:deleted` broadcast with `{ shapeId }`.
+
+---
+
+## 6. Remote State & Undo/Redo Isolation
+
+To prevent infinite feedback loops and avoid polluting local undo/redo history:
+- **Local User Actions**: Mutate Zustand store via `addShape`, `moveSelectedShapes`, `updateRectangleTransform`, or `deleteShape`, which append snapshots to `past` and clear `future`.
+- **Remote Collaborator Actions**: Dispatched via dedicated remote store actions:
+  - `applyRemoteShapeCreated(shape)`
+  - `applyRemoteShapeUpdated(shape)`
+  - `applyRemoteShapeDeleted(shapeId)`
+- **Isolation Guarantee**: Remote actions update `shapes` directly without touching `past` or `future` stacks and without re-emitting socket events.
+
+---
+
+## 7. Sender Exclusion
+
+Socket broadcasts use `socket.to(getBoardRoom(boardId)).emit(...)` rather than `io.to(...).emit(...)`.
+- The originating client is acknowledged directly via the Socket.IO acknowledgement callback.
+- The originating client never receives its own broadcast, preventing redundant UI re-renders and transformation jumping.
+
+---
+
+## 8. In-Memory Presence & Multi-Tab Model
 
 `PresenceManager` tracks active connections in memory without writing temporary presence state to MongoDB.
 
@@ -126,7 +201,7 @@ A user may open multiple tabs (multiple socket connections) for the same board:
 
 ---
 
-## 6. Disconnect Cleanup
+## 9. Disconnect Cleanup
 
 When a network drop, page refresh, or tab closure triggers Socket.IO `disconnect`:
 1. `socket.server.ts` catches `SocketEvents.DISCONNECT`.
@@ -136,28 +211,28 @@ When a network drop, page refresh, or tab closure triggers Socket.IO `disconnect
 
 ---
 
-## 7. Supported Events
+## 10. Supported Events
 
 | Client → Server | Server → Client | Description |
 |---|---|---|
 | `board:join` | `canvas:sync` | Validates access, joins room, delivers initial canonical shapes |
 | `board:leave` | `user:joined` | Leaves room, updates presence, notifies remaining collaborators |
-| `shape:create` (Future) | `user:left` | Authoritative shape creation broadcast |
-| `shape:update` (Future) | `shape:created` | Authoritative shape transform/position update broadcast |
-| `shape:delete` (Future) | `shape:updated` | Authoritative shape deletion broadcast |
-| `cursor:move` (Future) | `shape:deleted` | Live collaborator cursor synchronization |
-| | `cursor:moved` | Collaborator cursor position update |
+| `shape:create` | `shape:created` | Authoritative shape creation broadcast |
+| `shape:update` | `shape:updated` | Authoritative shape transform/position update broadcast |
+| `shape:delete` | `shape:deleted` | Authoritative shape deletion broadcast |
+| `cursor:move` (Future) | `cursor:moved` | Live collaborator cursor synchronization |
+| | `user:left` | User departure notification |
 | | `error` | Error notifications and status |
 
 ---
 
-## 8. Folder Structure
+## 11. Folder Structure
 
 ```text
 server/src/socket/
 ├── handlers/
 │   ├── board.handler.ts      # Board room lifecycle & authorization orchestration
-│   ├── shape.handler.ts      # (Future) Shape collaboration orchestration
+│   ├── shape.handler.ts      # Shape collaboration & persistence orchestration
 │   └── presence.handler.ts   # (Future) Cursor & presence event handlers
 ├── presence/
 │   └── presence.manager.ts   # Multi-tab in-memory presence tracking
@@ -171,16 +246,18 @@ server/src/socket/
 
 ---
 
-## 9. Security & Hardening
+## 12. Security & Hardening
 
 1. **Authentication**: All connections require a valid JWT access token verified against `JWT_ACCESS_SECRET`.
 2. **Authorization Boundary**: Board access authorization is verified server-side through `boardService.authorizeBoardAccess` before room entry or data sync.
-3. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all shape entities pass through `ShapeMapper.toResponseDto()`.
-4. **Structured Error Handling**: All handler errors return structured `SocketAckError` payloads with specific error codes (`NOT_FOUND`, `FORBIDDEN`, `BAD_REQUEST`, `INTERNAL_ERROR`).
+3. **Persisted Boundary Resolution**: Sockets cannot supply arbitrary `boardId` or `userId` values; the server derives `boardId` strictly from `Shape` → `Canvas` → `Board`.
+4. **Room Membership Enforcement**: Shape handlers verify `socket.rooms.has(getBoardRoom(boardId))` before allowing shape creation, modification, or deletion.
+5. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all shape entities pass through `ShapeMapper.toResponseDto()`.
+6. **Structured Error Handling**: All handler errors return structured `SocketAckError` payloads with specific error codes (`NOT_FOUND`, `FORBIDDEN`, `BAD_REQUEST`, `INTERNAL_ERROR`).
 
 ---
 
-## 10. Future Redis Architecture & Scaling
+## 13. Future Redis Architecture & Scaling
 
 When scaling beyond a single Node.js instance:
 1. **Redis Adapter (`@socket.io/redis-adapter`)**: Replaces the in-memory pub/sub adapter to broadcast room events across all server nodes.

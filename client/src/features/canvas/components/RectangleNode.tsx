@@ -4,7 +4,7 @@ import { Rect, Transformer } from "react-konva";
 import { toast } from "sonner";
 
 import { CANVAS_TOOLS } from "../constants";
-import { useUpdateShape } from "../hooks";
+import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
 import type { RectangleShape } from "../types";
 
@@ -15,7 +15,6 @@ type RectangleNodeProps = {
 export default function RectangleNode({
     shape,
 }: RectangleNodeProps): React.JSX.Element {
-    const updateShapeMutation = useUpdateShape();
     const rectRef = useRef<Konva.Rect | null>(null);
     const transformerRef =
         useRef<Konva.Transformer | null>(null);
@@ -148,24 +147,18 @@ export default function RectangleNode({
 
                     dragStartRef.current = null;
 
-                    updateShapeMutation.mutate(
-                        {
-                            id: shape.id,
-                            data: {
-                                x: shape.x + deltaX,
-                                y: shape.y + deltaY,
-                            },
-                        },
-                        {
-                            onError: (err) => {
-                                toast.error(
-                                    err instanceof Error
-                                        ? err.message
-                                        : "Failed to save shape position.",
-                                );
-                            },
-                        },
-                    );
+                    socketClientService
+                        .updateShape(shape.id, {
+                            x: shape.x + deltaX,
+                            y: shape.y + deltaY,
+                        })
+                        .catch((err) => {
+                            toast.error(
+                                err instanceof Error
+                                    ? err.message
+                                    : "Failed to save shape position.",
+                            );
+                        });
                 }}
                 onTransformEnd={(event) => {
                     event.cancelBubble = true;
@@ -200,27 +193,21 @@ export default function RectangleNode({
                         rotation,
                     });
 
-                    updateShapeMutation.mutate(
-                        {
-                            id: shape.id,
-                            data: {
-                                x,
-                                y,
-                                width,
-                                height,
-                                rotation,
-                            },
-                        },
-                        {
-                            onError: (err) => {
-                                toast.error(
-                                    err instanceof Error
-                                        ? err.message
-                                        : "Failed to save shape transform.",
-                                );
-                            },
-                        },
-                    );
+                    socketClientService
+                        .updateShape(shape.id, {
+                            x,
+                            y,
+                            width,
+                            height,
+                            rotation,
+                        })
+                        .catch((err) => {
+                            toast.error(
+                                err instanceof Error
+                                    ? err.message
+                                    : "Failed to save shape transform.",
+                            );
+                        });
                 }}
             />
 

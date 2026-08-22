@@ -57,7 +57,7 @@ export default function BoardCanvasPage(): React.JSX.Element {
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-700">
-      <CanvasEditor canvasId={activeCanvas.id} />
+      <CanvasEditor boardId={boardId} canvasId={activeCanvas.id} />
       <CanvasToolbar />
     </main>
   );

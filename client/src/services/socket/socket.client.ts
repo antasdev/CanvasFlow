@@ -5,14 +5,18 @@ import { SocketEvents } from "./socket.events";
 import type {
   BoardJoinAckData,
   ConnectionState,
+  CreateShapePayload,
+  DeleteShapePayload,
   JoinBoardPayload,
   LeaveBoardPayload,
+  ShapeResponseDto,
   TypedSocket,
+  UpdateShapePayload,
 } from "./socket.types";
 
 /**
  * Encapsulated service managing Socket.IO client connections,
- * authentication handshake, board room lifecycle, and connection state transitions.
+ * authentication handshake, board room lifecycle, shape synchronization, and connection state transitions.
  */
 export class SocketClientService {
   private socket: TypedSocket | null = null;
@@ -163,6 +167,93 @@ export class SocketClientService {
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to leave board room.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape creation request to authoritative backend over Socket.IO.
+   *
+   * @param payload - Shape creation parameters
+   * @returns Promise resolving with canonical persisted ShapeResponseDto
+   */
+  public createShape(
+    payload: CreateShapePayload
+  ): Promise<ShapeResponseDto> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      socket.emit(SocketEvents.SHAPE_CREATE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to create shape.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape update request to authoritative backend over Socket.IO.
+   *
+   * @param shapeId - Shape identifier
+   * @param data - Partial shape update properties
+   * @returns Promise resolving with canonical updated ShapeResponseDto
+   */
+  public updateShape(
+    shapeId: string,
+    data: UpdateShapePayload["data"]
+  ): Promise<ShapeResponseDto> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: UpdateShapePayload = {
+        shapeId,
+        data,
+      };
+
+      socket.emit(SocketEvents.SHAPE_UPDATE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to update shape.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape deletion request to authoritative backend over Socket.IO.
+   *
+   * @param shapeId - Shape identifier to delete
+   * @returns Promise resolving on successful deletion acknowledgement
+   */
+  public deleteShape(shapeId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: DeleteShapePayload = {
+        shapeId,
+      };
+
+      socket.emit(SocketEvents.SHAPE_DELETE, payload, (response) => {
+        if (response.success) {
+          resolve();
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to delete shape.";
           reject(new Error(errorMessage));
         }
       });

@@ -78,6 +78,12 @@ type CanvasStore = {
 
   setPan: (x: number, y: number) => void;
 
+  applyRemoteShapeCreated: (shape: Shape) => void;
+
+  applyRemoteShapeUpdated: (shape: Shape) => void;
+
+  applyRemoteShapeDeleted: (shapeId: string) => void;
+
   undo: () => void;
 
   redo: () => void;
@@ -319,6 +325,30 @@ export const useCanvasStore = create<CanvasStore>(
           y,
         },
       });
+    },
+
+    applyRemoteShapeCreated: (shape: Shape): void => {
+      set((state) => {
+        if (state.shapes.some((s) => s.id === shape.id)) {
+          return state;
+        }
+        return {
+          shapes: [...state.shapes, shape],
+        };
+      });
+    },
+
+    applyRemoteShapeUpdated: (shape: Shape): void => {
+      set((state) => ({
+        shapes: state.shapes.map((s) => (s.id === shape.id ? shape : s)),
+      }));
+    },
+
+    applyRemoteShapeDeleted: (shapeId: string): void => {
+      set((state) => ({
+        shapes: state.shapes.filter((s) => s.id !== shapeId),
+        selectedShapeIds: state.selectedShapeIds.filter((id) => id !== shapeId),
+      }));
     },
 
     undo: (): void => {

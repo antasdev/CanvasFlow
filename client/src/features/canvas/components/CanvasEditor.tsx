@@ -7,10 +7,10 @@ import { mapShapeResponseToRectangleShape, shapeApi } from "../api";
 import { CANVAS_TOOLS } from "../constants";
 import {
     useCanvasHistory,
-    useCreateShape,
-    useDeleteShape,
+    useCanvasSocket,
     useShapes,
 } from "../hooks";
+import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
 import { screenToWorld } from "../utils/canvas.coordinates";
 
@@ -19,6 +19,7 @@ import ShapeRenderer from "./ShapeRenderer";
 
 type CanvasEditorProps = {
     canvasId?: string;
+    boardId?: string;
     className?: string;
 };
 
@@ -47,9 +48,12 @@ const ZOOM_BY = 1.05;
 
 export default function CanvasEditor({
     canvasId,
+    boardId,
     className,
 }: CanvasEditorProps): React.JSX.Element {
     useCanvasHistory();
+    useCanvasSocket(boardId, canvasId);
+
     const containerRef =
         useRef<HTMLDivElement | null>(null);
 
@@ -60,8 +64,6 @@ export default function CanvasEditor({
         useRef<string | null>(null);
 
     const { data: serverShapes } = useShapes(canvasId);
-    const createShapeMutation = useCreateShape(canvasId);
-    const deleteShapeMutation = useDeleteShape(canvasId);
 
     const setShapes = useCanvasStore(
         (state) => state.setShapes,
@@ -202,32 +204,32 @@ export default function CanvasEditor({
 
                 event.preventDefault();
 
-                selectedShapeIds.forEach((shapeId) => {
+                selectedShapeIds.forEach(async (shapeId) => {
                     deleteShape(shapeId);
-                    deleteShapeMutation.mutate(shapeId, {
-                        onError: async (err) => {
-                            toast.error(
-                                err instanceof Error
-                                    ? err.message
-                                    : "Failed to delete shape.",
-                            );
-                            if (canvasId) {
-                                try {
-                                    const canonical =
-                                        await shapeApi.getShapes(
-                                            canvasId,
-                                        );
-                                    setShapes(
-                                        canonical.map(
-                                            mapShapeResponseToRectangleShape,
-                                        ),
+                    try {
+                        await socketClientService.deleteShape(shapeId);
+                    } catch (err) {
+                        toast.error(
+                            err instanceof Error
+                                ? err.message
+                                : "Failed to delete shape.",
+                        );
+                        if (canvasId) {
+                            try {
+                                const canonical =
+                                    await shapeApi.getShapes(
+                                        canvasId,
                                     );
-                                } catch {
-                                    // Ignore secondary fetch errors
-                                }
+                                setShapes(
+                                    canonical.map(
+                                        mapShapeResponseToRectangleShape,
+                                    ),
+                                );
+                            } catch {
+                                // Ignore secondary fetch errors
                             }
-                        },
-                    });
+                        }
+                    }
                 });
 
                 return;
@@ -544,8 +546,8 @@ export default function CanvasEditor({
             return;
         }
 
-        createShapeMutation.mutate(
-            {
+        socketClientService
+            .createShape({
                 canvasId,
                 type: "rectangle",
                 x,
@@ -559,24 +561,21 @@ export default function CanvasEditor({
                     strokeWidth: 2,
                     opacity: 1,
                 },
-            },
-            {
-                onSuccess: (savedShape) => {
-                    const rectangle =
-                        mapShapeResponseToRectangleShape(
-                            savedShape,
-                        );
-                    addShape(rectangle);
-                },
-                onError: (err) => {
-                    toast.error(
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to create shape.",
+            })
+            .then((savedShape) => {
+                const rectangle =
+                    mapShapeResponseToRectangleShape(
+                        savedShape,
                     );
-                },
-            },
-        );
+                addShape(rectangle);
+            })
+            .catch((err) => {
+                toast.error(
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to create shape.",
+                );
+            });
     };
 
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { useCanvasStore } from "./canvas.store";
 
-describe("canvas store history", () => {
+describe("canvas store history & remote synchronization", () => {
     beforeEach(() => {
         useCanvasStore.getState().resetCanvas();
     });
@@ -110,6 +110,118 @@ describe("canvas store history", () => {
         expect(useCanvasStore.getState().shapes[0].id).toBe("shape-server-1");
         expect(useCanvasStore.getState().canUndo()).toBe(false);
         expect(useCanvasStore.getState().canRedo()).toBe(false);
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
+
+    it("applies remote shape creation without modifying undo/redo history", () => {
+        // 1. Perform local action to have undo history
+        const localShape = {
+            id: "local-1",
+            type: "rectangle" as const,
+            x: 10,
+            y: 10,
+            width: 50,
+            height: 50,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            fill: "#ffffff",
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+        useCanvasStore.getState().addShape(localShape);
+        expect(useCanvasStore.getState().past).toHaveLength(1);
+
+        // 2. Receive remote shape creation
+        const remoteShape = {
+            id: "remote-1",
+            type: "rectangle" as const,
+            x: 100,
+            y: 100,
+            width: 80,
+            height: 80,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2,
+            fill: "#3b82f6",
+            stroke: "#1e40af",
+            strokeWidth: 2,
+        };
+        useCanvasStore.getState().applyRemoteShapeCreated(remoteShape);
+
+        // Verify shape added
+        expect(useCanvasStore.getState().shapes).toHaveLength(2);
+        expect(useCanvasStore.getState().shapes.find((s) => s.id === "remote-1")).toBeDefined();
+
+        // Verify undo/redo stacks were NOT polluted or altered
+        expect(useCanvasStore.getState().past).toHaveLength(1);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
+
+    it("applies remote shape update without modifying undo/redo history", () => {
+        const shape = {
+            id: "shape-1",
+            type: "rectangle" as const,
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            fill: "#ffffff",
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+        useCanvasStore.getState().setShapes([shape]);
+
+        // Remote collaborator updates position and rotation
+        const updatedRemoteShape = {
+            ...shape,
+            x: 200,
+            y: 250,
+            rotation: 45,
+        };
+        useCanvasStore.getState().applyRemoteShapeUpdated(updatedRemoteShape);
+
+        const current = useCanvasStore.getState().shapes[0];
+        expect(current.x).toBe(200);
+        expect(current.y).toBe(250);
+        expect(current.rotation).toBe(45);
+
+        // Verify undo stack remains empty
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
+
+    it("applies remote shape deletion without modifying undo/redo history and clears selection", () => {
+        const shape1 = {
+            id: "shape-1",
+            type: "rectangle" as const,
+            x: 10,
+            y: 10,
+            width: 50,
+            height: 50,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            fill: "#ffffff",
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+        useCanvasStore.getState().setShapes([shape1]);
+        useCanvasStore.getState().setSelectedShapeIds(["shape-1"]);
+
+        expect(useCanvasStore.getState().selectedShapeIds).toContain("shape-1");
+
+        // Remote collaborator deletes shape-1
+        useCanvasStore.getState().applyRemoteShapeDeleted("shape-1");
+
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+        expect(useCanvasStore.getState().selectedShapeIds).not.toContain("shape-1");
+
+        // Verify undo stack remains empty
         expect(useCanvasStore.getState().past).toHaveLength(0);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });

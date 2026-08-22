@@ -1,24 +1,370 @@
-import { Server } from "socket.io";
+import { Types } from "mongoose";
+import { z } from "zod";
+
+import { boardService } from "@/modules/board";
+import { canvasRepository } from "@/modules/canvas";
+import { shapeService, ShapeMapper, ShapeType } from "@/modules/shape";
+import { ApiError } from "@/shared/utils";
+import { HttpStatus, Messages } from "@/shared/constants";
+
+import { SocketEvents } from "../socket.events";
+import { getBoardRoom } from "../socket.rooms";
 import {
   AuthSocket,
-  ClientToServerEvents,
-  ServerToClientEvents,
-  InterServerEvents,
-  SocketData,
+  CreateShapePayload,
+  DeleteShapePayload,
+  ShapeResponseDto,
+  SocketAck,
+  UpdateShapePayload,
 } from "../socket.types";
 
+const objectIdSchema = z
+  .string()
+  .regex(/^[0-9a-fA-F]{24}$/, "Invalid ID format.");
+
+const shapeStyleSocketSchema = z.object({
+  fill: z.string().trim().optional(),
+  stroke: z.string().trim().optional(),
+  strokeWidth: z
+    .number()
+    .min(0, "Stroke width cannot be negative.")
+    .max(50)
+    .optional(),
+  opacity: z
+    .number()
+    .min(0, "Opacity must be at least 0.")
+    .max(1, "Opacity cannot exceed 1.")
+    .optional(),
+});
+
+const createShapeSocketSchema = z.object({
+  canvasId: objectIdSchema,
+  type: z.enum(["rectangle", "RECTANGLE"]).default("rectangle"),
+  x: z.number().finite("x must be a finite number."),
+  y: z.number().finite("y must be a finite number."),
+  width: z.number().positive("Width must be greater than 0."),
+  height: z.number().positive("Height must be greater than 0."),
+  rotation: z.number().finite("Rotation must be a finite number.").optional(),
+  style: shapeStyleSocketSchema.optional(),
+});
+
+const updateShapeSocketSchema = z.object({
+  shapeId: objectIdSchema,
+  data: z.object({
+    x: z.number().finite("x must be a finite number.").optional(),
+    y: z.number().finite("y must be a finite number.").optional(),
+    width: z.number().positive("Width must be greater than 0.").optional(),
+    height: z.number().positive("Height must be greater than 0.").optional(),
+    rotation: z.number().finite("Rotation must be a finite number.").optional(),
+    style: shapeStyleSocketSchema.optional(),
+  }),
+});
+
+const deleteShapeSocketSchema = z.object({
+  shapeId: objectIdSchema,
+});
+
 /**
- * Register shape event handlers (create, update, delete).
- * Implementation reserved for Shape Events slice.
+ * Registers real-time shape collaboration event handlers on an authenticated socket.
  */
-export const registerShapeHandlers = (
-  _io: Server<
-    ClientToServerEvents,
-    ServerToClientEvents,
-    InterServerEvents,
-    SocketData
-  >,
-  _socket: AuthSocket
-): void => {
-  // Handlers will be attached in Shape Collaboration slice
+export const registerShapeHandlers = (socket: AuthSocket): void => {
+  /**
+   * Handle shape:create
+   */
+  socket.on(
+    SocketEvents.SHAPE_CREATE,
+    async (
+      payload: CreateShapePayload,
+      callback?: (response: SocketAck<ShapeResponseDto>) => void
+    ) => {
+      try {
+        const parsed = createShapeSocketSchema.safeParse(payload);
+
+        if (!parsed.success) {
+          const message =
+            parsed.error.issues[0]?.message ?? "Invalid shape creation payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const canvasObjectId = new Types.ObjectId(parsed.data.canvasId);
+
+        // 1. Resolve canvas & board
+        const canvas = await canvasRepository.findById(canvasObjectId);
+
+        if (!canvas) {
+          throw new ApiError(
+            HttpStatus.NOT_FOUND,
+            Messages.CANVAS_NOT_FOUND
+          );
+        }
+
+        const boardId = canvas.boardId;
+
+        // 2. Authorize board access
+        await boardService.authorizeBoardAccess(boardId, userId);
+
+        // 3. Verify socket is joined to the board room
+        const room = getBoardRoom(boardId.toString());
+
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before creating shapes."
+          );
+        }
+
+        // 4. Authoritative persistence via ShapeService
+        const result = await shapeService.createShape(userId, {
+          canvasId: canvasObjectId,
+          type: ShapeType.RECTANGLE,
+          x: parsed.data.x,
+          y: parsed.data.y,
+          width: parsed.data.width,
+          height: parsed.data.height,
+          rotation: parsed.data.rotation ?? 0,
+          style: parsed.data.style,
+        });
+
+        // 5. Transform to canonical response DTO
+        const responseDto = ShapeMapper.toResponseDto(result.shape);
+
+        // 6. Broadcast to other collaborators in the room (excludes sender)
+        socket.to(room).emit(SocketEvents.SHAPE_CREATED, responseDto);
+
+        // 7. Acknowledge creator with canonical persisted shape
+        callback?.({
+          success: true,
+          data: responseDto,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          const code =
+            error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : "BAD_REQUEST";
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to create shape.";
+
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:update
+   */
+  socket.on(
+    SocketEvents.SHAPE_UPDATE,
+    async (
+      payload: UpdateShapePayload,
+      callback?: (response: SocketAck<ShapeResponseDto>) => void
+    ) => {
+      try {
+        const parsed = updateShapeSocketSchema.safeParse(payload);
+
+        if (!parsed.success) {
+          const message =
+            parsed.error.issues[0]?.message ?? "Invalid shape update payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const shapeObjectId = new Types.ObjectId(parsed.data.shapeId);
+
+        // 1. Resolve shape, canvas & board
+        const shape = await shapeService.getShapeById(shapeObjectId);
+        const canvas = await canvasRepository.findById(shape.canvasId);
+
+        if (!canvas) {
+          throw new ApiError(
+            HttpStatus.NOT_FOUND,
+            Messages.CANVAS_NOT_FOUND
+          );
+        }
+
+        const boardId = canvas.boardId;
+
+        // 2. Authorize board access
+        await boardService.authorizeBoardAccess(boardId, userId);
+
+        // 3. Verify socket is joined to the board room
+        const room = getBoardRoom(boardId.toString());
+
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before updating shapes."
+          );
+        }
+
+        // 4. Authoritative persistence via ShapeService
+        const result = await shapeService.updateShape(
+          shapeObjectId,
+          parsed.data.data
+        );
+
+        // 5. Transform to canonical response DTO
+        const responseDto = ShapeMapper.toResponseDto(result.shape);
+
+        // 6. Broadcast to other room members (excludes sender)
+        socket.to(room).emit(SocketEvents.SHAPE_UPDATED, responseDto);
+
+        // 7. Acknowledge sender
+        callback?.({
+          success: true,
+          data: responseDto,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          const code =
+            error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : "BAD_REQUEST";
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to update shape.";
+
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:delete
+   */
+  socket.on(
+    SocketEvents.SHAPE_DELETE,
+    async (
+      payload: DeleteShapePayload,
+      callback?: (response: SocketAck) => void
+    ) => {
+      try {
+        const parsed = deleteShapeSocketSchema.safeParse(payload);
+
+        if (!parsed.success) {
+          const message =
+            parsed.error.issues[0]?.message ?? "Invalid shape delete payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const shapeObjectId = new Types.ObjectId(parsed.data.shapeId);
+
+        // 1. Resolve shape, canvas & board
+        const shape = await shapeService.getShapeById(shapeObjectId);
+        const canvas = await canvasRepository.findById(shape.canvasId);
+
+        if (!canvas) {
+          throw new ApiError(
+            HttpStatus.NOT_FOUND,
+            Messages.CANVAS_NOT_FOUND
+          );
+        }
+
+        const boardId = canvas.boardId;
+
+        // 2. Authorize board access
+        await boardService.authorizeBoardAccess(boardId, userId);
+
+        // 3. Verify socket is joined to the board room
+        const room = getBoardRoom(boardId.toString());
+
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before deleting shapes."
+          );
+        }
+
+        // 4. Authoritative deletion via ShapeService
+        await shapeService.deleteShape(shapeObjectId);
+
+        // 5. Broadcast deletion to other room members (excludes sender)
+        socket.to(room).emit(SocketEvents.SHAPE_DELETED, {
+          shapeId: parsed.data.shapeId,
+        });
+
+        // 6. Acknowledge sender
+        callback?.({
+          success: true,
+        });
+      } catch (error) {
+        if (error instanceof ApiError) {
+          const code =
+            error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : "BAD_REQUEST";
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to delete shape.";
+
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
 };

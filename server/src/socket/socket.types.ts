@@ -3,6 +3,8 @@ import { Socket } from "socket.io";
 import type { UserRole } from "@/modules/user/user.types";
 import type { ShapeResponseDto } from "@/modules/shape/shape.dto";
 
+export type { ShapeResponseDto };
+
 /**
  * Authenticated user data attached to Socket.IO instances.
  */
