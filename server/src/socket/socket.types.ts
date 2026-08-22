@@ -141,6 +141,34 @@ export type SelectionChangedPayload = {
   shapeIds: string[];
 };
 
+export type LockShapePayload = {
+  boardId: string;
+  shapeId: string;
+};
+
+export type UnlockShapePayload = {
+  boardId: string;
+  shapeId: string;
+};
+
+export type RefreshShapeLockPayload = {
+  boardId: string;
+  shapeId: string;
+};
+
+export type ShapeLockedPayload = {
+  boardId: string;
+  shapeId: string;
+  userId: string;
+  fullName: string;
+  color: string;
+};
+
+export type ShapeUnlockedPayload = {
+  boardId: string;
+  shapeId: string;
+};
+
 export type UserJoinedPayload = {
   userId: string;
   activeUsers: ActiveUser[];
@@ -183,6 +211,21 @@ export interface ClientToServerEvents {
   "cursor:move": (payload: CursorMovePayload) => void;
 
   "selection:change": (payload: SelectionChangePayload) => void;
+
+  "shape:lock": (
+    payload: LockShapePayload,
+    callback?: (response: SocketAck<ShapeLockedPayload>) => void
+  ) => void;
+
+  "shape:unlock": (
+    payload: UnlockShapePayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "shape:lock-refresh": (
+    payload: RefreshShapeLockPayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
 }
 
 /**
@@ -195,6 +238,8 @@ export interface ServerToClientEvents {
   "shape:deleted": (payload: DeleteShapePayload) => void;
   "cursor:moved": (payload: CursorMovedPayload) => void;
   "selection:changed": (payload: SelectionChangedPayload) => void;
+  "shape:locked": (payload: ShapeLockedPayload) => void;
+  "shape:unlocked": (payload: ShapeUnlockedPayload) => void;
   "user:joined": (payload: UserJoinedPayload) => void;
   "user:left": (payload: UserLeftPayload) => void;
   error: (message: string) => void;

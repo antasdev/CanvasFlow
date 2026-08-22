@@ -32,14 +32,16 @@ import RectangleNode from "./RectangleNode";
 
 type ShapeRendererProps = {
     shape: Shape;
+    boardId?: string;
 };
 
 export default function ShapeRenderer({
     shape,
+    boardId,
 }: ShapeRendererProps): React.JSX.Element | null {
     switch (shape.type) {
         case "rectangle":
-            return <RectangleNode shape={shape} />;
+            return <RectangleNode shape={shape} boardId={boardId} />;
 
         default:
             return null;

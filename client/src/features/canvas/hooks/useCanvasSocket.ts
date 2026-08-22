@@ -5,7 +5,9 @@ import type {
   CanvasSyncPayload,
   CursorMovedPayload,
   SelectionChangedPayload,
+  ShapeLockedPayload,
   ShapeResponseDto,
+  ShapeUnlockedPayload,
   UserJoinedPayload,
   UserLeftPayload,
 } from "@/services/socket";
@@ -51,6 +53,15 @@ export const useCanvasSocket = (
   );
   const clearRemoteSelections = useCanvasStore(
     (state) => state.clearRemoteSelections
+  );
+  const setRemoteShapeLock = useCanvasStore(
+    (state) => state.setRemoteShapeLock
+  );
+  const removeRemoteShapeLock = useCanvasStore(
+    (state) => state.removeRemoteShapeLock
+  );
+  const clearRemoteShapeLocks = useCanvasStore(
+    (state) => state.clearRemoteShapeLocks
   );
 
   const activeBoardIdRef = useRef<string | null>(null);
@@ -115,7 +126,20 @@ export const useCanvasSocket = (
       }
     };
 
-    // 8. Handle presence broadcasts
+    // 8. Handle collaborator shape soft-locking
+    const handleShapeLocked = (payload: ShapeLockedPayload): void => {
+      if (payload.boardId === boardId) {
+        setRemoteShapeLock(payload);
+      }
+    };
+
+    const handleShapeUnlocked = (payload: ShapeUnlockedPayload): void => {
+      if (payload.boardId === boardId) {
+        removeRemoteShapeLock(payload.shapeId);
+      }
+    };
+
+    // 9. Handle presence broadcasts
     const handleUserJoined = (payload: UserJoinedPayload): void => {
       console.log(`[Presence] User joined board: ${payload.userId}`);
     };
@@ -124,6 +148,14 @@ export const useCanvasSocket = (
       console.log(`[Presence] User left board: ${payload.userId}`);
       removeRemoteCursor(payload.userId);
       removeRemoteSelection(payload.userId);
+
+      // Clean up any locks held by departing user
+      const locks = useCanvasStore.getState().remoteShapeLocks;
+      for (const [shapeId, lock] of Object.entries(locks)) {
+        if (lock.userId === payload.userId) {
+          removeRemoteShapeLock(shapeId);
+        }
+      }
     };
 
     socket.on(SocketEvents.CANVAS_SYNC, handleCanvasSync);
@@ -132,6 +164,8 @@ export const useCanvasSocket = (
     socket.on(SocketEvents.SHAPE_DELETED, handleShapeDeleted);
     socket.on(SocketEvents.CURSOR_MOVED, handleCursorMoved);
     socket.on(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
+    socket.on(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
+    socket.on(SocketEvents.SHAPE_UNLOCKED, handleShapeUnlocked);
     socket.on(SocketEvents.USER_JOINED, handleUserJoined);
     socket.on(SocketEvents.USER_LEFT, handleUserLeft);
 
@@ -142,11 +176,14 @@ export const useCanvasSocket = (
       socket.off(SocketEvents.SHAPE_DELETED, handleShapeDeleted);
       socket.off(SocketEvents.CURSOR_MOVED, handleCursorMoved);
       socket.off(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
+      socket.off(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
+      socket.off(SocketEvents.SHAPE_UNLOCKED, handleShapeUnlocked);
       socket.off(SocketEvents.USER_JOINED, handleUserJoined);
       socket.off(SocketEvents.USER_LEFT, handleUserLeft);
 
       clearRemoteCursors();
       clearRemoteSelections();
+      clearRemoteShapeLocks();
 
       if (activeBoardIdRef.current) {
         socketClientService
@@ -168,5 +205,8 @@ export const useCanvasSocket = (
     setRemoteSelection,
     removeRemoteSelection,
     clearRemoteSelections,
+    setRemoteShapeLock,
+    removeRemoteShapeLock,
+    clearRemoteShapeLocks,
   ]);
 };

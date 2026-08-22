@@ -11,6 +11,7 @@ import type {
   JoinBoardPayload,
   LeaveBoardPayload,
   SelectionChangePayload,
+  ShapeLockedPayload,
   ShapeResponseDto,
   TypedSocket,
   UpdateShapePayload,
@@ -307,6 +308,110 @@ export class SocketClientService {
     };
 
     this.socket.emit(SocketEvents.SELECTION_CHANGE, payload);
+  }
+
+  /**
+   * Requests an exclusive ephemeral soft-lock on a shape before transforming.
+   *
+   * @param boardId - Target board identifier
+   * @param shapeId - Target shape identifier
+   * @returns Promise resolving to ShapeLockedPayload or rejecting on conflict/error
+   */
+  public async lockShape(
+    boardId: string,
+    shapeId: string
+  ): Promise<ShapeLockedPayload> {
+    if (!this.socket?.connected) {
+      throw new Error("Socket is not connected.");
+    }
+
+    return new Promise<ShapeLockedPayload>((resolve, reject) => {
+      this.socket?.emit(
+        SocketEvents.SHAPE_LOCK,
+        { boardId, shapeId },
+        (response) => {
+          if (response.success && response.data) {
+            resolve(response.data);
+          } else {
+            const errorMessage =
+              typeof response.error === "string"
+                ? response.error
+                : response.error?.message ?? "Failed to acquire shape lock.";
+            const err = new Error(errorMessage);
+            if (typeof response.error === "object" && response.error?.code) {
+              (err as any).code = response.error.code;
+            }
+            reject(err);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Releases an ephemeral soft-lock on a shape after transformation finishes.
+   *
+   * @param boardId - Target board identifier
+   * @param shapeId - Target shape identifier
+   */
+  public async unlockShape(
+    boardId: string,
+    shapeId: string
+  ): Promise<void> {
+    if (!this.socket?.connected) {
+      return;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      this.socket?.emit(
+        SocketEvents.SHAPE_UNLOCK,
+        { boardId, shapeId },
+        (response) => {
+          if (response.success) {
+            resolve();
+          } else {
+            const errorMessage =
+              typeof response.error === "string"
+                ? response.error
+                : response.error?.message ?? "Failed to release shape lock.";
+            reject(new Error(errorMessage));
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Refreshes the activity timestamp on an active lock during ongoing dragging/transforming.
+   *
+   * @param boardId - Target board identifier
+   * @param shapeId - Target shape identifier
+   */
+  public async refreshShapeLock(
+    boardId: string,
+    shapeId: string
+  ): Promise<void> {
+    if (!this.socket?.connected) {
+      return;
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      this.socket?.emit(
+        SocketEvents.SHAPE_LOCK_REFRESH,
+        { boardId, shapeId },
+        (response) => {
+          if (response.success) {
+            resolve();
+          } else {
+            const errorMessage =
+              typeof response.error === "string"
+                ? response.error
+                : response.error?.message ?? "Failed to refresh shape lock.";
+            reject(new Error(errorMessage));
+          }
+        }
+      );
+    });
   }
 
   /**

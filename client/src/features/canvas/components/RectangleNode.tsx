@@ -10,10 +10,12 @@ import type { RectangleShape } from "../types";
 
 type RectangleNodeProps = {
     shape: RectangleShape;
+    boardId?: string;
 };
 
 export default function RectangleNode({
     shape,
+    boardId,
 }: RectangleNodeProps): React.JSX.Element {
     const rectRef = useRef<Konva.Rect | null>(null);
     const transformerRef =
@@ -32,6 +34,10 @@ export default function RectangleNode({
         (state) => state.selectedShapeIds,
     );
 
+    const remoteShapeLocks = useCanvasStore(
+        (state) => state.remoteShapeLocks,
+    );
+
     const selectShape = useCanvasStore(
         (state) => state.selectShape,
     );
@@ -39,10 +45,6 @@ export default function RectangleNode({
     const toggleShapeSelection = useCanvasStore(
         (state) => state.toggleShapeSelection,
     );
-
-    // const updateShapePosition = useCanvasStore(
-    //     (state) => state.updateShapePosition,
-    // );
 
     const updateRectangleTransform = useCanvasStore(
         (state) => state.updateRectangleTransform,
@@ -53,6 +55,8 @@ export default function RectangleNode({
     );
 
     const isSelected = selectedShapeIds.includes(shape.id);
+    const remoteLock = remoteShapeLocks[shape.id];
+    const isLockedByOther = Boolean(remoteLock);
 
     useEffect(() => {
         const transformer = transformerRef.current;
@@ -64,7 +68,8 @@ export default function RectangleNode({
 
         if (
             !isSelected ||
-            activeTool !== CANVAS_TOOLS.SELECT
+            activeTool !== CANVAS_TOOLS.SELECT ||
+            isLockedByOther
         ) {
             transformer.nodes([]);
             transformer.getLayer()?.batchDraw();
@@ -73,7 +78,7 @@ export default function RectangleNode({
 
         transformer.nodes([rect]);
         transformer.getLayer()?.batchDraw();
-    }, [activeTool, isSelected]);
+    }, [activeTool, isSelected, isLockedByOther]);
 
     return (
         <>
@@ -84,15 +89,22 @@ export default function RectangleNode({
                 width={shape.width}
                 height={shape.height}
                 rotation={shape.rotation}
-                opacity={shape.opacity}
+                opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
                 fill={shape.fill}
                 stroke={shape.stroke}
                 strokeWidth={shape.strokeWidth}
                 draggable={
-                    activeTool === CANVAS_TOOLS.SELECT
+                    activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther
                 }
                 onMouseDown={(event) => {
                     event.cancelBubble = true;
+
+                    if (isLockedByOther) {
+                        toast.info(
+                            `${remoteLock.fullName || "Another collaborator"} is currently editing this shape.`,
+                        );
+                        return;
+                    }
 
                     if (activeTool !== CANVAS_TOOLS.SELECT) {
                         return;
@@ -107,11 +119,18 @@ export default function RectangleNode({
                         selectShape(shape.id);
                     }
                 }}
-
                 onDragStart={(event) => {
                     event.cancelBubble = true;
 
                     if (activeTool !== CANVAS_TOOLS.SELECT) {
+                        return;
+                    }
+
+                    if (isLockedByOther) {
+                        event.target.stopDrag();
+                        toast.info(
+                            `${remoteLock.fullName || "Another collaborator"} is currently editing this shape.`,
+                        );
                         return;
                     }
 
@@ -126,14 +145,32 @@ export default function RectangleNode({
                         x: event.target.x(),
                         y: event.target.y(),
                     };
-                }}
 
+                    // Acquire exclusive ephemeral soft-lock
+                    if (boardId) {
+                        socketClientService
+                            .lockShape(boardId, shape.id)
+                            .catch((err) => {
+                                event.target.stopDrag();
+                                toast.error(
+                                    err instanceof Error
+                                        ? err.message
+                                        : "Shape is currently being edited by another collaborator.",
+                                );
+                            });
+                    }
+                }}
                 onDragEnd={(event) => {
                     event.cancelBubble = true;
 
                     const dragStart = dragStartRef.current;
 
                     if (!dragStart) {
+                        if (boardId) {
+                            socketClientService
+                                .unlockShape(boardId, shape.id)
+                                .catch(() => {});
+                        }
                         return;
                     }
 
@@ -158,7 +195,30 @@ export default function RectangleNode({
                                     ? err.message
                                     : "Failed to save shape position.",
                             );
+                        })
+                        .finally(() => {
+                            // Release soft-lock on drag completion
+                            if (boardId) {
+                                socketClientService
+                                    .unlockShape(boardId, shape.id)
+                                    .catch(() => {});
+                            }
                         });
+                }}
+                onTransformStart={(event) => {
+                    event.cancelBubble = true;
+
+                    if (boardId) {
+                        socketClientService
+                            .lockShape(boardId, shape.id)
+                            .catch((err) => {
+                                toast.error(
+                                    err instanceof Error
+                                        ? err.message
+                                        : "Shape is currently being edited by another collaborator.",
+                                );
+                            });
+                    }
                 }}
                 onTransformEnd={(event) => {
                     event.cancelBubble = true;
@@ -207,12 +267,21 @@ export default function RectangleNode({
                                     ? err.message
                                     : "Failed to save shape transform.",
                             );
+                        })
+                        .finally(() => {
+                            // Release soft-lock on transform completion
+                            if (boardId) {
+                                socketClientService
+                                    .unlockShape(boardId, shape.id)
+                                    .catch(() => {});
+                            }
                         });
                 }}
             />
 
             {isSelected &&
-                activeTool === CANVAS_TOOLS.SELECT ? (
+                activeTool === CANVAS_TOOLS.SELECT &&
+                !isLockedByOther ? (
                 <Transformer
                     ref={transformerRef}
                     rotateEnabled

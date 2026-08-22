@@ -312,4 +312,43 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().past).toHaveLength(0);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });
+
+    it("manages remote shape soft-locks without modifying undo/redo history", () => {
+        const lock1 = {
+            shapeId: "shape-101",
+            boardId: "board-1",
+            userId: "user-1",
+            fullName: "Alice Developer",
+            color: "#EF4444",
+        };
+
+        const lock2 = {
+            shapeId: "shape-102",
+            boardId: "board-1",
+            userId: "user-2",
+            fullName: "Bob Designer",
+            color: "#3B82F6",
+        };
+
+        // 1. Set remote shape locks
+        useCanvasStore.getState().setRemoteShapeLock(lock1);
+        useCanvasStore.getState().setRemoteShapeLock(lock2);
+
+        expect(Object.keys(useCanvasStore.getState().remoteShapeLocks)).toHaveLength(2);
+        expect(useCanvasStore.getState().remoteShapeLocks["shape-101"].userId).toBe("user-1");
+        expect(useCanvasStore.getState().remoteShapeLocks["shape-102"].userId).toBe("user-2");
+
+        // 2. Remove single shape lock
+        useCanvasStore.getState().removeRemoteShapeLock("shape-101");
+        expect(useCanvasStore.getState().remoteShapeLocks["shape-101"]).toBeUndefined();
+        expect(useCanvasStore.getState().remoteShapeLocks["shape-102"]).toBeDefined();
+
+        // 3. Clear all shape locks
+        useCanvasStore.getState().clearRemoteShapeLocks();
+        expect(Object.keys(useCanvasStore.getState().remoteShapeLocks)).toHaveLength(0);
+
+        // Verify undo/redo stacks were NEVER modified by lock state
+        expect(useCanvasStore.getState().past).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
 });

@@ -315,4 +315,89 @@ describe("SocketClientService", () => {
       }
     );
   });
+
+  it("handles lockShape with acknowledgement on success", async () => {
+    const mockLockData = {
+      boardId: "board-123",
+      shapeId: "shape-1",
+      userId: "user-1",
+      fullName: "Alice Developer",
+      color: "#EF4444",
+    };
+
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((_event, _payload, callback) => {
+        callback({ success: true, data: mockLockData });
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    const result = await service.lockShape("board-123", "shape-1");
+
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.SHAPE_LOCK,
+      { boardId: "board-123", shapeId: "shape-1" },
+      expect.any(Function)
+    );
+    expect(result).toEqual(mockLockData);
+  });
+
+  it("handles lockShape rejection on conflict error", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((_event, _payload, callback) => {
+        callback({
+          success: false,
+          error: {
+            code: "SHAPE_LOCKED",
+            message: "Shape is currently being edited by another collaborator.",
+          },
+        });
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    await expect(service.lockShape("board-123", "shape-1")).rejects.toThrow(
+      "Shape is currently being edited by another collaborator."
+    );
+  });
+
+  it("handles unlockShape with acknowledgement", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((_event, _payload, callback) => {
+        callback({ success: true });
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    await expect(service.unlockShape("board-123", "shape-1")).resolves.toBeUndefined();
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.SHAPE_UNLOCK,
+      { boardId: "board-123", shapeId: "shape-1" },
+      expect.any(Function)
+    );
+  });
+
+  it("handles refreshShapeLock with acknowledgement", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((_event, _payload, callback) => {
+        callback({ success: true });
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    await expect(service.refreshShapeLock("board-123", "shape-1")).resolves.toBeUndefined();
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.SHAPE_LOCK_REFRESH,
+      { boardId: "board-123", shapeId: "shape-1" },
+      expect.any(Function)
+    );
+  });
 });

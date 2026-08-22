@@ -5,9 +5,13 @@ import {
   type CanvasTool,
 } from "../constants";
 import type { Shape } from "../types";
-import type { RemoteCursor, RemoteSelection } from "@/services/socket";
+import type {
+  RemoteCursor,
+  RemoteSelection,
+  RemoteShapeLock,
+} from "@/services/socket";
 
-export type { RemoteCursor, RemoteSelection };
+export type { RemoteCursor, RemoteSelection, RemoteShapeLock };
 
 type ShapePositionUpdate = {
   x: number;
@@ -85,6 +89,8 @@ type CanvasStore = {
 
   remoteSelections: Record<string, RemoteSelection>;
 
+  remoteShapeLocks: Record<string, RemoteShapeLock>;
+
   applyRemoteShapeCreated: (shape: Shape) => void;
 
   applyRemoteShapeUpdated: (shape: Shape) => void;
@@ -102,6 +108,12 @@ type CanvasStore = {
   removeRemoteSelection: (userId: string) => void;
 
   clearRemoteSelections: () => void;
+
+  setRemoteShapeLock: (lock: RemoteShapeLock) => void;
+
+  removeRemoteShapeLock: (shapeId: string) => void;
+
+  clearRemoteShapeLocks: () => void;
 
   undo: () => void;
 
@@ -123,6 +135,8 @@ export const useCanvasStore = create<CanvasStore>(
     remoteCursors: {},
 
     remoteSelections: {},
+
+    remoteShapeLocks: {},
 
     zoom: 1,
 
@@ -429,6 +443,31 @@ export const useCanvasStore = create<CanvasStore>(
     clearRemoteSelections: (): void => {
       set({
         remoteSelections: {},
+      });
+    },
+
+    setRemoteShapeLock: (lock: RemoteShapeLock): void => {
+      set((state) => ({
+        remoteShapeLocks: {
+          ...state.remoteShapeLocks,
+          [lock.shapeId]: lock,
+        },
+      }));
+    },
+
+    removeRemoteShapeLock: (shapeId: string): void => {
+      set((state) => {
+        const nextLocks = { ...state.remoteShapeLocks };
+        delete nextLocks[shapeId];
+        return {
+          remoteShapeLocks: nextLocks,
+        };
+      });
+    },
+
+    clearRemoteShapeLocks: (): void => {
+      set({
+        remoteShapeLocks: {},
       });
     },
 

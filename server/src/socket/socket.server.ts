@@ -8,7 +8,9 @@ import { registerBoardHandlers } from "./handlers/board.handler";
 import { registerShapeHandlers } from "./handlers/shape.handler";
 import { registerCursorHandlers } from "./handlers/cursor.handler";
 import { registerSelectionHandlers } from "./handlers/selection.handler";
+import { registerLockHandlers } from "./handlers/lock.handler";
 import { presenceManager } from "./presence/presence.manager";
+import { shapeLockManager } from "./locks/shape-lock.manager";
 import { getBoardRoom } from "./socket.rooms";
 import {
   AuthSocket,
@@ -62,8 +64,22 @@ export class SocketServer {
       // Register Slice 5 Live Collaborator Selection Handlers
       registerSelectionHandlers(socket);
 
-      // Handle Socket Disconnection Lifecycle & Multi-Tab Presence Cleanup
+      // Register Slice 6 Collaborative Selection Conflict & Lock Handlers
+      registerLockHandlers(socket);
+
+      // Handle Socket Disconnection Lifecycle, Lock Release & Presence Cleanup
       socket.on(SocketEvents.DISCONNECT, (reason) => {
+        // 1. Release any shape locks held by this specific socket
+        const releasedLocks = shapeLockManager.releaseSocketLocks(socket.id);
+        for (const lock of releasedLocks) {
+          const room = getBoardRoom(lock.boardId);
+          this.io.to(room).emit(SocketEvents.SHAPE_UNLOCKED, {
+            boardId: lock.boardId,
+            shapeId: lock.shapeId,
+          });
+        }
+
+        // 2. Update multi-tab presence
         const removeResult = presenceManager.removeSocket(socket.id);
 
         if (

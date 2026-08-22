@@ -26,6 +26,12 @@ export const SocketEvents = {
   SELECTION_CHANGE: "selection:change",
   SELECTION_CHANGED: "selection:changed",
 
+  SHAPE_LOCK: "shape:lock",
+  SHAPE_UNLOCK: "shape:unlock",
+  SHAPE_LOCK_REFRESH: "shape:lock-refresh",
+  SHAPE_LOCKED: "shape:locked",
+  SHAPE_UNLOCKED: "shape:unlocked",
+
   USER_JOINED: "user:joined",
   USER_LEFT: "user:left",
 

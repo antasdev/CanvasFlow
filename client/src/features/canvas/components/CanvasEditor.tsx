@@ -17,6 +17,7 @@ import { screenToWorld } from "../utils/canvas.coordinates";
 import CanvasGrid from "./CanvasGrid";
 import CollaboratorCursor from "./CollaboratorCursor";
 import CollaboratorSelection from "./CollaboratorSelection";
+import CollaboratorShapeLock from "./CollaboratorShapeLock";
 import ShapeRenderer from "./ShapeRenderer";
 
 type CanvasEditorProps = {
@@ -83,6 +84,10 @@ export default function CanvasEditor({
 
     const remoteSelections = useCanvasStore(
         (state) => state.remoteSelections,
+    );
+
+    const remoteShapeLocks = useCanvasStore(
+        (state) => state.remoteShapeLocks,
     );
 
     const selectedShapeIds = useCanvasStore(
@@ -666,6 +671,7 @@ export default function CanvasEditor({
                             <ShapeRenderer
                                 key={shape.id}
                                 shape={shape}
+                                boardId={boardId}
                             />
                         ))}
 
@@ -727,6 +733,14 @@ export default function CanvasEditor({
                             <CollaboratorSelection
                                 key={selection.userId}
                                 selection={selection}
+                                shapes={shapes}
+                            />
+                        ))}
+
+                        {Object.values(remoteShapeLocks).map((lock) => (
+                            <CollaboratorShapeLock
+                                key={lock.shapeId}
+                                lock={lock}
                                 shapes={shapes}
                             />
                         ))}

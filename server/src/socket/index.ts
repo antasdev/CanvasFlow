@@ -39,3 +39,5 @@ export * from "./handlers/board.handler";
 export * from "./handlers/shape.handler";
 export * from "./handlers/cursor.handler";
 export * from "./handlers/selection.handler";
+export * from "./handlers/lock.handler";
+export * from "./locks/shape-lock.manager";
