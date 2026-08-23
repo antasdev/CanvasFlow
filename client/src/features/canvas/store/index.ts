@@ -12,3 +12,5 @@ export type {
 } from "./mutation.store";
 export { usePresenceStore } from "./presence.store";
 export type { PresenceState } from "./presence.store";
+export { useInteractionStore } from "./interaction.store";
+export type { InteractionState } from "./interaction.store";

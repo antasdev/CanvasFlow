@@ -59,7 +59,12 @@ export const SocketEvents = {
   PRESENCE_ACTIVITY: "presence:activity",
   PRESENCE_HEARTBEAT: "presence:heartbeat",
 
+  INTERACTION_START: "interaction:start",
+  INTERACTION_UPDATE: "interaction:update",
+  INTERACTION_END: "interaction:end",
+  INTERACTION_SNAPSHOT: "interaction:snapshot",
+
   ERROR: "error",
 } as const;
 
-export type SocketEventType = (typeof SocketEvents)[keyof typeof SocketEvents];
+export type SocketEventName = (typeof SocketEvents)[keyof typeof SocketEvents];

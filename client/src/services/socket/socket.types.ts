@@ -28,7 +28,8 @@ export type SocketAckErrorCode =
   | "NOT_FOUND"
   | "INTERNAL_ERROR"
   | "IDEMPOTENCY_KEY_REUSED"
-  | "MUTATION_IN_PROGRESS";
+  | "MUTATION_IN_PROGRESS"
+  | "INTERACTION_CONFLICT";
 
 /**
  * Structured socket acknowledgement error details.
@@ -36,9 +37,11 @@ export type SocketAckErrorCode =
 export type SocketAckError = {
   code?: SocketAckErrorCode | string;
   message: string;
-  resourceType?: ConflictResourceType;
+  resourceType?: ConflictResourceType | InteractionTargetType;
   resourceId?: string;
   currentVersion?: number;
+  ownerUserId?: string;
+  interactionType?: InteractionType;
 };
 
 /**
@@ -676,6 +679,28 @@ export interface ClientToServerEvents {
     payload: { boardId: string },
     callback?: (response: SocketAck<PresenceSnapshotPayload>) => void
   ) => void;
+
+  "interaction:start": (
+    payload: InteractionStartPayload,
+    callback?: (response: SocketAck<InteractionStartAckData>) => void
+  ) => void;
+
+  "interaction:update": (
+    payload: InteractionUpdatePayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "interaction:end": (
+    payload: InteractionEndPayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "interaction:snapshot": (
+    payload: InteractionSnapshotPayload,
+    callback?: (
+      response: SocketAck<{ boardId: string; interactions: CollaborativeInteraction[] }>
+    ) => void
+  ) => void;
 }
 
 /**
@@ -706,7 +731,91 @@ export interface ServerToClientEvents {
   "presence:cursor": (payload: PresenceCursorBroadcastPayload) => void;
   "presence:activity": (payload: PresenceActivityBroadcastPayload) => void;
 
+  "interaction:start": (payload: InteractionBroadcastPayload) => void;
+  "interaction:update": (payload: InteractionBroadcastPayload) => void;
+  "interaction:end": (payload: InteractionEndBroadcastPayload) => void;
+  "interaction:snapshot": (payload: { boardId: string; interactions: CollaborativeInteraction[] }) => void;
+
   error: (message: string) => void;
+}
+
+/**
+ * Collaborative Interaction Domain Types (Slice 16)
+ */
+export type InteractionType =
+  | "selecting"
+  | "moving"
+  | "resizing"
+  | "rotating"
+  | "editing-text"
+  | "commenting";
+
+export type InteractionTargetType = "shape" | "comment";
+
+export interface InteractionTarget {
+  type: InteractionTargetType;
+  id: string;
+}
+
+export interface CollaborativeInteraction {
+  interactionId: string;
+  socketId: string;
+  userId: string;
+  boardId: string;
+  type: InteractionType;
+  targets: InteractionTarget[];
+  startedAt: string;
+  updatedAt: string;
+  data?: Record<string, unknown>;
+}
+
+export interface InteractionConflict {
+  code: "INTERACTION_CONFLICT";
+  resourceType: InteractionTargetType;
+  resourceId: string;
+  ownerUserId: string;
+  interactionType: InteractionType;
+}
+
+export interface InteractionStartPayload {
+  boardId: string;
+  type: InteractionType;
+  targets: InteractionTarget[];
+  data?: Record<string, unknown>;
+}
+
+export interface InteractionStartAckData {
+  interactionId: string;
+  startedAt: string;
+}
+
+export interface InteractionUpdatePayload {
+  boardId: string;
+  interactionId: string;
+  targets?: InteractionTarget[];
+  data?: Record<string, unknown>;
+}
+
+export interface InteractionEndPayload {
+  boardId: string;
+  interactionId: string;
+}
+
+export interface InteractionSnapshotPayload {
+  boardId: string;
+}
+
+export interface InteractionBroadcastPayload {
+  boardId: string;
+  interaction: CollaborativeInteraction;
+}
+
+export interface InteractionEndBroadcastPayload {
+  boardId: string;
+  interactionId: string;
+  userId: string;
+  type: InteractionType;
+  targets: InteractionTarget[];
 }
 
 /**

@@ -18,7 +18,23 @@ import type {
   PresenceUserLeftPayload,
 } from "./presence/presence.types";
 
+import type {
+  CollaborativeInteraction,
+  InteractionBroadcastPayload,
+  InteractionConflict,
+  InteractionEndBroadcastPayload,
+  InteractionEndPayload,
+  InteractionSnapshotPayload,
+  InteractionStartAckData,
+  InteractionStartPayload,
+  InteractionTarget,
+  InteractionTargetType,
+  InteractionType,
+  InteractionUpdatePayload,
+} from "./presence/interaction.types";
+
 export * from "./presence/presence.types";
+export * from "./presence/interaction.types";
 
 /**
  * Authenticated user data attached to Socket.IO instances.
@@ -63,7 +79,8 @@ export type SocketAckErrorCode =
   | "NOT_FOUND"
   | "INTERNAL_ERROR"
   | "IDEMPOTENCY_KEY_REUSED"
-  | "MUTATION_IN_PROGRESS";
+  | "MUTATION_IN_PROGRESS"
+  | "INTERACTION_CONFLICT";
 
 /**
  * Structured socket acknowledgement error details.
@@ -71,9 +88,11 @@ export type SocketAckErrorCode =
 export type SocketAckError = {
   code?: SocketAckErrorCode | string;
   message: string;
-  resourceType?: ConflictResourceType;
+  resourceType?: ConflictResourceType | InteractionTargetType;
   resourceId?: string;
   currentVersion?: number;
+  ownerUserId?: string;
+  interactionType?: InteractionType;
 };
 
 /**
@@ -457,6 +476,28 @@ export interface ClientToServerEvents {
     payload: { boardId: string },
     callback?: (response: SocketAck<PresenceSnapshotPayload>) => void
   ) => void;
+
+  "interaction:start": (
+    payload: InteractionStartPayload,
+    callback?: (response: SocketAck<InteractionStartAckData>) => void
+  ) => void;
+
+  "interaction:update": (
+    payload: InteractionUpdatePayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "interaction:end": (
+    payload: InteractionEndPayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "interaction:snapshot": (
+    payload: InteractionSnapshotPayload,
+    callback?: (
+      response: SocketAck<{ boardId: string; interactions: CollaborativeInteraction[] }>
+    ) => void
+  ) => void;
 }
 
 /**
@@ -486,6 +527,11 @@ export interface ServerToClientEvents {
   "presence:user-left": (payload: PresenceUserLeftPayload) => void;
   "presence:cursor": (payload: PresenceCursorBroadcastPayload) => void;
   "presence:activity": (payload: PresenceActivityBroadcastPayload) => void;
+
+  "interaction:start": (payload: InteractionBroadcastPayload) => void;
+  "interaction:update": (payload: InteractionBroadcastPayload) => void;
+  "interaction:end": (payload: InteractionEndBroadcastPayload) => void;
+  "interaction:snapshot": (payload: { boardId: string; interactions: CollaborativeInteraction[] }) => void;
 
   error: (message: string) => void;
 }

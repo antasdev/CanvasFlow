@@ -11,9 +11,10 @@ import {
     useShapes,
     useBoardRecovery,
     usePresenceSocket,
+    useInteractionSocket,
 } from "../hooks";
 import { socketClientService } from "@/services/socket";
-import { useCanvasStore } from "../store";
+import { useCanvasStore, usePresenceStore } from "../store";
 import type { TextShape, StickyNoteShape } from "../types";
 import { screenToWorld } from "../utils/canvas.coordinates";
 
@@ -67,11 +68,9 @@ export default function CanvasEditor({
     boardId,
     className,
 }: CanvasEditorProps): React.JSX.Element {
-    const containerRef =
-        useRef<HTMLDivElement | null>(null);
-
-    const stageRef =
-        useRef<Konva.Stage | null>(null);
+    const stageRef = useRef<Konva.Stage | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const activeTextInteractionIdRef = useRef<string | null>(null);
 
     const hydratedCanvasIdRef =
         useRef<string | null>(null);
@@ -85,7 +84,7 @@ export default function CanvasEditor({
     const [editingShape, setEditingShape] =
         useState<TextShape | StickyNoteShape | null>(null);
 
-    // Initialize real-time WebSocket room subscriptions and synchronization
+    // Initialize real-time board socket handlers
     useCanvasSocket(boardId, canvasId);
 
     // Initialize real-time board state recovery and reconnect synchronization
@@ -101,6 +100,14 @@ export default function CanvasEditor({
 
     // Initialize collaborative presence & session lifecycle
     const { emitCursor, emitActivity } = usePresenceSocket(boardId);
+
+    // Initialize collaborative interaction state & gesture coordination
+    const {
+        startInteraction,
+        endInteraction,
+        isTargetLockedByPeer,
+        getTargetOwner,
+    } = useInteractionSocket(boardId);
 
     // Initialize keyboard undo/redo shortcuts
     useCanvasHistory();
@@ -793,9 +800,19 @@ export default function CanvasEditor({
                     boardId={boardId}
                     onCommit={(shapeId, text) => {
                         updateShapeText(shapeId, text);
+                        if (activeTextInteractionIdRef.current) {
+                            endInteraction(activeTextInteractionIdRef.current);
+                            activeTextInteractionIdRef.current = null;
+                        }
                         setEditingShape(null);
                     }}
-                    onClose={() => setEditingShape(null)}
+                    onClose={() => {
+                        if (activeTextInteractionIdRef.current) {
+                            endInteraction(activeTextInteractionIdRef.current);
+                            activeTextInteractionIdRef.current = null;
+                        }
+                        setEditingShape(null);
+                    }}
                 />
             )}
 
@@ -841,9 +858,22 @@ export default function CanvasEditor({
                                 key={shape.id}
                                 shape={shape}
                                 boardId={boardId}
-                                onStartEditing={(targetShape) =>
-                                    setEditingShape(targetShape)
-                                }
+                                onStartEditing={(targetShape) => {
+                                    if (isTargetLockedByPeer("shape", targetShape.id)) {
+                                        const ownerId = getTargetOwner("shape", targetShape.id);
+                                        const ownerName = ownerId
+                                            ? (usePresenceStore.getState().users[ownerId]?.fullName || "Another collaborator")
+                                            : "Another collaborator";
+                                        toast.info(`${ownerName} is currently editing this shape.`);
+                                        return;
+                                    }
+                                    startInteraction("editing-text", [{ type: "shape", id: targetShape.id }]).then((res) => {
+                                        if (res.success && res.interactionId) {
+                                            activeTextInteractionIdRef.current = res.interactionId;
+                                        }
+                                    });
+                                    setEditingShape(targetShape);
+                                }}
                             />
                         ))}
 

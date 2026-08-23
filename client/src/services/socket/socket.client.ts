@@ -17,6 +17,11 @@ import type {
   CursorMovePayload,
   DeleteCommentPayload,
   DeleteShapePayload,
+  CollaborativeInteraction,
+  InteractionBroadcastPayload,
+  InteractionEndBroadcastPayload,
+  InteractionTarget,
+  InteractionType,
   JoinBoardPayload,
   LeaveBoardPayload,
   PresenceActivity,
@@ -898,6 +903,202 @@ export class SocketClientService {
 
     return () => {
       socket.off(SocketEvents.PRESENCE_ACTIVITY, handler);
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Slice 16: Collaborative Interaction State Methods
+  // -------------------------------------------------------------
+
+  /**
+   * Initiates a collaborative interaction (e.g. moving, resizing, editing text, selecting).
+   */
+  public startInteraction(
+    boardId: string,
+    type: InteractionType,
+    targets: InteractionTarget[],
+    data?: Record<string, unknown>
+  ): Promise<{
+    success: boolean;
+    interactionId?: string;
+    startedAt?: string;
+    error?: {
+      code: string;
+      message: string;
+      resourceType?: string;
+      resourceId?: string;
+      ownerUserId?: string;
+      interactionType?: string;
+    };
+  }> {
+    return new Promise((resolve) => {
+      const socket = this.socket ?? this.connect();
+      if (!socket.connected) {
+        resolve({
+          success: false,
+          error: { code: "DISCONNECTED", message: "Socket is not connected." },
+        });
+        return;
+      }
+
+      socket.emit(
+        SocketEvents.INTERACTION_START,
+        { boardId, type, targets, data },
+        (response) => {
+          if (response.success && response.data) {
+            resolve({
+              success: true,
+              interactionId: response.data.interactionId,
+              startedAt: response.data.startedAt,
+            });
+          } else {
+            resolve({
+              success: false,
+              error: {
+                code: typeof response.error === "object" ? response.error.code ?? "ERROR" : "ERROR",
+                message: typeof response.error === "object" ? response.error.message : response.error ?? "Failed to start interaction.",
+                resourceType: typeof response.error === "object" ? response.error.resourceType : undefined,
+                resourceId: typeof response.error === "object" ? response.error.resourceId : undefined,
+                ownerUserId: typeof response.error === "object" ? response.error.ownerUserId : undefined,
+                interactionType: typeof response.error === "object" ? response.error.interactionType : undefined,
+              },
+            });
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Updates an ongoing collaborative interaction with transient data or updated target items.
+   */
+  public updateInteraction(
+    boardId: string,
+    interactionId: string,
+    data?: Record<string, unknown>,
+    targets?: InteractionTarget[]
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = this.socket ?? this.connect();
+      if (!socket.connected) {
+        resolve(false);
+        return;
+      }
+
+      socket.emit(
+        SocketEvents.INTERACTION_UPDATE,
+        { boardId, interactionId, data, targets },
+        (response) => {
+          resolve(Boolean(response.success));
+        }
+      );
+    });
+  }
+
+  /**
+   * Ends an active collaborative interaction, releasing target ownership locks.
+   */
+  public endInteraction(
+    boardId: string,
+    interactionId: string
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const socket = this.socket ?? this.connect();
+      if (!socket.connected) {
+        resolve(false);
+        return;
+      }
+
+      socket.emit(
+        SocketEvents.INTERACTION_END,
+        { boardId, interactionId },
+        (response) => {
+          resolve(Boolean(response.success));
+        }
+      );
+    });
+  }
+
+  /**
+   * Requests a fresh snapshot of active interactions on a board.
+   */
+  public getInteractionSnapshot(
+    boardId: string
+  ): Promise<CollaborativeInteraction[]> {
+    return new Promise((resolve) => {
+      const socket = this.socket ?? this.connect();
+      if (!socket.connected) {
+        resolve([]);
+        return;
+      }
+
+      socket.emit(
+        SocketEvents.INTERACTION_SNAPSHOT,
+        { boardId },
+        (response) => {
+          if (response.success && response.data) {
+            resolve(response.data.interactions);
+          } else {
+            resolve([]);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Subscribes to remote interaction start events.
+   */
+  public onInteractionStart(
+    handler: (payload: InteractionBroadcastPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.INTERACTION_START, handler);
+
+    return () => {
+      socket.off(SocketEvents.INTERACTION_START, handler);
+    };
+  }
+
+  /**
+   * Subscribes to remote interaction update events.
+   */
+  public onInteractionUpdate(
+    handler: (payload: InteractionBroadcastPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.INTERACTION_UPDATE, handler);
+
+    return () => {
+      socket.off(SocketEvents.INTERACTION_UPDATE, handler);
+    };
+  }
+
+  /**
+   * Subscribes to remote interaction end events.
+   */
+  public onInteractionEnd(
+    handler: (payload: InteractionEndBroadcastPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.INTERACTION_END, handler);
+
+    return () => {
+      socket.off(SocketEvents.INTERACTION_END, handler);
+    };
+  }
+
+  /**
+   * Subscribes to interaction snapshot events.
+   */
+  public onInteractionSnapshot(
+    handler: (payload: { boardId: string; interactions: CollaborativeInteraction[] }) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.INTERACTION_SNAPSHOT, handler);
+
+    return () => {
+      socket.off(SocketEvents.INTERACTION_SNAPSHOT, handler);
     };
   }
 

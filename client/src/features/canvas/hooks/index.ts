@@ -8,3 +8,4 @@ export * from "./useCanvasSocket";
 export * from "./useShapeTransform";
 export * from "./useBoardRecovery";
 export * from "./usePresenceSocket";
+export * from "./useInteractionSocket";

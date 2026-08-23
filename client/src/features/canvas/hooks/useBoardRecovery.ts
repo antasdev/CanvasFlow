@@ -6,6 +6,7 @@ import type { BoardRecoveryStatePayload } from "@/services/socket";
 import { useCanvasStore, useCollaborationStore } from "../store";
 import { useMutationStore } from "../store/mutation.store";
 import { mutationManager } from "../services/mutation-manager";
+import { interactionManagerService } from "../services/interaction-manager";
 import { shapeApi } from "../api/shape.api";
 import { mapShapeResponseToShape } from "../api/shape.mapper";
 import { commentApi } from "@/features/comments/api";
@@ -100,14 +101,16 @@ export function useBoardRecovery(
         const recoverySocketPromise =
           socketClientService.recoverBoard(activeBoardId);
 
-        // 4. Authoritative REST Data Hydration
+        // 4. Authoritative REST Data Hydration & Interaction Snapshot
         const shapesPromise = shapeApi.getShapes(activeCanvasId);
         const commentsPromise = commentApi.getComments(activeBoardId);
+        const interactionPromise = interactionManagerService.recoverSnapshot(activeBoardId);
 
         const [recoveryState, rawShapes, comments] = await Promise.all([
           recoverySocketPromise,
           shapesPromise,
           commentsPromise,
+          interactionPromise,
         ]);
 
         // 5. Check Generation Token to discard stale concurrent responses

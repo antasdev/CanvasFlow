@@ -1386,3 +1386,169 @@ Clients send raw coordinate pairs `(x, y)` from mouse events. Without validation
 2. **Pub/Sub Broker**: Use Redis Pub/Sub (or the Socket.IO Redis Adapter) to broadcast `presence:cursor` and `presence:user-joined` across all server nodes.
 3. **Pruning Worker**: Run a scheduled cron job executing `ZREMRANGEBYSCORE` to atomically remove expired heartbeats and publish `presence:user-left` messages.
 4. **Zero Client Changes**: Because the WebSocket event contracts and payload schemas are strictly abstracted, client code requires zero modification.
+
+---
+
+## 28. Slice 16 — Collaborative Interaction State & Gesture Coordination Architecture
+
+### 28.1 Overview & Architectural Objectives
+Slice 16 implements high-performance, real-time coordination of transient user gestures across collaborators:
+- **Gestures Supported**: `selecting`, `moving`, `resizing`, `rotating`, `editing-text`, `commenting`.
+- **Target Types**: `shape` and `comment`.
+- **Latency Target**: Sub-20ms gesture propagation with sender exclusion.
+- **Concurrency Model**: Exclusive target locking for manipulation gestures (`moving`, `resizing`, `rotating`, `editing-text`) vs. Shared simultaneous interactions for observation/annotation (`selecting`, `commenting`).
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                   SLICE 16: COLLABORATIVE INTERACTION FLOW                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+       Collaborator A (User 1)                    Collaborator B (User 2)
+              │                                              │
+       [1] Pointer Down / Drag Start                         │
+              │                                              │
+              ├──► Pre-check targetOwner in Memory           │
+              │    (Abort if peer locked)                    │
+              │                                              │
+              ├──► Emit interaction:start                    │
+              │    (Exclusive lock on Shape 1)               │
+              ▼                                              │
+       ┌───────────────────────────────┐                     │
+       │    Server InteractionManager  │                     │
+       │    ├── Target lock acquired   │                     │
+       │    └── Index in targetOwners  │                     │
+       └──────────────┬────────────────┘                     │
+                      │                                      │
+                      ├──► Ack { success: true }             │
+                      │                                      │
+                      └──► Broadcast interaction:start ─────►│
+                           (sender excluded)                 ├──► Render Remote Halo
+                                                             │    & Activity Badge
+              ┌───────────────────────────────┐              │
+              │ High-Frequency Drag Movement  │              │
+              │ (~30 FPS Throttled Packets)   │              │
+              └──────────────┬────────────────┘              │
+                             │                               │
+                             ├──► Emit interaction:update ──►│ Update Halo Position
+                             │                               │
+              ┌──────────────┴────────────────┐              │
+       [2] Pointer Up / Drag End                             │
+              │                                              │
+              ├──► Emit interaction:end                      │
+              │                                              │
+              ├──► Emit durable shape:update (Slice 14)      │
+              │    (MongoDB Transaction + OCC Revision bump) │
+              ▼                                              │
+       ┌───────────────────────────────┐                     │
+       │  Server releases targetOwner  │                     │
+       └──────────────┬────────────────┘                     │
+                      │                                      │
+                      └──► Broadcast interaction:end ───────►│ Release Remote Halo
+```
+
+---
+
+### 28.2 Invariant Guarantees
+1. **Zero Database Writes**: Interaction operations are purely in-memory transient coordination. Zero MongoDB queries, zero documents created or updated.
+2. **Zero Revision Bumps**: Interaction events do **NOT** increment `Board.collaborationRevision`.
+3. **Zero Entity Version Changes**: `Shape.version` and `Comment.version` remain unaltered during interaction states.
+4. **Zero Mutation Records**: Idempotency records (`MutationRecordModel`) are reserved strictly for durable mutations.
+5. **Zero Undo/Redo Pollution**: Transient gestures do not push to `useCanvasStore.past` or `future`.
+
+---
+
+### 28.3 Exclusive vs Shared Interaction Matrix
+
+| Interaction Type | Target Scope | Concurrency Rule | Conflict Behavior |
+| :--- | :--- | :--- | :--- |
+| `moving` | `shape` | **Exclusive** (1 socket per shape) | Rejects with `INTERACTION_CONFLICT` |
+| `resizing` | `shape` | **Exclusive** (1 socket per shape) | Rejects with `INTERACTION_CONFLICT` |
+| `rotating` | `shape` | **Exclusive** (1 socket per shape) | Rejects with `INTERACTION_CONFLICT` |
+| `editing-text` | `shape` | **Exclusive** (1 socket per shape) | Rejects with `INTERACTION_CONFLICT` |
+| `selecting` | `shape`, `comment` | **Shared** (Multiple concurrent sockets) | Always succeeds simultaneously |
+| `commenting` | `shape`, `comment` | **Shared** (Multiple concurrent sockets) | Always succeeds simultaneously |
+
+---
+
+### 28.4 Multi-Tab & Lifecycle Safety
+1. **Socket-Scoped Ownership**: Locks belong to the active physical socket connection (`socketId`), not the abstract `userId`. If Alice has Tab 1 and Tab 2 open, Tab 2 cannot manipulate a shape locked by Tab 1.
+2. **Disconnect Cleanup**: Disconnecting Tab 1 releases Tab 1's locks and emits `interaction:end`, while Tab 2 remains active and the user stays online.
+3. **Inactivity Pruning**: Sockets that fail to update an interaction for > 10 seconds are automatically cleaned up by the server's periodic 5-second background pruning loop.
+
+---
+
+## 29. Senior Engineering Interview Q&A: Collaborative Interaction State & Gesture Coordination
+
+### Q1: Why must interaction state be separated from both durable entity mutations and presence state?
+**Answer:**
+A production whiteboard architecture addresses three distinct concerns:
+1. **Authoritative Persistence (Durable)**: Entities (`Shape`, `Comment`) stored in MongoDB with OCC versions and global monotonic `collaborationRevision`.
+2. **Session Lifecycle (Presence)**: Answers *"Who is currently in the room?"* with multi-tab deduplication.
+3. **Active Gestures (Interaction State)**: Answers *"What is a collaborator manipulating right now at this exact sub-second interval?"*
+Mixing interaction state into durable mutations would flood MongoDB with 30 writes/sec per active user and destroy revision monotonicity. Mixing interaction state into presence would overload user identity models with transient target indices. Keeping a dedicated ephemeral `InteractionManager` provides $O(1)$ lock lookups, zero disk I/O, and sub-millisecond dispatch.
+
+### Q2: What is the exact sequence of events when User A drags a shape on the whiteboard?
+**Answer:**
+1. **Client-Side Pre-check**: Client A queries local `useInteractionStore.getTargetOwner("shape", shapeId)`. If locked by a peer, drag is prevented immediately without network round-trips.
+2. **Interaction Start**: Client A emits `interaction:start` (`type: "moving"`, `targets: [{ type: "shape", id: shapeId }]`).
+3. **Lock Acquisition & Broadcast**: Server locks the target in `targetOwners` map and broadcasts `interaction:start` to room peers (User A excluded). Peer clients render a dashed bounding halo and user tag.
+4. **Gesture Streaming**: As User A moves the mouse, throttled `interaction:update` events (~30 FPS) stream delta coordinates to peers.
+5. **Gesture End & Lock Release**: On mouse up, Client A emits `interaction:end`. Server frees `targetOwners` and broadcasts `interaction:end`.
+6. **Durable Mutation**: Client A emits the authoritative `shape:update` payload with a unique `mutationId` and `expectedVersion`, which goes through OCC validation, increments `collaborationRevision`, and writes to MongoDB.
+
+### Q3: How does CanvasFlow resolve simultaneous drag collisions on the same shape?
+**Answer:**
+If User A and User B drag Shape 1 at the exact same millisecond:
+1. Both requests arrive at the server's event loop.
+2. Node.js processes events sequentially. The first event (e.g. User A) acquires the lock in `InteractionManager.targetOwners` and receives `{ success: true, interactionId }`.
+3. The second event (User B) detects that `targetOwners.get("board:shape:1")` is occupied by User A's socket.
+4. The server rejects User B's request with `{ success: false, error: { code: "INTERACTION_CONFLICT", resourceType: "shape", resourceId: "1", ownerUserId: "userA", interactionType: "moving" } }`.
+5. User B's client displays a non-blocking toast notification: `"${ownerName} is currently moving this shape."` and leaves User A in control.
+
+### Q4: Why are interaction locks socket-scoped rather than user-scoped?
+**Answer:**
+A user can have multiple browser tabs or devices open simultaneously.
+- If locks were user-scoped, Tab 1 dragging Shape A would allow Tab 2 to simultaneously resize Shape A without conflict, causing local visual tearing.
+- Socket-scoped ownership ensures that every browser viewport maintains strict exclusive gesture boundaries. If Tab 1 crashes or closes, only Tab 1's locks are released without disturbing Tab 2.
+
+### Q5: How does the system prevent stale interaction locks if a client abruptly crashes mid-drag?
+**Answer:**
+CanvasFlow utilizes two complementary safety nets:
+1. **Immediate Socket Disconnect**: On TCP close or Socket.IO disconnect, `interactionManager.removeSocketInteractions(socket.id)` cleans up all locks held by that socket and emits `interaction:end` to the board room immediately.
+2. **Periodic Background Pruning**: If a network partition occurs without a clean TCP FIN, the server runs a 5-second interval that checks `interaction.updatedAt`. Any interaction with no activity for > 10 seconds is pruned, freeing the target.
+
+### Q6: Why do `selecting` and `commenting` use shared ownership while `moving` and `editing-text` use exclusive ownership?
+**Answer:**
+- **Observational/Annotation Actions**: Multiple users can view or highlight the same shape or leave comments on the same thread simultaneously without corrupting geometric coordinates or text strings. Shared interactions do not block peers.
+- **Transformative Actions**: Translating coordinates, scaling dimensions, or editing character strings simultaneously leads to visual chaos and race conditions. Exclusive ownership guarantees that only one collaborator manipulates geometry or character streams at a time.
+
+### Q7: How does Board Recovery (Slice 10) synchronize active interaction state after a reconnection?
+**Answer:**
+When a client reconnects and triggers `useBoardRecovery`:
+1. The client clears its local ephemeral interaction maps.
+2. Alongside fetching authoritative shapes and comments, it requests `socketClientService.getInteractionSnapshot(boardId)`.
+3. The server returns all active `CollaborativeInteraction` records from memory.
+4. The client hydrates `useInteractionStore.setSnapshot(interactions)`, immediately restoring remote manipulation halos without triggering false undo/redo entries.
+
+### Q8: What data structure provides $O(1)$ lock management in the `InteractionManager`?
+**Answer:**
+The server utilizes 5 synchronized `Map` indices:
+1. `interactions`: `Map<string, CollaborativeInteraction>` (keyed by `interactionId`).
+2. `boardInteractions`: `Map<string, Set<string>>` (board to interaction IDs).
+3. `userInteractions`: `Map<string, Set<string>>` (`${boardId}:${userId}` to interaction IDs).
+4. `socketInteractions`: `Map<string, Set<string>>` (`socketId` to interaction IDs).
+5. `targetOwners`: `Map<string, string>` (`${boardId}:${targetType}:${targetId}` to `socketId`).
+Looking up an exclusive owner, registering a lock, or releasing all socket locks on disconnect takes strictly $O(1)$ or $O(k)$ where $k$ is the small number of targets held by that socket.
+
+### Q9: How is client UI performance protected during high-frequency gesture updates?
+**Answer:**
+1. **Isolated State Slices**: Interaction state is kept in `useInteractionStore`, completely decoupled from the heavyweight canvas shapes tree.
+2. **Rate Limiting**: `FrontendInteractionManager` throttles outbound updates to ~30 FPS (33ms debounce window).
+3. **Lightweight Konva Overlay**: Remote indicators are drawn on a separate `listening={false}` overlay layer, avoiding canvas hit-testing recalculations.
+
+### Q10: How would you scale the `InteractionManager` across a horizontally distributed WebSocket cluster?
+**Answer:**
+1. **Redis Key-Value with TTL**: Store target ownership in Redis keys `lock:{boardId}:{targetType}:{targetId}` with a 10s TTL, acquired atomically via `SET lock:... socketId NX PX 10000`.
+2. **Redis Pub/Sub**: Broadcast `interaction:start`, `interaction:update`, and `interaction:end` across server nodes using the Socket.IO Redis Adapter.
+3. **Heartbeat Refresh**: The active socket extends the Redis key TTL via `PEXPIRE` during `interaction:update`.
+4. **Disconnect Sweeper**: On socket disconnect, the local node deletes its owned Redis keys and publishes `interaction:end`.

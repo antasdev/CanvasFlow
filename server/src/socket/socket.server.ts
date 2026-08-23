@@ -13,7 +13,9 @@ import { registerTransformHandlers } from "./handlers/transform.handler";
 import { registerCommentHandlers } from "./handlers/comment.handler";
 import { registerRecoveryHandlers } from "./handlers/recovery.handler";
 import { registerPresenceHandlers } from "./handlers/presence.handler";
+import { registerInteractionHandlers } from "./handlers/interaction.handler";
 import { presenceManager } from "./presence/presence.manager";
+import { interactionManager } from "./presence/interaction.manager";
 import { shapeLockManager } from "./locks/shape-lock.manager";
 import { getBoardRoom } from "./socket.rooms";
 import {
@@ -53,10 +55,11 @@ export class SocketServer {
   }
 
   private startStaleSessionPruning(): void {
-    // Periodically prune stale presence sessions every 30 seconds
+    // Periodically prune stale presence sessions and interactions every 5 seconds
     this.cleanupInterval = setInterval(() => {
       this.pruneStaleSessions();
-    }, 30000);
+      this.pruneStaleInteractions();
+    }, 5000);
     // Unref so timer does not prevent process exit in test runners
     if (this.cleanupInterval.unref) {
       this.cleanupInterval.unref();
@@ -78,6 +81,20 @@ export class SocketServer {
           remainingSessions: 0,
         });
       }
+    }
+  }
+
+  public pruneStaleInteractions(timeoutMs: number = 10000): void {
+    const expiredInteractions = interactionManager.removeExpiredInteractions(timeoutMs);
+    for (const expired of expiredInteractions) {
+      const room = getBoardRoom(expired.boardId);
+      this.io.to(room).emit(SocketEvents.INTERACTION_END, {
+        boardId: expired.boardId,
+        interactionId: expired.interactionId,
+        userId: expired.userId,
+        type: expired.type,
+        targets: expired.targets,
+      });
     }
   }
 
@@ -114,7 +131,10 @@ export class SocketServer {
       // Register Slice 15 Collaborative Presence & Session Lifecycle Handlers
       registerPresenceHandlers(this.io, socket);
 
-      // Handle Socket Disconnection Lifecycle, Lock Release & Presence Cleanup
+      // Register Slice 16 Presence-Aware Collaborative Interaction State Handlers
+      registerInteractionHandlers(this.io, socket);
+
+      // Handle Socket Disconnection Lifecycle, Lock Release, Interaction & Presence Cleanup
       socket.on(SocketEvents.DISCONNECT, (reason) => {
         // 1. Release any shape locks held by this specific socket
         const releasedLocks = shapeLockManager.releaseSocketLocks(socket.id);
@@ -126,7 +146,20 @@ export class SocketServer {
           });
         }
 
-        // 2. Update multi-tab presence
+        // 2. Clean up any active interactions started by this specific socket
+        const removedInteractions = interactionManager.removeSocketInteractions(socket.id);
+        for (const interaction of removedInteractions) {
+          const room = getBoardRoom(interaction.boardId);
+          this.io.to(room).emit(SocketEvents.INTERACTION_END, {
+            boardId: interaction.boardId,
+            interactionId: interaction.interactionId,
+            userId: interaction.userId,
+            type: interaction.type,
+            targets: interaction.targets,
+          });
+        }
+
+        // 3. Update multi-tab presence
         const removeResult = presenceManager.removeSocket(socket.id);
 
         if (

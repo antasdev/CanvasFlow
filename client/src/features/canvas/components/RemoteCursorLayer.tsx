@@ -1,34 +1,40 @@
 import React, { memo } from "react";
 import { Group, Path, Rect, Text } from "react-konva";
-import { usePresenceStore } from "../store";
+import { usePresenceStore, useInteractionStore, useCanvasStore } from "../store";
 import { useAuthStore } from "@/store";
 import { getCursorColor, getCursorLabel } from "../utils/cursor.utils";
-import type { PresenceActivity, PresenceCursor, PresenceUser } from "@/services/socket";
+import type { PresenceCursor, PresenceUser, CollaborativeInteraction } from "@/services/socket";
 
 const CURSOR_PATH_DATA = "M0 0 L0 16 L4.5 12 L8 19 L10.5 18 L7 11 L13 11 Z";
 
-const SHORT_ACTIVITY_LABELS: Partial<Record<PresenceActivity, string>> = {
+const INTERACTION_LABELS: Record<string, string> = {
   selecting: "selecting",
   moving: "moving",
   resizing: "resizing",
-  "editing-text": "typing",
+  rotating: "rotating",
+  "editing-text": "editing text",
   commenting: "commenting",
 };
 
 type RemoteCursorItemProps = {
   cursor: PresenceCursor;
   user?: PresenceUser;
+  activeInteraction?: CollaborativeInteraction;
 };
 
 const RemoteCursorItem = memo(function RemoteCursorItem({
   cursor,
   user,
+  activeInteraction,
 }: RemoteCursorItemProps): React.JSX.Element {
   const color = getCursorColor(cursor.userId);
   const name = user?.fullName || getCursorLabel(cursor.userId);
+
+  // Active interaction activity takes precedence over static presence activity
+  const interactionType = activeInteraction?.type || user?.activity;
   const activityTag =
-    user?.activity && SHORT_ACTIVITY_LABELS[user.activity]
-      ? ` • ${SHORT_ACTIVITY_LABELS[user.activity]}`
+    interactionType && INTERACTION_LABELS[interactionType]
+      ? ` • ${INTERACTION_LABELS[interactionType]}`
       : "";
   const displayLabel = `${name}${activityTag}`;
 
@@ -72,26 +78,115 @@ const RemoteCursorItem = memo(function RemoteCursorItem({
   );
 });
 
-export const RemoteCursorLayer = memo(function RemoteCursorLayer(): React.JSX.Element {
-  const cursorsMap = usePresenceStore((state) => state.cursors);
-  const usersMap = usePresenceStore((state) => state.users);
-  const currentAuthUser = useAuthStore((state) => state.user);
+type RemoteShapeHighlightProps = {
+  interaction: CollaborativeInteraction;
+  user?: PresenceUser;
+};
 
-  const cursors = Object.values(cursorsMap);
+const RemoteShapeHighlight = memo(function RemoteShapeHighlight({
+  interaction,
+  user,
+}: RemoteShapeHighlightProps): React.JSX.Element | null {
+  const shapes = useCanvasStore((state) => state.shapes);
+  const color = getCursorColor(interaction.userId);
+  const name = user?.fullName || getCursorLabel(interaction.userId);
+  const actionLabel = INTERACTION_LABELS[interaction.type] || interaction.type;
 
   return (
     <Group listening={false}>
+      {interaction.targets.map((target) => {
+        if (target.type !== "shape") return null;
+        const shape = shapes.find((s) => s.id === target.id);
+        if (!shape) return null;
+
+        const pad = 4;
+        const labelText = `${name} (${actionLabel})`;
+        const tagWidth = Math.max(labelText.length * 5.8 + 10, 60);
+
+        return (
+          <Group key={`${interaction.interactionId}-${target.id}`}>
+            {/* Outline Halo around remotely manipulated shape */}
+            <Rect
+              x={shape.x - pad}
+              y={shape.y - pad}
+              width={shape.width + pad * 2}
+              height={shape.height + pad * 2}
+              stroke={color}
+              strokeWidth={2}
+              dash={[6, 3]}
+              cornerRadius={2}
+              opacity={0.85}
+            />
+
+            {/* Subtle User Action Tag atop shape */}
+            <Group x={shape.x - pad} y={shape.y - pad - 16}>
+              <Rect
+                width={tagWidth}
+                height={14}
+                fill={color}
+                cornerRadius={3}
+                opacity={0.9}
+              />
+              <Text
+                x={4}
+                y={2.5}
+                text={labelText}
+                fill="#ffffff"
+                fontSize={9}
+                fontFamily="system-ui, -apple-system, sans-serif"
+                fontStyle="bold"
+              />
+            </Group>
+          </Group>
+        );
+      })}
+    </Group>
+  );
+});
+
+export const RemoteCursorLayer = memo(function RemoteCursorLayer(): React.JSX.Element {
+  const cursorsMap = usePresenceStore((state) => state.cursors);
+  const usersMap = usePresenceStore((state) => state.users);
+  const interactionsMap = useInteractionStore((state) => state.interactions);
+  const currentAuthUser = useAuthStore((state) => state.user);
+
+  const cursors = Object.values(cursorsMap);
+  const interactions = Object.values(interactionsMap);
+
+  return (
+    <Group listening={false}>
+      {/* Remote Shape Manipulation Highlights */}
+      {interactions.map((interaction: CollaborativeInteraction) => {
+        if (interaction.userId === currentAuthUser?.id) {
+          return null;
+        }
+
+        return (
+          <RemoteShapeHighlight
+            key={interaction.interactionId}
+            interaction={interaction}
+            user={usersMap[interaction.userId]}
+          />
+        );
+      })}
+
+      {/* Remote Collaborator Cursors & Labels */}
       {cursors.map((cursor: PresenceCursor) => {
         // Exclude local user's own cursor
         if (cursor.userId === currentAuthUser?.id) {
           return null;
         }
 
+        const userInteraction = interactions.find(
+          (i) => i.userId === cursor.userId
+        );
+
         return (
           <RemoteCursorItem
             key={cursor.userId}
             cursor={cursor}
             user={usersMap[cursor.userId]}
+            activeInteraction={userInteraction}
           />
         );
       })}
