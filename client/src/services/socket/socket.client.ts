@@ -4,6 +4,8 @@ import { useAuthStore } from "@/store";
 import { SocketEvents } from "./socket.events";
 import type {
   BoardJoinAckData,
+  BoardRecoveryRequestPayload,
+  BoardRecoveryStatePayload,
   CommentDeletedPayload,
   CommentResponseDto,
   ConnectionState,
@@ -181,6 +183,48 @@ export class SocketClientService {
         }
       });
     });
+  }
+
+  /**
+   * Recovers board state and presence snapshot following connection drop or tab wakeup.
+   *
+   * @param boardId - Target board identifier
+   * @returns Promise resolving with authoritative presence snapshot and recovery timestamp
+   */
+  public recoverBoard(boardId: string): Promise<BoardRecoveryStatePayload> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: BoardRecoveryRequestPayload = {
+        boardId,
+      };
+
+      socket.emit(SocketEvents.BOARD_RECOVERY_REQUEST, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to recover board state.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Subscribes to authoritative board recovery state push broadcasts.
+   */
+  public onRecoveryState(
+    handler: (state: BoardRecoveryStatePayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.BOARD_RECOVERY_STATE, handler);
+
+    return () => {
+      socket.off(SocketEvents.BOARD_RECOVERY_STATE, handler);
+    };
   }
 
   /**

@@ -525,4 +525,90 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().remoteShapeLocks["shape-delete-test"]).toBeUndefined();
         expect(useCanvasStore.getState().remoteShapeTransforms["shape-delete-test"]).toBeUndefined();
     });
+
+    it("replaces shapes from recovery without polluting undo/redo history and clears remote transforms", () => {
+        // 1. Perform local action to have undo history
+        const localShape = {
+            id: "local-shape-1",
+            type: "rectangle" as const,
+            x: 10,
+            y: 10,
+            width: 50,
+            height: 50,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            fill: "#ffffff",
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+        useCanvasStore.getState().addShape(localShape);
+        expect(useCanvasStore.getState().past).toHaveLength(1);
+
+        // 2. Set an ephemeral remote transform
+        useCanvasStore.getState().setRemoteShapeTransform({
+            shapeId: "shape-transforming",
+            boardId: "board-1",
+            userId: "user-99",
+            fullName: "Remote User",
+            color: "#3B82F6",
+            x: 200,
+            y: 200,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            lastUpdatedAt: Date.now(),
+        });
+        expect(Object.keys(useCanvasStore.getState().remoteShapeTransforms)).toHaveLength(1);
+
+        // 3. Receive authoritative recovery shapes
+        const recoveredShapes = [
+            {
+                id: "authoritative-1",
+                type: "rectangle" as const,
+                x: 500,
+                y: 500,
+                width: 300,
+                height: 200,
+                rotation: 0,
+                opacity: 1,
+                zIndex: 1,
+                fill: "#3B82F6",
+                stroke: "#1D4ED8",
+                strokeWidth: 2,
+            },
+            {
+                id: "authoritative-2",
+                type: "text" as const,
+                x: 100,
+                y: 100,
+                width: 150,
+                height: 40,
+                rotation: 0,
+                opacity: 1,
+                zIndex: 2,
+                text: "Recovered Text",
+                fontSize: 20,
+                fontFamily: "Inter",
+                fontWeight: "normal",
+                fontStyle: "normal",
+                textAlign: "left" as const,
+                fill: "#1f2937",
+            },
+        ];
+
+        useCanvasStore.getState().replaceShapesFromRecovery(recoveredShapes);
+
+        // Verify shapes were replaced atomically
+        expect(useCanvasStore.getState().shapes).toHaveLength(2);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("authoritative-1");
+        expect(useCanvasStore.getState().shapes[1].id).toBe("authoritative-2");
+
+        // Verify remote transforms were cleared
+        expect(Object.keys(useCanvasStore.getState().remoteShapeTransforms)).toHaveLength(0);
+
+        // Verify undo/redo stacks were NEVER modified by recovery
+        expect(useCanvasStore.getState().past).toHaveLength(1);
+        expect(useCanvasStore.getState().future).toHaveLength(0);
+    });
 });

@@ -442,4 +442,88 @@ describe("SocketClientService", () => {
       { boardId: "board-123", shapeId: "shape-1" }
     );
   });
+
+  it("handles recoverBoard success acknowledgement", async () => {
+    const mockRecoveryData = {
+      boardId: "board-123",
+      recoveredAt: "2026-08-23T12:00:00.000Z",
+      presence: {
+        activeUsers: [
+          {
+            userId: "user-1",
+            fullName: "Alice",
+            color: "#3B82F6",
+            joinedAt: "2026-08-23T12:00:00.000Z",
+          },
+        ],
+      },
+    };
+
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+        if (event === SocketEvents.BOARD_RECOVERY_REQUEST) {
+          callback({
+            success: true,
+            data: mockRecoveryData,
+          });
+        }
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    const result = await service.recoverBoard("board-123");
+    expect(result.boardId).toBe("board-123");
+    expect(result.recoveredAt).toBe("2026-08-23T12:00:00.000Z");
+    expect(result.presence.activeUsers).toHaveLength(1);
+    expect(mockSocket.emit).toHaveBeenCalledWith(
+      SocketEvents.BOARD_RECOVERY_REQUEST,
+      { boardId: "board-123" },
+      expect.any(Function)
+    );
+  });
+
+  it("handles recoverBoard failure acknowledgement", async () => {
+    const mockSocket: any = {
+      connected: true,
+      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+        if (event === SocketEvents.BOARD_RECOVERY_REQUEST) {
+          callback({
+            success: false,
+            error: { code: "FORBIDDEN", message: "Forbidden board recovery." },
+          });
+        }
+      }),
+    };
+
+    (service as any).socket = mockSocket;
+
+    await expect(service.recoverBoard("board-123")).rejects.toThrow(
+      "Forbidden board recovery."
+    );
+  });
+
+  it("subscribes and unsubscribes to onRecoveryState broadcasts", () => {
+    const mockHandler = vi.fn();
+    const mockSocket: any = {
+      connected: true,
+      on: vi.fn(),
+      off: vi.fn(),
+    };
+
+    (service as any).socket = mockSocket;
+
+    const unsubscribe = service.onRecoveryState(mockHandler);
+    expect(mockSocket.on).toHaveBeenCalledWith(
+      SocketEvents.BOARD_RECOVERY_STATE,
+      mockHandler
+    );
+
+    unsubscribe();
+    expect(mockSocket.off).toHaveBeenCalledWith(
+      SocketEvents.BOARD_RECOVERY_STATE,
+      mockHandler
+    );
+  });
 });

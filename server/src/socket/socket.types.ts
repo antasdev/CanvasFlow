@@ -251,6 +251,21 @@ export type CommentDeletedPayload = {
 };
 
 /**
+ * Board Recovery Payloads (Slice 10)
+ */
+export type BoardRecoveryRequestPayload = {
+  boardId: string;
+};
+
+export type BoardRecoveryStatePayload = {
+  boardId: string;
+  recoveredAt: string;
+  presence: {
+    activeUsers: ActiveUser[];
+  };
+};
+
+/**
  * Strongly typed Client-to-Server Event Contracts.
  */
 export interface ClientToServerEvents {
@@ -262,6 +277,11 @@ export interface ClientToServerEvents {
   "board:leave": (
     payload: LeaveBoardPayload,
     callback?: (response: SocketAck) => void
+  ) => void;
+
+  "board:recovery-request": (
+    payload: BoardRecoveryRequestPayload,
+    callback?: (response: SocketAck<BoardRecoveryStatePayload>) => void
   ) => void;
 
   "shape:create": (
@@ -328,6 +348,7 @@ export interface ClientToServerEvents {
  */
 export interface ServerToClientEvents {
   "canvas:sync": (payload: CanvasSyncPayload) => void;
+  "board:recovery-state": (payload: BoardRecoveryStatePayload) => void;
   "shape:created": (shape: ShapeResponseDto) => void;
   "shape:updated": (shape: ShapeResponseDto) => void;
   "shape:deleted": (payload: DeleteShapePayload) => void;

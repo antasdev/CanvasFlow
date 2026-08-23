@@ -433,19 +433,67 @@ Collaborative annotations introduce persistent discussion threads attached to ei
 
 ---
 
-## 18. Security & Hardening
+## 18. Slice 10 — Real-Time Reconnection & Authoritative Board State Recovery
+
+### A. Architectural Principles
+
+When network drops, tab sleep, or mobile backgrounding breaks a WebSocket connection, systems must recover seamlessly without state corruption or stale collaboration artifacts.
+
+1. **State Categorization & Recovery Boundaries**:
+   - **Authoritative State** (Boards, Canvases, Shapes, Comments): Persisted in MongoDB; recovered cleanly via authoritative REST hydration.
+   - **Ephemeral Collaboration State** (Presence, Cursors, Selections, Shape Locks, Live Transforms): Exists in-memory during active connections; wiped on disconnect and reconstructed fresh from server snapshot.
+   - **Undo/Redo History Isolation**: Recovery replaces stale store state atomically (`replaceShapesFromRecovery`) without pushing snapshots into `past` or wiping `future`. Recovery is never treated as a local undoable user action.
+
+2. **Race Condition Prevention**:
+   - **Single-Flight Mutex (`isRecoveringRef`)**: Prevents rapid connection churn or retry bursts from triggering concurrent overlapping hydration flights.
+   - **Generation Counter Token (`recoveryGenerationRef`)**: Every recovery cycle increments a monotonic integer token. If a subsequent recovery initiates while a slow API request is in-flight, the stale response from the superseded recovery is silently discarded upon arrival.
+
+3. **Multi-Tab Session Isolation**:
+   - Tab-specific socket IDs join board rooms and register in `PresenceManager`.
+   - When Tab 1 disconnects and reconnects, other active tabs for the same user remain undisturbed, and room presence deduplication guarantees zero phantom user drops.
+
+### B. Recovery Event Lifecycle:
+
+```text
+1. Network / Tab Reconnection Event
+   Client: socket.on("connect") fires after disconnect
+   Client ──► Sets status = "recovering"
+             ├── Wipes local ephemeral state (remoteCursors, remoteSelections, remoteShapeLocks, remoteShapeTransforms)
+             ├── Emits "board:recovery-request" { boardId }
+             ├── Fetches GET /api/v1/shapes/canvas/:canvasId
+             └── Fetches GET /api/v1/comments/board/:boardId
+
+2. Server Processing:
+   Server ──► Validates boardId (Zod hex ObjectId)
+            ├── Authorizes board access (boardService.authorizeBoardAccess)
+            ├── Idempotently joins socket.join(getBoardRoom(boardId))
+            ├── Updates PresenceManager: presenceManager.joinBoard(boardId, socket.id, user)
+            ├── Broadcasts "user:joined" if first active socket for user
+            └── Returns ack({ success: true, data: { boardId, recoveredAt, presence: { activeUsers } } })
+
+3. Client Store Hydration:
+   Client ──► Verifies generation token
+            ├── useCanvasStore.replaceShapesFromRecovery(authoritativeShapes)
+            ├── useCommentStore.setComments(authoritativeComments)
+            ├── queryClient.invalidateQueries(["boards", boardId, "comments"])
+            └── Sets status = "recovered" (transitions to "idle" after 2.5s)
+```
+
+---
+
+## 19. Security & Hardening
 
 1. **Authentication**: All connections require a valid JWT access token verified against `JWT_ACCESS_SECRET`.
-2. **Authorization Boundary**: Board access authorization is verified server-side through `boardService.authorizeBoardAccess` before room entry or data sync.
+2. **Authorization Boundary**: Board access authorization is verified server-side through `boardService.authorizeBoardAccess` before room entry, recovery, or data sync.
 3. **Persisted Boundary Resolution**: Sockets cannot supply arbitrary `boardId` or `userId` values; the server derives `boardId` strictly from `Shape` → `Canvas` → `Board`.
 4. **Room Membership Enforcement**: Shape, cursor, selection, lock, and comment handlers verify `socket.rooms.has(getBoardRoom(boardId))` before allowing actions.
 5. **Shape Ownership Verification**: For selection and lock requests, `shapeService.verifyShapesBelongToBoard` guarantees foreign shapes cannot be locked or selected across boards.
-6. **Payload Bounds & Validation**: Zod validates all shape properties (`text` length $\le 5000$, `fontSize` 8–200, valid text alignment, finite coordinates) and comment payloads (`content` 1–2000 chars, max length enforcement).
+6. **Payload Bounds & Validation**: Zod validates all shape properties (`text` length $\le 5000$, `fontSize` 8–200, valid text alignment, finite coordinates), comment payloads (`content` 1–2000 chars), and recovery requests (`boardId` 24-char ObjectId).
 7. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all entities pass through DTO mappers (`ShapeMapper`, `CommentMapper`) with soft-delete masking.
 
 ---
 
-## 19. Interview Concepts
+## 20. Interview Concepts
 
 ### 1. Discriminated Unions in Real-Time Systems
 Using a literal discriminator field (`type: "rectangle" | "text" | "sticky_note"`) enables TypeScript to perform exhaustive pattern matching and type narrowing. This eliminates optional-property soup and ensures component renderers receive guaranteed, non-null properties for specific shape types.
@@ -454,12 +502,15 @@ Using a literal discriminator field (`type: "rectangle" | "text" | "sticky_note"
 - **Durable State**: Shapes, text content, colors, z-indexes, board settings, comment threads. Persisted authoritatively in MongoDB.
 - **Ephemeral State**: Cursor coordinates, shape selections, soft-locks, heartbeat refresh timers. Managed in-memory to prevent database write amplification.
 
-### 3. Write Amplification Mitigation
-Writing every text keystroke to MongoDB generates unsustainable I/O load. CanvasFlow uses the **Local Editing + Soft Lock + Authoritative Commit** pattern to provide instant local typing feedback, conflict prevention via ephemeral locks, and efficient, single-transaction database persistence upon completion.
+### 3. State Invalidation vs. Event Replay during Recovery
+Attempting to recover state by replaying a buffer of missed Socket.IO events introduces severe consistency and ordering hazards (race conditions, dropped events, split-brain). The robust industry standard (used by Figma and Google Docs) is to fetch the current authoritative snapshot from durable persistence, atomically replace canonical state, and rebuild transient presence from live in-memory managers.
 
-### 4. Screen vs. World Coordinate Projection
+### 4. Generation Token Pattern for Out-of-Order Async Responses
+When network conditions fluctuate rapidly, multiple asynchronous recovery cycles may be dispatched. By tagging each recovery invocation with a monotonically increasing integer (`recoveryGeneration`), late-arriving responses from superseded requests are discarded, preventing stale data from overwriting newer snapshots.
+
+### 5. Screen vs. World Coordinate Projection
 - **World Space**: The invariant infinite canvas coordinates where a shape lives at `(x, y)`.
-- **Screen Space**: The pixel position on the viewport computed via `screenX = worldX * zoom + pan.x`. HTML overlays like `<InlineTextEditor>` and `<CommentBadge>` dynamically compute screen projections so editing controls match the visual canvas perfectly during pan and zoom.
+- **Screen Space**: The pixel position on the viewport computed via `screenX = worldX * zoom + pan.x`. HTML overlays like `<InlineTextEditor>`, `<CommentBadge>`, and `<RecoveryStatusIndicator>` dynamically compute screen projections so editing controls match the visual canvas perfectly during pan and zoom.
 
-### 5. Decoupled Persistence & Soft-Deletion Cascades
+### 6. Decoupled Persistence & Soft-Deletion Cascades
 In collaborative systems, hard-deleting records or cascading deletes can destroy contextual collaborator discussions. By adopting a soft-delete model with masked content on comments and a foreign-key nullification lifecycle (`shapeId: null` on shape deletion), the collaborative history remains resilient without orphaned dangling references.

@@ -141,6 +141,8 @@ type CanvasStore = {
 
   clearRemoteShapeTransforms: () => void;
 
+  replaceShapesFromRecovery: (shapes: Shape[]) => void;
+
   undo: () => void;
 
   redo: () => void;
@@ -595,6 +597,13 @@ export const useCanvasStore = create<CanvasStore>(
           shapes: previousShapes,
           selectedShapeIds: [],
         };
+      });
+    },
+
+    replaceShapesFromRecovery: (shapes: Shape[]): void => {
+      set({
+        shapes,
+        remoteShapeTransforms: {},
       });
     },
 

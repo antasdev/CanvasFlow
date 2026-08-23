@@ -9,6 +9,8 @@ export const SocketEvents = {
 
   BOARD_JOIN: "board:join",
   BOARD_LEAVE: "board:leave",
+  BOARD_RECOVERY_REQUEST: "board:recovery-request",
+  BOARD_RECOVERY_STATE: "board:recovery-state",
 
   CANVAS_SYNC: "canvas:sync",
 

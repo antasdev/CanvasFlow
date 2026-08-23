@@ -9,6 +9,7 @@ import {
     useCanvasHistory,
     useCanvasSocket,
     useShapes,
+    useBoardRecovery,
 } from "../hooks";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
@@ -21,6 +22,7 @@ import CollaboratorSelection from "./CollaboratorSelection";
 import CollaboratorShapeLock from "./CollaboratorShapeLock";
 import InlineTextEditor from "./InlineTextEditor";
 import ShapeRenderer from "./ShapeRenderer";
+import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
 import {
     useComments,
     useCommentSocket,
@@ -83,6 +85,13 @@ export default function CanvasEditor({
 
     // Initialize real-time WebSocket room subscriptions and synchronization
     useCanvasSocket(boardId, canvasId);
+
+    // Initialize real-time board state recovery and reconnect synchronization
+    const {
+        status: recoveryStatus,
+        error: recoveryError,
+        triggerRecovery,
+    } = useBoardRecovery(boardId, canvasId);
 
     // Initialize real-time comments subscriptions and data loading
     useComments(boardId);
@@ -932,6 +941,17 @@ export default function CanvasEditor({
                     />
                 );
             })}
+
+            {/* Real-time Connection & Board State Recovery Status Indicator */}
+            <RecoveryStatusIndicator
+                status={recoveryStatus}
+                error={recoveryError}
+                onRetry={() => {
+                    if (boardId && canvasId) {
+                        triggerRecovery(boardId, canvasId);
+                    }
+                }}
+            />
 
             {/* Real-time Collaborative Comments Panel */}
             <CommentPanel boardId={boardId} />
