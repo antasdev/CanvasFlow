@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { socketClientService, SocketEvents } from "@/services/socket";
 import type { BoardRecoveryStatePayload } from "@/services/socket";
-import { useCanvasStore } from "../store";
+import { useCanvasStore, useCollaborationStore } from "../store";
 import { shapeApi } from "../api/shape.api";
 import { mapShapeResponseToShape } from "../api/shape.mapper";
 import { commentApi } from "@/features/comments/api";
@@ -78,6 +78,7 @@ export function useBoardRecovery(
       }
 
       isRecoveringRef.current = true;
+      useCollaborationStore.getState().setRecovering(true);
       const currentGeneration = ++recoveryGenerationRef.current;
 
       setStatus("recovering");
@@ -108,6 +109,7 @@ export function useBoardRecovery(
         // 5. Check Generation Token to discard stale concurrent responses
         if (currentGeneration !== recoveryGenerationRef.current) {
           isRecoveringRef.current = false;
+          useCollaborationStore.getState().setRecovering(false);
           return false;
         }
 
@@ -121,8 +123,14 @@ export function useBoardRecovery(
           queryKey: COMMENT_QUERY_KEYS.boardComments(activeBoardId),
         });
 
+        // 8. Update Authoritative Collaboration Revision in Store
+        if (typeof recoveryState.revision === "number") {
+          useCollaborationStore.getState().setRevision(activeBoardId, recoveryState.revision);
+        }
+
         setRecoveredAt(recoveryState.recoveredAt);
         setStatus("recovered");
+        useCollaborationStore.getState().setRecovering(false);
 
         // Transition back to idle after 2.5s
         if (timerRef.current) {
@@ -146,6 +154,7 @@ export function useBoardRecovery(
           setStatus("error");
         }
         isRecoveringRef.current = false;
+        useCollaborationStore.getState().setRecovering(false);
         return false;
       }
     },

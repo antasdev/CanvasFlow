@@ -43,6 +43,12 @@ const boardSchema = new Schema(
       type: Boolean,
       default: false,
     },
+
+    collaborationRevision: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
   },
   {
     timestamps: true,

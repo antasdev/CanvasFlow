@@ -443,9 +443,14 @@ describe("SocketClientService", () => {
     );
   });
 
-  it("handles recoverBoard success acknowledgement", async () => {
+  it("tracks connectionEpoch counter", () => {
+    expect(service.getConnectionEpoch()).toBe(0);
+  });
+
+  it("handles recoverBoard success acknowledgement with revision", async () => {
     const mockRecoveryData = {
       boardId: "board-123",
+      revision: 42,
       recoveredAt: "2026-08-23T12:00:00.000Z",
       presence: {
         activeUsers: [
@@ -475,6 +480,7 @@ describe("SocketClientService", () => {
 
     const result = await service.recoverBoard("board-123");
     expect(result.boardId).toBe("board-123");
+    expect(result.revision).toBe(42);
     expect(result.recoveredAt).toBe("2026-08-23T12:00:00.000Z");
     expect(result.presence.activeUsers).toHaveLength(1);
     expect(mockSocket.emit).toHaveBeenCalledWith(

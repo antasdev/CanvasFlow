@@ -96,6 +96,7 @@ describe("Board Recovery Logic & State Integration Tests", () => {
     // 3. Mock authoritative recovery responses
     const mockRecoveryState = {
       boardId: "board-1",
+      revision: 55,
       recoveredAt: "2026-08-23T12:00:00.000Z",
       presence: {
         activeUsers: [
@@ -168,9 +169,11 @@ describe("Board Recovery Logic & State Integration Tests", () => {
     const mappedShapes = rawShapes.map(mapShapeResponseToShape);
     useCanvasStore.getState().replaceShapesFromRecovery(mappedShapes);
     useCommentStore.getState().setComments(comments);
+    useCanvasStore.getState().clearRemoteShapeLocks();
 
     // 5. Verify authoritative store state
     expect(recoveryState.boardId).toBe("board-1");
+    expect(recoveryState.revision).toBe(55);
     expect(useCanvasStore.getState().shapes).toHaveLength(1);
     expect(useCanvasStore.getState().shapes[0].id).toBe("recovered-shape-1");
     expect(useCanvasStore.getState().shapes[0].x).toBe(300);

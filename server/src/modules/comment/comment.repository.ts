@@ -17,8 +17,11 @@ export class CommentRepository {
     return comment;
   }
 
-  async findById(id: Types.ObjectId): Promise<CommentDocument | null> {
-    return CommentModel.findById(id).populate({
+  async findById(
+    id: Types.ObjectId,
+    session?: ClientSession
+  ): Promise<CommentDocument | null> {
+    return CommentModel.findById(id, null, { session }).populate({
       path: "authorId",
       select: "fullName email profile",
     });

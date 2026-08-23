@@ -344,10 +344,54 @@ export type DeleteCommentPayload = {
 export type CommentDeletedPayload = {
   boardId: string;
   commentId: string;
+  comment?: CommentResponseDto;
+  meta?: CollaborationEventMeta;
 };
 
 /**
- * Board Recovery Payloads (Slice 10)
+ * Collaboration Event Metadata & Envelopes (Slice 11)
+ */
+export type CollaborationEventMeta = {
+  eventId: string;
+  boardId: string;
+  actorId: string;
+  socketId: string;
+  revision: number;
+  occurredAt: string;
+};
+
+export type ShapeCreatedPayload = {
+  meta: CollaborationEventMeta;
+  shape: ShapeResponseDto;
+};
+
+export type ShapeUpdatedPayload = {
+  meta: CollaborationEventMeta;
+  shape: ShapeResponseDto;
+};
+
+export type ShapeDeletedPayload = {
+  meta: CollaborationEventMeta;
+  shapeId: string;
+};
+
+export type CommentCreatedPayload = {
+  meta: CollaborationEventMeta;
+  comment: CommentResponseDto;
+};
+
+export type CommentUpdatedPayload = {
+  meta: CollaborationEventMeta;
+  comment: CommentResponseDto;
+};
+
+export type CommentResolvedPayload = {
+  meta: CollaborationEventMeta;
+  comment: CommentResponseDto;
+};
+
+/**
+ * Board Recovery Payloads (Slice 10 & Slice 11)
  */
 export type BoardRecoveryRequestPayload = {
   boardId: string;
@@ -355,6 +399,7 @@ export type BoardRecoveryRequestPayload = {
 
 export type BoardRecoveryStatePayload = {
   boardId: string;
+  revision: number;
   recoveredAt: string;
   presence: {
     activeUsers: ActiveUser[];
@@ -445,19 +490,19 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   "canvas:sync": (payload: CanvasSyncPayload) => void;
   "board:recovery-state": (payload: BoardRecoveryStatePayload) => void;
-  "shape:created": (shape: ShapeResponseDto) => void;
-  "shape:updated": (shape: ShapeResponseDto) => void;
-  "shape:deleted": (payload: DeleteShapePayload) => void;
+  "shape:created": (payload: ShapeCreatedPayload | ShapeResponseDto) => void;
+  "shape:updated": (payload: ShapeUpdatedPayload | ShapeResponseDto) => void;
+  "shape:deleted": (payload: ShapeDeletedPayload | DeleteShapePayload) => void;
   "cursor:moved": (payload: CursorMovedPayload) => void;
   "selection:changed": (payload: SelectionChangedPayload) => void;
   "shape:locked": (payload: ShapeLockedPayload) => void;
   "shape:unlocked": (payload: ShapeUnlockedPayload) => void;
   "shape:transforming": (payload: ShapeTransformingPayload) => void;
   "shape:transform-end": (payload: ShapeTransformEndPayload) => void;
-  "comment:created": (comment: CommentResponseDto) => void;
-  "comment:updated": (comment: CommentResponseDto) => void;
-  "comment:resolved": (comment: CommentResponseDto) => void;
-  "comment:deleted": (payload: CommentDeletedPayload) => void;
+  "comment:created": (payload: CommentCreatedPayload | CommentResponseDto) => void;
+  "comment:updated": (payload: CommentUpdatedPayload | CommentResponseDto) => void;
+  "comment:resolved": (payload: CommentResolvedPayload | CommentResponseDto) => void;
+  "comment:deleted": (payload: CommentDeletedPayload | { boardId: string; commentId: string }) => void;
   "user:joined": (payload: UserJoinedPayload) => void;
   "user:left": (payload: UserLeftPayload) => void;
   error: (message: string) => void;

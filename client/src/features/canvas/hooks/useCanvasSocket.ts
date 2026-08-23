@@ -4,29 +4,35 @@ import { socketClientService, SocketEvents } from "@/services/socket";
 import type {
   CanvasSyncPayload,
   CursorMovedPayload,
+  DeleteShapePayload,
   SelectionChangedPayload,
+  ShapeCreatedPayload,
+  ShapeDeletedPayload,
   ShapeLockedPayload,
   ShapeResponseDto,
   ShapeTransformEndPayload,
   ShapeTransformingPayload,
   ShapeUnlockedPayload,
+  ShapeUpdatedPayload,
   UserJoinedPayload,
   UserLeftPayload,
 } from "@/services/socket";
 import { mapShapeResponseToShape } from "../api";
-import { useCanvasStore } from "../store";
+import { useCanvasStore, useCollaborationStore } from "../store";
 
 /**
  * Custom hook managing real-time collaboration Socket.IO subscriptions for a canvas.
  * Dispatches remote events into the local Zustand store using dedicated remote actions
- * that isolate remote updates from local undo/redo stacks.
+ * that isolate remote updates from local undo/redo stacks and validates revision freshness.
  *
  * @param boardId - Active board identifier
  * @param canvasId - Optional active canvas identifier
+ * @param onGapDetected - Optional callback when a revision gap is detected
  */
 export const useCanvasSocket = (
   boardId?: string,
-  canvasId?: string
+  canvasId?: string,
+  onGapDetected?: () => void
 ): void => {
   const setShapes = useCanvasStore((state) => state.setShapes);
   const applyRemoteShapeCreated = useCanvasStore(
@@ -106,23 +112,65 @@ export const useCanvasSocket = (
       }
     };
 
-    // 3. Handle remote shape creation
-    const handleShapeCreated = (shapeDto: ShapeResponseDto): void => {
+    // 3. Handle remote shape creation with revision freshness guard
+    const handleShapeCreated = (payload: ShapeCreatedPayload | ShapeResponseDto): void => {
+      const meta = "meta" in payload ? payload.meta : undefined;
+      const shapeDto = "shape" in payload ? payload.shape : (payload as ShapeResponseDto);
+
+      if (meta && boardId) {
+        const freshness = useCollaborationStore.getState().checkEventFreshness(boardId, meta.revision);
+        if (freshness.action === "ignore") {
+          return;
+        }
+        if (freshness.action === "gap") {
+          onGapDetected?.();
+          return;
+        }
+      }
+
       const shape = mapShapeResponseToShape(shapeDto);
       applyRemoteShapeCreated(shape);
     };
 
-    // 4. Handle remote shape update (transform, move, resize, rotate, text edit)
-    const handleShapeUpdated = (shapeDto: ShapeResponseDto): void => {
+    // 4. Handle remote shape update with revision freshness guard
+    const handleShapeUpdated = (payload: ShapeUpdatedPayload | ShapeResponseDto): void => {
+      const meta = "meta" in payload ? payload.meta : undefined;
+      const shapeDto = "shape" in payload ? payload.shape : (payload as ShapeResponseDto);
+
+      if (meta && boardId) {
+        const freshness = useCollaborationStore.getState().checkEventFreshness(boardId, meta.revision);
+        if (freshness.action === "ignore") {
+          return;
+        }
+        if (freshness.action === "gap") {
+          onGapDetected?.();
+          return;
+        }
+      }
+
       const shape = mapShapeResponseToShape(shapeDto);
       applyRemoteShapeUpdated(shape);
       removeRemoteShapeTransform(shapeDto.id);
     };
 
-    // 5. Handle remote shape deletion
-    const handleShapeDeleted = (payload: { shapeId: string }): void => {
-      applyRemoteShapeDeleted(payload.shapeId);
-      removeRemoteShapeTransform(payload.shapeId);
+    // 5. Handle remote shape deletion with revision freshness guard
+    const handleShapeDeleted = (payload: ShapeDeletedPayload | DeleteShapePayload): void => {
+      const meta = "meta" in payload ? payload.meta : undefined;
+      const shapeId = "shapeId" in payload ? payload.shapeId : (payload as DeleteShapePayload).shapeId;
+
+      if (meta && boardId) {
+        const freshness = useCollaborationStore.getState().checkEventFreshness(boardId, meta.revision);
+        if (freshness.action === "ignore") {
+          return;
+        }
+        if (freshness.action === "gap") {
+          onGapDetected?.();
+          return;
+        }
+      }
+
+      applyRemoteShapeDeleted(shapeId);
+      removeRemoteShapeTransform(shapeId);
     };
 
     // 6. Handle collaborator cursor movement
@@ -264,5 +312,6 @@ export const useCanvasSocket = (
     setRemoteShapeTransform,
     removeRemoteShapeTransform,
     clearRemoteShapeTransforms,
+    onGapDetected,
   ]);
 };

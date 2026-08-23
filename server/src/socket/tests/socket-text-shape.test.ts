@@ -164,14 +164,14 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   // ----------------------------------------------------
   console.log("\nTest 1: User 1 creates Text Shape -> Persisted -> User 2 receives shape:created...");
 
-  let user2ReceivedCreated: ShapeResponseDto | null = null;
-  let user3ReceivedCreated: ShapeResponseDto | null = null;
+  let user2ReceivedCreated: any = null;
+  let user3ReceivedCreated: any = null;
 
-  client2.on(SocketEvents.SHAPE_CREATED, (dto: ShapeResponseDto) => {
-    user2ReceivedCreated = dto;
+  client2.on(SocketEvents.SHAPE_CREATED, (payload: any) => {
+    user2ReceivedCreated = "shape" in payload ? payload.shape : payload;
   });
-  client3.on(SocketEvents.SHAPE_CREATED, (dto: ShapeResponseDto) => {
-    user3ReceivedCreated = dto;
+  client3.on(SocketEvents.SHAPE_CREATED, (payload: any) => {
+    user3ReceivedCreated = "shape" in payload ? payload.shape : payload;
   });
 
   const createTextPayload: CreateShapePayload = {
@@ -390,9 +390,9 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   // ----------------------------------------------------
   console.log("\nTest 7: User 1 commits text update -> Persisted in MongoDB -> User 2 receives shape:updated...");
 
-  let user2ReceivedUpdated: ShapeResponseDto | null = null;
-  client2.on(SocketEvents.SHAPE_UPDATED, (dto: ShapeResponseDto) => {
-    user2ReceivedUpdated = dto;
+  let user2ReceivedUpdated: any = null;
+  client2.on(SocketEvents.SHAPE_UPDATED, (payload: any) => {
+    user2ReceivedUpdated = "shape" in payload ? payload.shape : payload;
   });
 
   const updateTextPayload: UpdateShapePayload = {
@@ -465,9 +465,9 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   console.log("\nTest 9: User 2 updates Sticky Note content and background color...");
 
   user2ReceivedUpdated = null;
-  let user1ReceivedUpdated: ShapeResponseDto | null = null;
-  client1.on(SocketEvents.SHAPE_UPDATED, (dto: ShapeResponseDto) => {
-    user1ReceivedUpdated = dto;
+  let user1ReceivedUpdated: any = null;
+  client1.on(SocketEvents.SHAPE_UPDATED, (payload: any) => {
+    user1ReceivedUpdated = "shape" in payload ? payload.shape : payload;
   });
 
   const updateStickyPayload: UpdateShapePayload = {
@@ -502,8 +502,8 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   // ----------------------------------------------------
   console.log("\nTest 10: Deleting Text Shape and Sticky Note -> MongoDB removed -> shape:deleted broadcast...");
 
-  let user2ReceivedDeleted: { shapeId: string } | null = null;
-  client2.on(SocketEvents.SHAPE_DELETED, (payload: { shapeId: string }) => {
+  let user2ReceivedDeleted: any = null;
+  client2.on(SocketEvents.SHAPE_DELETED, (payload: any) => {
     user2ReceivedDeleted = payload;
   });
 
@@ -522,7 +522,11 @@ async function runTextAndStickyShapeTests(): Promise<void> {
 
   await new Promise((r) => setTimeout(r, 100));
   assert(user2ReceivedDeleted !== null, "User 2 must receive shape:deleted for text shape");
-  assert((user2ReceivedDeleted as any).shapeId === textShapeId, "Deleted shapeId must match");
+  const resolvedShapeId =
+    "shapeId" in user2ReceivedDeleted
+      ? user2ReceivedDeleted.shapeId
+      : user2ReceivedDeleted;
+  assert(resolvedShapeId === textShapeId, "Deleted shapeId must match");
 
   console.log("✓ Text shape deleted, removed from DB, and broadcast.");
 

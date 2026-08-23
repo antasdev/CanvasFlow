@@ -12,6 +12,7 @@ import { HttpStatus } from "@/shared/constants";
 
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
+import { collaborationVersionService } from "../services/collaboration-version.service";
 import {
   AuthSocket,
   CommentResponseDto,
@@ -61,17 +62,28 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 2. Authoritative persistence via CommentService
-        const result = await commentService.createComment(userId, {
-          boardId: boardObjectId,
-          content: parsed.data.content,
-          shapeId: parsed.data.shapeId
-            ? new Types.ObjectId(parsed.data.shapeId)
-            : null,
-          parentCommentId: parsed.data.parentCommentId
-            ? new Types.ObjectId(parsed.data.parentCommentId)
-            : null,
-        });
+        // 2. Authoritative persistence via CommentService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardObjectId,
+          userId,
+          socket.id,
+          async (session) => {
+            return commentService.createComment(
+              userId,
+              {
+                boardId: boardObjectId,
+                content: parsed.data.content,
+                shapeId: parsed.data.shapeId
+                  ? new Types.ObjectId(parsed.data.shapeId)
+                  : null,
+                parentCommentId: parsed.data.parentCommentId
+                  ? new Types.ObjectId(parsed.data.parentCommentId)
+                  : null,
+              },
+              session
+            );
+          }
+        );
 
         // 3. Transform to canonical response DTO
         const responseDto = CommentMapper.toResponseDto(
@@ -79,8 +91,11 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           result.comment.authorId as any
         );
 
-        // 4. Broadcast to other collaborators in the room (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_CREATED, responseDto);
+        // 4. Broadcast envelope to other collaborators in the room (excludes sender)
+        socket.to(room).emit(SocketEvents.COMMENT_CREATED, {
+          meta,
+          comment: responseDto,
+        });
 
         // 5. Acknowledge creator with canonical persisted DTO
         callback?.({
@@ -141,6 +156,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
 
         const userId = socket.data.user.userId;
         const commentObjectId = new Types.ObjectId(parsed.data.commentId);
+        const boardObjectId = new Types.ObjectId(parsed.data.boardId);
 
         // 1. Verify socket is joined to the board room
         const room = getBoardRoom(parsed.data.boardId);
@@ -151,12 +167,20 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 2. Authoritative update via CommentService
-        const result = await commentService.updateComment(
-          commentObjectId,
+        // 2. Authoritative update via CommentService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardObjectId,
           userId,
-          {
-            content: parsed.data.content,
+          socket.id,
+          async (session) => {
+            return commentService.updateComment(
+              commentObjectId,
+              userId,
+              {
+                content: parsed.data.content,
+              },
+              session
+            );
           }
         );
 
@@ -166,8 +190,11 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           result.comment.authorId as any
         );
 
-        // 4. Broadcast to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_UPDATED, responseDto);
+        // 4. Broadcast envelope to other room members (excludes sender)
+        socket.to(room).emit(SocketEvents.COMMENT_UPDATED, {
+          meta,
+          comment: responseDto,
+        });
 
         // 5. Acknowledge sender
         callback?.({
@@ -228,6 +255,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
 
         const userId = socket.data.user.userId;
         const commentObjectId = new Types.ObjectId(parsed.data.commentId);
+        const boardObjectId = new Types.ObjectId(parsed.data.boardId);
 
         // 1. Verify socket is joined to the board room
         const room = getBoardRoom(parsed.data.boardId);
@@ -238,12 +266,20 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 2. Authoritative resolution via CommentService
-        const result = await commentService.resolveComment(
-          commentObjectId,
+        // 2. Authoritative resolution via CommentService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardObjectId,
           userId,
-          {
-            isResolved: parsed.data.isResolved,
+          socket.id,
+          async (session) => {
+            return commentService.resolveComment(
+              commentObjectId,
+              userId,
+              {
+                isResolved: parsed.data.isResolved,
+              },
+              session
+            );
           }
         );
 
@@ -253,8 +289,11 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           result.comment.authorId as any
         );
 
-        // 4. Broadcast to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_RESOLVED, responseDto);
+        // 4. Broadcast envelope to other room members (excludes sender)
+        socket.to(room).emit(SocketEvents.COMMENT_RESOLVED, {
+          meta,
+          comment: responseDto,
+        });
 
         // 5. Acknowledge sender
         callback?.({
@@ -315,6 +354,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
 
         const userId = socket.data.user.userId;
         const commentObjectId = new Types.ObjectId(parsed.data.commentId);
+        const boardObjectId = new Types.ObjectId(parsed.data.boardId);
 
         // 1. Verify socket is joined to the board room
         const room = getBoardRoom(parsed.data.boardId);
@@ -325,10 +365,18 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 2. Authoritative soft deletion via CommentService
-        const result = await commentService.deleteComment(
-          commentObjectId,
-          userId
+        // 2. Authoritative soft deletion via CommentService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardObjectId,
+          userId,
+          socket.id,
+          async (session) => {
+            return commentService.deleteComment(
+              commentObjectId,
+              userId,
+              session
+            );
+          }
         );
 
         // 3. Transform to canonical response DTO
@@ -337,14 +385,19 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           result.comment.authorId as any
         );
 
-        // 4. Broadcast deletion to other room members (excludes sender)
+        // 4. Broadcast deletion envelope to other room members (excludes sender)
         socket.to(room).emit(SocketEvents.COMMENT_DELETED, {
+          meta,
           boardId: parsed.data.boardId,
           commentId: parsed.data.commentId,
+          comment: responseDto,
         });
 
-        // Also broadcast comment:updated with masked soft-deleted payload so UI can seamlessly mask
-        socket.to(room).emit(SocketEvents.COMMENT_UPDATED, responseDto);
+        // Also broadcast comment:updated with masked soft-deleted payload
+        socket.to(room).emit(SocketEvents.COMMENT_UPDATED, {
+          meta,
+          comment: responseDto,
+        });
 
         // 5. Acknowledge sender
         callback?.({

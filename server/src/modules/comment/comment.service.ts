@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { ClientSession, Types } from "mongoose";
 
 import { boardService } from "@/modules/board";
 import { shapeService } from "@/modules/shape";
@@ -23,7 +23,8 @@ export class CommentService {
    */
   async createComment(
     authorId: Types.ObjectId,
-    dto: CreateCommentDto
+    dto: CreateCommentDto,
+    session?: ClientSession
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
     // 1. Authorize board access
     await boardService.authorizeBoardAccess(dto.boardId, authorId);
@@ -79,18 +80,21 @@ export class CommentService {
     }
 
     // 4. Authoritative persistence
-    const created = await commentRepository.create({
-      boardId: dto.boardId,
-      shapeId: effectiveShapeId,
-      authorId,
-      parentCommentId: dto.parentCommentId ?? null,
-      content: dto.content,
-      isResolved: false,
-      isEdited: false,
-    });
+    const created = await commentRepository.create(
+      {
+        boardId: dto.boardId,
+        shapeId: effectiveShapeId,
+        authorId,
+        parentCommentId: dto.parentCommentId ?? null,
+        content: dto.content,
+        isResolved: false,
+        isEdited: false,
+      },
+      session
+    );
 
     // 5. Populate author info for response DTO
-    const populated = await commentRepository.findById(created._id);
+    const populated = await commentRepository.findById(created._id, session);
 
     return {
       comment: populated ?? created,
@@ -133,7 +137,8 @@ export class CommentService {
   async updateComment(
     commentId: Types.ObjectId,
     userId: Types.ObjectId,
-    dto: UpdateCommentDto
+    dto: UpdateCommentDto,
+    session?: ClientSession
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
     const comment = await commentRepository.findById(commentId);
 
@@ -163,10 +168,14 @@ export class CommentService {
       );
     }
 
-    const updated = await commentRepository.updateById(commentId, {
-      content: dto.content,
-      isEdited: true,
-    });
+    const updated = await commentRepository.updateById(
+      commentId,
+      {
+        content: dto.content,
+        isEdited: true,
+      },
+      session
+    );
 
     if (!updated) {
       throw new ApiError(
@@ -187,7 +196,8 @@ export class CommentService {
   async resolveComment(
     commentId: Types.ObjectId,
     userId: Types.ObjectId,
-    dto: ResolveCommentDto
+    dto: ResolveCommentDto,
+    session?: ClientSession
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
     const comment = await commentRepository.findById(commentId);
 
@@ -204,9 +214,13 @@ export class CommentService {
       );
     }
 
-    const updated = await commentRepository.updateById(commentId, {
-      isResolved: dto.isResolved,
-    });
+    const updated = await commentRepository.updateById(
+      commentId,
+      {
+        isResolved: dto.isResolved,
+      },
+      session
+    );
 
     if (!updated) {
       throw new ApiError(
@@ -226,7 +240,8 @@ export class CommentService {
    */
   async deleteComment(
     commentId: Types.ObjectId,
-    userId: Types.ObjectId
+    userId: Types.ObjectId,
+    session?: ClientSession
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
     const comment = await commentRepository.findById(commentId);
 
@@ -268,7 +283,7 @@ export class CommentService {
       );
     }
 
-    const deleted = await commentRepository.softDeleteById(commentId);
+    const deleted = await commentRepository.softDeleteById(commentId, session);
 
     if (!deleted) {
       throw new ApiError(

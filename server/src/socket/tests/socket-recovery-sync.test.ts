@@ -473,7 +473,8 @@ async function runSocketRecoverySyncTests(): Promise<void> {
 
       // Member creates shape
       let shapeCreatedReceivedOnOwner = false;
-      ownerClient.on(SocketEvents.SHAPE_CREATED, (shape) => {
+      ownerClient.on(SocketEvents.SHAPE_CREATED, (payload: any) => {
+        const shape = "shape" in payload ? payload.shape : payload;
         if (shape.type === "rectangle") {
           shapeCreatedReceivedOnOwner = true;
         }

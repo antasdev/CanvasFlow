@@ -260,8 +260,8 @@ async function runSocketCommentSyncTests(): Promise<void> {
     let ownerReceivedBroadcast = false;
     let outsiderReceivedBroadcast = false;
 
-    memberClient.on(SocketEvents.COMMENT_CREATED, (dto: CommentResponseDto) => {
-      capturedCreatedOnMember = dto;
+    memberClient.on(SocketEvents.COMMENT_CREATED, (payload: any) => {
+      capturedCreatedOnMember = "comment" in payload ? payload.comment : payload;
     });
 
     ownerClient.on(SocketEvents.COMMENT_CREATED, () => {
@@ -416,8 +416,8 @@ async function runSocketCommentSyncTests(): Promise<void> {
     console.log("\nScenario 11-14: Editing, Permissions & Authorization...");
 
     let capturedUpdatedOnMember: CommentResponseDto | null = null;
-    memberClient.on(SocketEvents.COMMENT_UPDATED, (dto: CommentResponseDto) => {
-      capturedUpdatedOnMember = dto;
+    memberClient.on(SocketEvents.COMMENT_UPDATED, (payload: any) => {
+      capturedUpdatedOnMember = "comment" in payload ? payload.comment : payload;
     });
 
     // 11. Author can edit own comment
@@ -479,8 +479,8 @@ async function runSocketCommentSyncTests(): Promise<void> {
     console.log("\nScenario 15, 21-23: Resolving and Unresolving Comment Threads...");
 
     let capturedResolvedOnMember: CommentResponseDto | null = null;
-    memberClient.on(SocketEvents.COMMENT_RESOLVED, (dto: CommentResponseDto) => {
-      capturedResolvedOnMember = dto;
+    memberClient.on(SocketEvents.COMMENT_RESOLVED, (payload: any) => {
+      capturedResolvedOnMember = "comment" in payload ? payload.comment : payload;
     });
 
     // 21. Resolve comment

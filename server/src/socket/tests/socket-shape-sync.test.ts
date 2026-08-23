@@ -308,12 +308,12 @@ async function runSocketShapeSyncTests(): Promise<void> {
     let memberReceivedCreated: ShapeResponseDto | null = null;
     let ownerReceivedCreated: ShapeResponseDto | null = null;
 
-    clientMember.on(SocketEvents.SHAPE_CREATED, (shape: ShapeResponseDto) => {
-      memberReceivedCreated = shape;
+    clientMember.on(SocketEvents.SHAPE_CREATED, (payload: any) => {
+      memberReceivedCreated = "shape" in payload ? payload.shape : payload;
     });
 
-    clientOwner.on(SocketEvents.SHAPE_CREATED, (shape: ShapeResponseDto) => {
-      ownerReceivedCreated = shape;
+    clientOwner.on(SocketEvents.SHAPE_CREATED, (payload: any) => {
+      ownerReceivedCreated = "shape" in payload ? payload.shape : payload;
     });
 
     let createdShapeId: string | null = null;
@@ -442,12 +442,12 @@ async function runSocketShapeSyncTests(): Promise<void> {
     let ownerReceivedUpdated: ShapeResponseDto | null = null;
     let memberReceivedUpdated: ShapeResponseDto | null = null;
 
-    clientOwner.on(SocketEvents.SHAPE_UPDATED, (shape: ShapeResponseDto) => {
-      ownerReceivedUpdated = shape;
+    clientOwner.on(SocketEvents.SHAPE_UPDATED, (payload: any) => {
+      ownerReceivedUpdated = "shape" in payload ? payload.shape : payload;
     });
 
-    clientMember.on(SocketEvents.SHAPE_UPDATED, (shape: ShapeResponseDto) => {
-      memberReceivedUpdated = shape;
+    clientMember.on(SocketEvents.SHAPE_UPDATED, (payload: any) => {
+      memberReceivedUpdated = "shape" in payload ? payload.shape : payload;
     });
 
     const updateAck = await new Promise<SocketAck<ShapeResponseDto>>((resolve) => {
@@ -459,7 +459,14 @@ async function runSocketShapeSyncTests(): Promise<void> {
             x: 250,
             y: 350,
             width: 400,
+            height: 200,
             rotation: 90,
+            style: {
+              fill: "#ef4444",
+              stroke: "#991b1b",
+              strokeWidth: 6,
+              opacity: 0.8,
+            },
           },
         },
         (ack: SocketAck<ShapeResponseDto>) => resolve(ack)
@@ -467,39 +474,78 @@ async function runSocketShapeSyncTests(): Promise<void> {
     });
 
     assert(updateAck.success === true, "Update ack must succeed");
+    assert(updateAck.data !== undefined, "Update ack must contain updated data");
     assert(updateAck.data!.x === 250, "Updated x must be 250");
     assert(updateAck.data!.y === 350, "Updated y must be 350");
     assert(updateAck.data!.width === 400, "Updated width must be 400");
+    assert(updateAck.data!.height === 200, "Updated height must be 200");
     assert(updateAck.data!.rotation === 90, "Updated rotation must be 90");
+    if (updateAck.data!.type === "rectangle") {
+      assert(updateAck.data!.style.fill === "#ef4444", "Updated fill must be #ef4444");
+      assert(updateAck.data!.style.stroke === "#991b1b", "Updated stroke must be #991b1b");
+      assert(updateAck.data!.style.strokeWidth === 6, "Updated strokeWidth must be 6");
+      assert(updateAck.data!.style.opacity === 0.8, "Updated opacity must be 0.8");
+    }
 
-    // Verify DB update
-    const updatedDbShape = await ShapeModel.findById(new Types.ObjectId(createdShapeId!));
-    assert(updatedDbShape!.x === 250, "DB x must match updated value");
-    assert(updatedDbShape!.rotation === 90, "DB rotation must match updated value");
+    // Verify DB updated
+    const dbUpdated = await ShapeModel.findById(new Types.ObjectId(createdShapeId!));
+    assert(dbUpdated !== null, "Updated shape must exist in DB");
+    assert(dbUpdated!.x === 250, "DB x must be 250");
+    assert(dbUpdated!.width === 400, "DB width must be 400");
 
+    // Wait for broadcast delivery
     await new Promise((r) => setTimeout(r, 100));
 
     assert(
       ownerReceivedUpdated !== null,
-      "Owner in Board 1 room must receive shape:updated"
+      "Owner in Board 1 room must receive shape:updated broadcast"
+    );
+    assert(
+      (ownerReceivedUpdated as any).id === createdShapeId,
+      "Broadcasted shape id must match updated shape"
     );
     assert(
       (ownerReceivedUpdated as any).x === 250,
-      "Broadcasted updated x must match"
+      "Broadcasted shape x must match updated value"
     );
     assert(
       memberReceivedUpdated === null,
-      "Member (sender) must NOT receive their own shape:updated broadcast"
+      "Updater (sender) must NOT receive their own shape:updated broadcast"
     );
-    console.log("✓ Shape updated, persisted, DTO returned, and broadcast delivered to collaborators only.");
+    console.log("✓ Shape updated, DB verified, DTO ack returned, broadcast delivered with sender excluded.");
+
+    // Test 10: Partial shape update (only updating fill color)
+    console.log("Test 10: Partial shape update (only fill color)...");
+    const partialAck = await new Promise<SocketAck<ShapeResponseDto>>((resolve) => {
+      clientOwner.emit(
+        SocketEvents.SHAPE_UPDATE,
+        {
+          shapeId: createdShapeId!,
+          data: {
+            style: {
+              fill: "#10b981",
+            },
+          },
+        },
+        (ack: SocketAck<ShapeResponseDto>) => resolve(ack)
+      );
+    });
+
+    assert(partialAck.success === true, "Partial update ack must succeed");
+    if (partialAck.data!.type === "rectangle") {
+      assert(partialAck.data!.style.fill === "#10b981", "Fill must be updated to #10b981");
+      // Other dimensions remain intact
+      assert(partialAck.data!.width === 400, "Width must be preserved as 400");
+    }
+    console.log("✓ Partial update succeeded, existing fields preserved.");
 
     // -------------------------------------------------------------
     // DELETE TESTS
     // -------------------------------------------------------------
     console.log("\n--- SHAPE DELETE TESTS ---");
 
-    // Test 10: Invalid shapeId on delete
-    console.log("Test 10: Rejecting invalid shapeId on shape:delete...");
+    // Test 11: Invalid shapeId on delete
+    console.log("Test 11: Rejecting invalid shapeId on shape:delete...");
     await new Promise<void>((resolve) => {
       clientOwner.emit(
         SocketEvents.SHAPE_DELETE,
@@ -516,8 +562,8 @@ async function runSocketShapeSyncTests(): Promise<void> {
     });
     console.log("✓ Invalid shapeId on delete rejected with BAD_REQUEST.");
 
-    // Test 11: Unauthorized delete rejection
-    console.log("Test 11: Rejecting unauthorized delete by outsider...");
+    // Test 12: Unauthorized delete rejection
+    console.log("Test 12: Rejecting unauthorized delete by outsider...");
     await new Promise<void>((resolve) => {
       clientOutsider.emit(
         SocketEvents.SHAPE_DELETE,
@@ -534,16 +580,16 @@ async function runSocketShapeSyncTests(): Promise<void> {
     });
     console.log("✓ Unauthorized delete rejected with FORBIDDEN.");
 
-    // Test 12: Authorized delete, removed from MongoDB, broadcast to Member, sender excluded
-    console.log("Test 12: Owner deletes shape -> DB removed -> Member receives shape:deleted, Owner excluded...");
-    let memberReceivedDeleted: DeleteShapePayload | null = null;
-    let ownerReceivedDeleted: DeleteShapePayload | null = null;
+    // Test 13: Authorized delete, removed from MongoDB, broadcast to Member, sender excluded
+    console.log("Test 13: Owner deletes shape -> DB removed -> Member receives shape:deleted, Owner excluded...");
+    let memberReceivedDeleted: any = null;
+    let ownerReceivedDeleted: any = null;
 
-    clientMember.on(SocketEvents.SHAPE_DELETED, (payload: DeleteShapePayload) => {
+    clientMember.on(SocketEvents.SHAPE_DELETED, (payload: any) => {
       memberReceivedDeleted = payload;
     });
 
-    clientOwner.on(SocketEvents.SHAPE_DELETED, (payload: DeleteShapePayload) => {
+    clientOwner.on(SocketEvents.SHAPE_DELETED, (payload: any) => {
       ownerReceivedDeleted = payload;
     });
 
@@ -567,8 +613,12 @@ async function runSocketShapeSyncTests(): Promise<void> {
       memberReceivedDeleted !== null,
       "Member must receive shape:deleted"
     );
+    const resolvedShapeId =
+      "shapeId" in memberReceivedDeleted
+        ? memberReceivedDeleted.shapeId
+        : memberReceivedDeleted;
     assert(
-      (memberReceivedDeleted as any).shapeId === createdShapeId,
+      resolvedShapeId === createdShapeId,
       "Deleted shapeId must match"
     );
     assert(

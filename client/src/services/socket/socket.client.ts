@@ -6,8 +6,11 @@ import type {
   BoardJoinAckData,
   BoardRecoveryRequestPayload,
   BoardRecoveryStatePayload,
+  CommentCreatedPayload,
   CommentDeletedPayload,
+  CommentResolvedPayload,
   CommentResponseDto,
+  CommentUpdatedPayload,
   ConnectionState,
   CreateCommentPayload,
   CreateShapePayload,
@@ -26,6 +29,8 @@ import type {
   UpdateShapePayload,
 } from "./socket.types";
 
+import { useCollaborationStore } from "@/features/canvas/store";
+
 /**
  * Encapsulated service managing Socket.IO client connections,
  * authentication handshake, board room lifecycle, shape synchronization, and connection state transitions.
@@ -34,6 +39,14 @@ export class SocketClientService {
   private socket: TypedSocket | null = null;
   private connectionState: ConnectionState = "disconnected";
   private stateChangeListeners = new Set<(state: ConnectionState) => void>();
+  private connectionEpoch: number = 0;
+
+  /**
+   * Returns current connection epoch counter.
+   */
+  public getConnectionEpoch(): number {
+    return this.connectionEpoch;
+  }
 
   /**
    * Initializes or returns the authenticated Socket.IO connection.
@@ -75,6 +88,8 @@ export class SocketClientService {
     }) as TypedSocket;
 
     this.socket.on("connect", () => {
+      this.connectionEpoch += 1;
+      useCollaborationStore.getState().incrementEpoch();
       this.setConnectionState("connected");
     });
 
@@ -588,7 +603,7 @@ export class SocketClientService {
    * Subscribes to remote comment creation broadcasts.
    */
   public onCommentCreated(
-    handler: (comment: CommentResponseDto) => void
+    handler: (payload: CommentCreatedPayload | CommentResponseDto) => void
   ): () => void {
     const socket = this.socket ?? this.connect();
     socket.on(SocketEvents.COMMENT_CREATED, handler);
@@ -602,7 +617,7 @@ export class SocketClientService {
    * Subscribes to remote comment update broadcasts.
    */
   public onCommentUpdated(
-    handler: (comment: CommentResponseDto) => void
+    handler: (payload: CommentUpdatedPayload | CommentResponseDto) => void
   ): () => void {
     const socket = this.socket ?? this.connect();
     socket.on(SocketEvents.COMMENT_UPDATED, handler);
@@ -616,7 +631,7 @@ export class SocketClientService {
    * Subscribes to remote comment resolved broadcasts.
    */
   public onCommentResolved(
-    handler: (comment: CommentResponseDto) => void
+    handler: (payload: CommentResolvedPayload | CommentResponseDto) => void
   ): () => void {
     const socket = this.socket ?? this.connect();
     socket.on(SocketEvents.COMMENT_RESOLVED, handler);
@@ -630,7 +645,7 @@ export class SocketClientService {
    * Subscribes to remote comment deletion broadcasts.
    */
   public onCommentDeleted(
-    handler: (payload: CommentDeletedPayload) => void
+    handler: (payload: CommentDeletedPayload | { boardId: string; commentId: string }) => void
   ): () => void {
     const socket = this.socket ?? this.connect();
     socket.on(SocketEvents.COMMENT_DELETED, handler);

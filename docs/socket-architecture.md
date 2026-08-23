@@ -514,3 +514,100 @@ When network conditions fluctuate rapidly, multiple asynchronous recovery cycles
 
 ### 6. Decoupled Persistence & Soft-Deletion Cascades
 In collaborative systems, hard-deleting records or cascading deletes can destroy contextual collaborator discussions. By adopting a soft-delete model with masked content on comments and a foreign-key nullification lifecycle (`shapeId: null` on shape deletion), the collaborative history remains resilient without orphaned dangling references.
+
+---
+
+## 21. Real-Time Collaboration Ordering, Versioning & Reliability (Slice 11)
+
+### Architectural Architecture
+
+```text
+       Authoritative Mutation
+                  │
+                  ▼
+   Validate Zod & Authorize Access
+                  │
+                  ▼
+CollaborationVersionService.executeWithRevision
+                  │
+      ┌───────────┴───────────┐
+      │  MongoDB Transaction  │
+      │  ├── Persist Mutation │
+      │  └── $inc Board.collaborationRevision
+      │  Commit Transaction   │
+      └───────────┬───────────┘
+                  │
+                  ▼
+  CollaborationEventMeta Construction
+  ├── eventId: crypto.randomUUID()
+  ├── boardId: boardObjectId.toString()
+  ├── actorId: user.userId.toString()
+  ├── socketId: socket.id
+  ├── revision: updatedBoard.collaborationRevision
+  └── occurredAt: ISO timestamp
+                  │
+                  ▼
+  Socket.IO Broadcast Envelope
+  ├── shape:created  -> { meta, shape }
+  ├── shape:updated  -> { meta, shape }
+  ├── shape:deleted  -> { meta, shapeId }
+  ├── comment:created -> { meta, comment }
+  ├── comment:updated -> { meta, comment }
+  └── comment:resolved -> { meta, comment }
+                  │
+                  ▼
+           Client Receiver
+                  │
+      ┌───────────┴───────────┐
+      │  checkEventFreshness  │
+      └───────────┬───────────┘
+                  │
+     ┌────────────┼────────────┐
+     ▼            ▼            ▼
+  incoming     incoming     incoming
+  <= current   === curr + 1 > curr + 1
+     │            │            │
+     ▼            ▼            ▼
+  "ignore"     "apply"       "gap"
+  (drop stale) (apply state) (trigger Slice 10 recovery)
+```
+
+### 1. Authoritative Monotonic Board Revision
+- Every `Board` document maintains an integer `collaborationRevision: { type: Number, default: 0, min: 0 }`.
+- Only **authoritative mutations** that persist into MongoDB (Shapes and Comments) increment `collaborationRevision`.
+- Ephemeral mutations (Presence, Cursors, Selections, Live transforms, Soft-locks) **never** increment `collaborationRevision`.
+
+### 2. Transaction Atomicity & Write Conflict Retry
+- Mutation persistence and `$inc: { collaborationRevision: 1 }` execute together inside a MongoDB `ClientSession` transaction.
+- If concurrent mutations contend on the same `Board` document, `CollaborationVersionService` intercepts `TransientTransactionError` / `WriteConflict` and applies automatic exponential backoff retries (up to 5 attempts).
+- An event is **never** broadcast if mutation persistence fails.
+
+### 3. Server-Generated Event Envelopes
+Every versioned socket event wraps its payload with an authoritative metadata block:
+```typescript
+export type CollaborationEventMeta = {
+  eventId: string;     // Unique UUID generated server-side
+  boardId: string;     // Canonical board identifier
+  actorId: string;     // Authenticated user ID who performed mutation
+  socketId: string;    // Originating socket ID
+  revision: number;    // Monotonically increasing board revision integer
+  occurredAt: string;  // ISO 8601 server timestamp
+};
+```
+
+### 4. Client Freshness State Machine
+Client components and hooks (`useCanvasSocket`, `useCommentSocket`) route incoming events through `useCollaborationStore.checkEventFreshness(boardId, meta.revision)`:
+1. **Stale or Duplicate (`incoming <= currentRevision`)**: Discarded silently. Protects against out-of-order delivery, slow networks, and post-reconnection message echoes.
+2. **Sequential Next (`incoming === currentRevision + 1` or `currentRevision === 0`)**: Applied directly to the canvas/comment store, advancing `currentRevision`.
+3. **Gap Detected (`incoming > currentRevision + 1`)**: Indicates one or more intermediate mutations were dropped or missed. Automatically triggers authoritative snapshot recovery via `useBoardRecovery(boardId, canvasId)`.
+
+### 5. Concept Disambiguation: Epoch vs. Revision vs. Generation
+| Concept | Scope | Source | Purpose |
+| :--- | :--- | :--- | :--- |
+| **`connectionEpoch`** | Ephemeral Connection | Client Socket.IO | Tracks "Which socket connection session am I currently in?" Incremented on every socket `connect`. |
+| **`collaborationRevision`**| Authoritative Board State | Server MongoDB | Tracks "Which durable board mutation state am I seeing?" Monotonically incremented per board mutation. |
+| **`recoveryGeneration`** | Async Recovery Cycle | Client Recovery Hook | Tracks "Is this async REST hydration response still fresh?" Prevents slow recovery responses from overwriting newer snapshots. |
+
+### 6. Undo/Redo Isolation Guarantees
+- Monotonic revision checks, epoch updates, and recovery hydration execute in `useCollaborationStore` and dedicated remote store actions (`replaceShapesFromRecovery`, `applyRemoteShapeCreated`, `applyRemoteShapeUpdated`, `applyRemoteShapeDeleted`).
+- Undo/redo stacks (`past` / `future` in `useCanvasStore`) are reserved strictly for local user edits, maintaining pristine edit histories across real-time collaboration.

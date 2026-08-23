@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { ClientSession, Types } from "mongoose";
 
 import { shapeRepository } from "./shape.repository";
 import { canvasRepository } from "@/modules/canvas";
@@ -17,7 +17,8 @@ import {
 export class ShapeService {
   async createShape(
     createdBy: Types.ObjectId,
-    dto: CreateShapeDto
+    dto: CreateShapeDto,
+    session?: ClientSession
   ) {
     const canvas = await canvasRepository.findById(
       dto.canvasId
@@ -39,11 +40,14 @@ export class ShapeService {
       ? highestShape.zIndex + 1
       : 1;
 
-    const shape = await shapeRepository.create({
-      ...dto,
-      createdBy,
-      zIndex,
-    });
+    const shape = await shapeRepository.create(
+      {
+        ...dto,
+        createdBy,
+        zIndex,
+      },
+      session
+    );
 
     return {
       shape,
@@ -75,7 +79,8 @@ export class ShapeService {
 
   async updateShape(
     id: Types.ObjectId,
-    dto: UpdateShapeDto
+    dto: UpdateShapeDto,
+    session?: ClientSession
   ) {
     const shape =
       await shapeRepository.findById(id);
@@ -90,7 +95,8 @@ export class ShapeService {
     const updatedShape =
       await shapeRepository.updateById(
         id,
-        dto
+        dto,
+        session
       );
 
     if (!updatedShape) {
@@ -119,7 +125,8 @@ export class ShapeService {
   }
 
   async deleteShape(
-    id: Types.ObjectId
+    id: Types.ObjectId,
+    session?: ClientSession
   ) {
     const shape =
       await shapeRepository.findById(id);
@@ -143,8 +150,8 @@ export class ShapeService {
       );
     }
 
-    await shapeRepository.deleteById(id);
-    await commentRepository.nullifyShapeId(id);
+    await shapeRepository.deleteById(id, session);
+    await commentRepository.nullifyShapeId(id, session);
 
     return {
       boardId: canvas.boardId,

@@ -15,6 +15,8 @@ import {
 } from "../socket.types";
 import { boardRecoveryRequestSchema } from "../validation/recovery.validation";
 
+import { collaborationVersionService } from "../services/collaboration-version.service";
+
 /**
  * Registers board reconnection and state recovery handlers on an authenticated socket.
  * Provides idempotent room rejoining and authoritative presence synchronization.
@@ -67,16 +69,20 @@ export const registerRecoveryHandlers = (socket: AuthSocket): void => {
           });
         }
 
-        // 6. Build recovery state response
+        // 6. Query authoritative collaboration revision
+        const revision = await collaborationVersionService.getBoardRevision(boardObjectId);
+
+        // 7. Build recovery state response
         const recoveryData: BoardRecoveryStatePayload = {
           boardId: parsed.data.boardId,
+          revision,
           recoveredAt: new Date().toISOString(),
           presence: {
             activeUsers,
           },
         };
 
-        // 7. Push recovery state to reconnecting client and ack
+        // 8. Push recovery state to reconnecting client and ack
         socket.emit(SocketEvents.BOARD_RECOVERY_STATE, recoveryData);
 
         callback?.({

@@ -9,6 +9,7 @@ import { HttpStatus, Messages } from "@/shared/constants";
 
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
+import { collaborationVersionService } from "../services/collaboration-version.service";
 import {
   AuthSocket,
   CreateShapePayload,
@@ -142,25 +143,39 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shapeType = ShapeType.STICKY_NOTE;
         }
 
-        // 5. Authoritative persistence via ShapeService
-        const result = await shapeService.createShape(userId, {
-          canvasId: canvasObjectId,
-          type: shapeType,
-          x: parsed.data.x,
-          y: parsed.data.y,
-          width: parsed.data.width,
-          height: parsed.data.height,
-          rotation: parsed.data.rotation ?? 0,
-          style: parsed.data.style,
-        });
+        // 5. Authoritative persistence via ShapeService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.createShape(
+              userId,
+              {
+                canvasId: canvasObjectId,
+                type: shapeType,
+                x: parsed.data.x,
+                y: parsed.data.y,
+                width: parsed.data.width,
+                height: parsed.data.height,
+                rotation: parsed.data.rotation ?? 0,
+                style: parsed.data.style,
+              },
+              session
+            );
+          }
+        );
 
-        // 5. Transform to canonical response DTO
+        // 6. Transform to canonical response DTO
         const responseDto = ShapeMapper.toResponseDto(result.shape);
 
-        // 6. Broadcast to other collaborators in the room (excludes sender)
-        socket.to(room).emit(SocketEvents.SHAPE_CREATED, responseDto);
+        // 7. Broadcast envelope to other collaborators in the room (excludes sender)
+        socket.to(room).emit(SocketEvents.SHAPE_CREATED, {
+          meta,
+          shape: responseDto,
+        });
 
-        // 7. Acknowledge creator with canonical persisted shape
+        // 8. Acknowledge creator with canonical persisted shape
         callback?.({
           success: true,
           data: responseDto,
@@ -248,17 +263,28 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 4. Authoritative persistence via ShapeService
-        const result = await shapeService.updateShape(
-          shapeObjectId,
-          parsed.data.data
+        // 4. Authoritative persistence via ShapeService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.updateShape(
+              shapeObjectId,
+              parsed.data.data,
+              session
+            );
+          }
         );
 
         // 5. Transform to canonical response DTO
         const responseDto = ShapeMapper.toResponseDto(result.shape);
 
-        // 6. Broadcast to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.SHAPE_UPDATED, responseDto);
+        // 6. Broadcast envelope to other room members (excludes sender)
+        socket.to(room).emit(SocketEvents.SHAPE_UPDATED, {
+          meta,
+          shape: responseDto,
+        });
 
         // 7. Acknowledge sender
         callback?.({
@@ -348,11 +374,19 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           );
         }
 
-        // 4. Authoritative deletion via ShapeService
-        await shapeService.deleteShape(shapeObjectId);
+        // 4. Authoritative deletion via ShapeService & atomic revision increment
+        const { meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.deleteShape(shapeObjectId, session);
+          }
+        );
 
-        // 5. Broadcast deletion to other room members (excludes sender)
+        // 5. Broadcast deletion envelope to other room members (excludes sender)
         socket.to(room).emit(SocketEvents.SHAPE_DELETED, {
+          meta,
           shapeId: parsed.data.shapeId,
         });
 
