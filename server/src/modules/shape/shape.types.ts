@@ -37,6 +37,8 @@ export type Shape = {
 
   createdBy: Types.ObjectId;
 
+  version: number;
+
   createdAt: Date;
   updatedAt: Date;
 };
@@ -62,6 +64,8 @@ export type CreateShapeData = {
   style?: Record<string, unknown>;
 
   createdBy: Types.ObjectId;
+
+  version?: number;
 };
 
 /**

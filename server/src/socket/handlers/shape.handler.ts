@@ -4,7 +4,7 @@ import { z } from "zod";
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
 import { shapeService, ShapeMapper, ShapeType } from "@/modules/shape";
-import { ApiError } from "@/shared/utils";
+import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
 
 import { SocketEvents } from "../socket.events";
@@ -65,6 +65,7 @@ const createShapeSocketSchema = z.object({
 
 const updateShapeSocketSchema = z.object({
   shapeId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
   data: z.object({
     x: z.number().finite("x must be a finite number.").optional(),
     y: z.number().finite("y must be a finite number.").optional(),
@@ -77,6 +78,7 @@ const updateShapeSocketSchema = z.object({
 
 const deleteShapeSocketSchema = z.object({
   shapeId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
 });
 
 /**
@@ -272,7 +274,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
             return shapeService.updateShape(
               shapeObjectId,
               parsed.data.data,
-              session
+              session,
+              parsed.data.expectedVersion
             );
           }
         );
@@ -292,6 +295,21 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           data: responseDto,
         });
       } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
         if (error instanceof ApiError) {
           const code =
             error.statusCode === HttpStatus.NOT_FOUND
@@ -380,7 +398,11 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           userId,
           socket.id,
           async (session) => {
-            return shapeService.deleteShape(shapeObjectId, session);
+            return shapeService.deleteShape(
+              shapeObjectId,
+              session,
+              parsed.data.expectedVersion
+            );
           }
         );
 
@@ -395,6 +417,21 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           success: true,
         });
       } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
         if (error instanceof ApiError) {
           const code =
             error.statusCode === HttpStatus.NOT_FOUND

@@ -23,6 +23,7 @@ export function mapCommentResponseToComment(dto: CommentResponseDto): Comment {
     isResolved: Boolean(dto.isResolved),
     isEdited: Boolean(dto.isEdited),
     isDeleted: Boolean(dto.isDeleted),
+    version: dto.version ?? 1,
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
   };

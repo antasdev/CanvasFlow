@@ -30,11 +30,27 @@ export type ActiveUser = {
 };
 
 /**
+ * Conflict Resource Types & Conflict Payload (Slice 12)
+ */
+export type ConflictResourceType = "shape" | "comment";
+
+export type CollaborationConflictPayload = {
+  code: "CONFLICT";
+  resourceType: ConflictResourceType;
+  resourceId: string;
+  currentVersion: number;
+  message?: string;
+};
+
+/**
  * Structured socket acknowledgement error details.
  */
 export type SocketAckError = {
   code?: string;
   message: string;
+  resourceType?: ConflictResourceType;
+  resourceId?: string;
+  currentVersion?: number;
 };
 
 /**
@@ -95,6 +111,7 @@ export type CreateShapePayload = {
 
 export type UpdateShapePayload = {
   shapeId: string;
+  expectedVersion?: number;
   data: {
     x?: number;
     y?: number;
@@ -107,6 +124,7 @@ export type UpdateShapePayload = {
 
 export type DeleteShapePayload = {
   shapeId: string;
+  expectedVersion?: number;
 };
 
 /**
@@ -231,18 +249,21 @@ export type CreateCommentPayload = {
 export type UpdateCommentPayload = {
   boardId: string;
   commentId: string;
+  expectedVersion?: number;
   content: string;
 };
 
 export type ResolveCommentPayload = {
   boardId: string;
   commentId: string;
+  expectedVersion?: number;
   isResolved: boolean;
 };
 
 export type DeleteCommentPayload = {
   boardId: string;
   commentId: string;
+  expectedVersion?: number;
 };
 
 export type CommentDeletedPayload = {

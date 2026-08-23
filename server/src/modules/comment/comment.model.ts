@@ -51,6 +51,13 @@ const commentSchema = new Schema<Comment>(
       type: Date,
       default: null,
     },
+
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: 1,
+    },
   },
   {
     timestamps: true,

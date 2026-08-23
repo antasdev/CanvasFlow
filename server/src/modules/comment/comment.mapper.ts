@@ -49,6 +49,7 @@ export class CommentMapper {
       isResolved: Boolean(doc.isResolved),
       isEdited: Boolean(doc.isEdited),
       isDeleted,
+      version: doc.version ?? 1,
       createdAt:
         doc.createdAt instanceof Date
           ? doc.createdAt.toISOString()

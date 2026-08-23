@@ -273,17 +273,20 @@ export class SocketClientService {
    *
    * @param shapeId - Shape identifier
    * @param data - Partial shape update properties
+   * @param expectedVersion - Expected OCC version
    * @returns Promise resolving with canonical updated ShapeResponseDto
    */
   public updateShape(
     shapeId: string,
-    data: UpdateShapePayload["data"]
+    data: UpdateShapePayload["data"],
+    expectedVersion?: number
   ): Promise<ShapeResponseDto> {
     return new Promise((resolve, reject) => {
       const socket = this.socket ?? this.connect();
 
       const payload: UpdateShapePayload = {
         shapeId,
+        expectedVersion,
         data,
       };
 
@@ -291,11 +294,16 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to update shape.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          reject(err);
         }
       });
     });
@@ -305,25 +313,32 @@ export class SocketClientService {
    * Emits shape deletion request to authoritative backend over Socket.IO.
    *
    * @param shapeId - Shape identifier to delete
+   * @param expectedVersion - Expected OCC version
    * @returns Promise resolving on successful deletion acknowledgement
    */
-  public deleteShape(shapeId: string): Promise<void> {
+  public deleteShape(shapeId: string, expectedVersion?: number): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = this.socket ?? this.connect();
 
       const payload: DeleteShapePayload = {
         shapeId,
+        expectedVersion,
       };
 
       socket.emit(SocketEvents.SHAPE_DELETE, payload, (response) => {
         if (response.success) {
           resolve();
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to delete shape.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          reject(err);
         }
       });
     });
@@ -543,11 +558,16 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to update comment.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          reject(err);
         }
       });
     });
@@ -566,11 +586,16 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to resolve comment.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          reject(err);
         }
       });
     });
@@ -589,11 +614,16 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to delete comment.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          reject(err);
         }
       });
     });

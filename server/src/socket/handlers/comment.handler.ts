@@ -7,7 +7,7 @@ import {
   resolveCommentSocketSchema,
   deleteCommentSocketSchema,
 } from "@/modules/comment/comment.validation";
-import { ApiError } from "@/shared/utils";
+import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
 
 import { SocketEvents } from "../socket.events";
@@ -179,7 +179,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               {
                 content: parsed.data.content,
               },
-              session
+              session,
+              parsed.data.expectedVersion
             );
           }
         );
@@ -202,6 +203,21 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           data: responseDto,
         });
       } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
         if (error instanceof ApiError) {
           const code =
             error.statusCode === HttpStatus.NOT_FOUND
@@ -278,7 +294,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               {
                 isResolved: parsed.data.isResolved,
               },
-              session
+              session,
+              parsed.data.expectedVersion
             );
           }
         );
@@ -301,6 +318,21 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           data: responseDto,
         });
       } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
         if (error instanceof ApiError) {
           const code =
             error.statusCode === HttpStatus.NOT_FOUND
@@ -374,7 +406,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
             return commentService.deleteComment(
               commentObjectId,
               userId,
-              session
+              session,
+              parsed.data.expectedVersion
             );
           }
         );
@@ -405,6 +438,21 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           data: responseDto,
         });
       } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
         if (error instanceof ApiError) {
           const code =
             error.statusCode === HttpStatus.NOT_FOUND

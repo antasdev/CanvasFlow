@@ -22,6 +22,7 @@ export type Comment = {
   isResolved: boolean;
   isEdited: boolean;
   isDeleted: boolean;
+  version?: number;
   createdAt: string;
   updatedAt: string;
   isOptimistic?: boolean;

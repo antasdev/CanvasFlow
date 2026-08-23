@@ -55,6 +55,62 @@ export class CommentRepository {
       });
   }
 
+  async updateWithExpectedVersion(
+    id: Types.ObjectId,
+    expectedVersion: number,
+    data: UpdateCommentData,
+    session?: ClientSession
+  ): Promise<CommentDocument | null> {
+    return CommentModel.findOneAndUpdate(
+      {
+        _id: id,
+        version: expectedVersion,
+        deletedAt: null,
+      },
+      {
+        $set: data,
+        $inc: { version: 1 },
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+        session,
+      }
+    ).populate({
+      path: "authorId",
+      select: "fullName email profile",
+    });
+  }
+
+  async softDeleteWithExpectedVersion(
+    id: Types.ObjectId,
+    expectedVersion: number,
+    session?: ClientSession
+  ): Promise<CommentDocument | null> {
+    return CommentModel.findOneAndUpdate(
+      {
+        _id: id,
+        version: expectedVersion,
+        deletedAt: null,
+      },
+      {
+        $set: {
+          content: "",
+          deletedAt: new Date(),
+        },
+        $inc: { version: 1 },
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+        session,
+      }
+    ).populate({
+      path: "authorId",
+      select: "fullName email profile",
+    });
+  }
+
   async updateById(
     id: Types.ObjectId,
     data: UpdateCommentData,
@@ -62,7 +118,10 @@ export class CommentRepository {
   ): Promise<CommentDocument | null> {
     return CommentModel.findByIdAndUpdate(
       id,
-      { $set: data },
+      {
+        $set: data,
+        $inc: { version: 1 },
+      },
       {
         returnDocument: "after",
         runValidators: true,
@@ -85,6 +144,7 @@ export class CommentRepository {
           content: "",
           deletedAt: new Date(),
         },
+        $inc: { version: 1 },
       },
       {
         returnDocument: "after",

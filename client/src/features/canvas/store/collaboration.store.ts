@@ -5,15 +5,24 @@ export type FreshnessResult = {
   currentRevision: number;
 };
 
+export type CollaborationConflict = {
+  resourceType: "shape" | "comment";
+  resourceId: string;
+  currentVersion: number;
+};
+
 export interface CollaborationState {
   boardRevisions: Record<string, number>;
   connectionEpoch: number;
   isRecovering: boolean;
+  lastConflict: CollaborationConflict | null;
 
   getRevision: (boardId: string) => number;
   setRevision: (boardId: string, revision: number) => void;
   incrementEpoch: () => number;
   setRecovering: (isRecovering: boolean) => void;
+  setConflict: (conflict: CollaborationConflict) => void;
+  clearConflict: () => void;
 
   /**
    * Checks the ordering and freshness of an incoming authoritative event revision.
@@ -30,6 +39,7 @@ const initialState = {
   boardRevisions: {},
   connectionEpoch: 0,
   isRecovering: false,
+  lastConflict: null as CollaborationConflict | null,
 };
 
 export const useCollaborationStore = create<CollaborationState>()((set, get) => ({
@@ -56,6 +66,14 @@ export const useCollaborationStore = create<CollaborationState>()((set, get) => 
 
   setRecovering: (isRecovering: boolean): void => {
     set({ isRecovering });
+  },
+
+  setConflict: (conflict: CollaborationConflict): void => {
+    set({ lastConflict: conflict });
+  },
+
+  clearConflict: (): void => {
+    set({ lastConflict: null });
   },
 
   checkEventFreshness: (boardId: string, revision: number): FreshnessResult => {

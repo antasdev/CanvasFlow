@@ -24,6 +24,7 @@ export type CommentResponseDto = {
   isResolved: boolean;
   isEdited: boolean;
   isDeleted: boolean;
+  version: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -42,6 +43,7 @@ export type CreateCommentDto = {
  * Internal/Service DTO for updating an existing comment's content.
  */
 export type UpdateCommentDto = {
+  expectedVersion?: number;
   content: string;
 };
 
@@ -49,6 +51,7 @@ export type UpdateCommentDto = {
  * Internal/Service DTO for resolving/unresolving a comment thread.
  */
 export type ResolveCommentDto = {
+  expectedVersion?: number;
   isResolved: boolean;
 };
 

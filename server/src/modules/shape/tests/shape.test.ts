@@ -41,6 +41,7 @@ async function runTests() {
       opacity: 0.8,
     },
     createdBy: mockUserId,
+    version: 1,
     createdAt: mockDate,
     updatedAt: mockDate,
   };
@@ -56,6 +57,7 @@ async function runTests() {
     responseDto.createdBy === mockUserId.toString(),
     "DTO createdBy must be a string"
   );
+  assert(responseDto.version === 1, "DTO version must match");
   assert(responseDto.type === "rectangle", "DTO type must be lowercase rectangle");
   assert(responseDto.x === 100, "DTO x must match");
   assert(responseDto.y === 200, "DTO y must match");
@@ -89,6 +91,7 @@ async function runTests() {
     zIndex: 1,
     style: {},
     createdBy: mockUserId,
+    version: 1,
     createdAt: mockDate,
     updatedAt: mockDate,
   };

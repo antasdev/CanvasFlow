@@ -12,6 +12,7 @@ export type BaseShapeResponseDto = {
   rotation: number;
   zIndex: number;
   createdBy: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
 };

@@ -8,7 +8,7 @@ import {
   UpdateShapeDto,
 } from "./shape.dto";
 
-import { ApiError } from "@/shared/utils";
+import { ApiError, ConflictError } from "@/shared/utils";
 import {
   HttpStatus,
   Messages,
@@ -80,36 +80,63 @@ export class ShapeService {
   async updateShape(
     id: Types.ObjectId,
     dto: UpdateShapeDto,
-    session?: ClientSession
+    session?: ClientSession,
+    expectedVersion?: number
   ) {
-    const shape =
-      await shapeRepository.findById(id);
+    const effectiveExpectedVersion = expectedVersion ?? dto.expectedVersion;
 
-    if (!shape) {
-      throw new ApiError(
-        HttpStatus.NOT_FOUND,
-        Messages.SHAPE_NOT_FOUND
+    let updatedShape = null;
+
+    if (effectiveExpectedVersion !== undefined) {
+      updatedShape = await shapeRepository.updateWithExpectedVersion(
+        id,
+        effectiveExpectedVersion,
+        dto,
+        session
       );
-    }
 
-    const updatedShape =
-      await shapeRepository.updateById(
+      if (!updatedShape) {
+        const existing = await shapeRepository.findById(id, session);
+        if (!existing) {
+          throw new ApiError(
+            HttpStatus.NOT_FOUND,
+            Messages.SHAPE_NOT_FOUND
+          );
+        }
+        throw new ConflictError(
+          "shape",
+          id.toString(),
+          existing.version,
+          "Shape has been modified by another collaborator."
+        );
+      }
+    } else {
+      const shape = await shapeRepository.findById(id, session);
+
+      if (!shape) {
+        throw new ApiError(
+          HttpStatus.NOT_FOUND,
+          Messages.SHAPE_NOT_FOUND
+        );
+      }
+
+      updatedShape = await shapeRepository.updateById(
         id,
         dto,
         session
       );
 
-    if (!updatedShape) {
-      throw new ApiError(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to update shape."
-      );
+      if (!updatedShape) {
+        throw new ApiError(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Failed to update shape."
+        );
+      }
     }
 
-    const canvas =
-      await canvasRepository.findById(
-        shape.canvasId
-      );
+    const canvas = await canvasRepository.findById(
+      updatedShape.canvasId
+    );
 
     if (!canvas) {
       throw new ApiError(
@@ -126,22 +153,50 @@ export class ShapeService {
 
   async deleteShape(
     id: Types.ObjectId,
-    session?: ClientSession
+    session?: ClientSession,
+    expectedVersion?: number
   ) {
-    const shape =
-      await shapeRepository.findById(id);
+    let canvasId: Types.ObjectId | null = null;
 
-    if (!shape) {
-      throw new ApiError(
-        HttpStatus.NOT_FOUND,
-        Messages.SHAPE_NOT_FOUND
+    if (expectedVersion !== undefined) {
+      const deleted = await shapeRepository.deleteWithExpectedVersion(
+        id,
+        expectedVersion,
+        session
       );
+
+      if (!deleted) {
+        const existing = await shapeRepository.findById(id, session);
+        if (!existing) {
+          throw new ApiError(
+            HttpStatus.NOT_FOUND,
+            Messages.SHAPE_NOT_FOUND
+          );
+        }
+        throw new ConflictError(
+          "shape",
+          id.toString(),
+          existing.version,
+          "Shape has been modified by another collaborator."
+        );
+      }
+
+      canvasId = deleted.canvasId;
+    } else {
+      const shape = await shapeRepository.findById(id, session);
+
+      if (!shape) {
+        throw new ApiError(
+          HttpStatus.NOT_FOUND,
+          Messages.SHAPE_NOT_FOUND
+        );
+      }
+
+      canvasId = shape.canvasId;
+      await shapeRepository.deleteById(id, session);
     }
 
-    const canvas =
-      await canvasRepository.findById(
-        shape.canvasId
-      );
+    const canvas = await canvasRepository.findById(canvasId);
 
     if (!canvas) {
       throw new ApiError(
@@ -150,7 +205,6 @@ export class ShapeService {
       );
     }
 
-    await shapeRepository.deleteById(id, session);
     await commentRepository.nullifyShapeId(id, session);
 
     return {

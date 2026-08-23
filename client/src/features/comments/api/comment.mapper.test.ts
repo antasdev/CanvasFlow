@@ -21,6 +21,7 @@ describe("Comment Mapper (mapCommentResponseToComment)", () => {
       isResolved: false,
       isEdited: false,
       isDeleted: false,
+      version: 1,
       createdAt: "2026-08-23T10:00:00.000Z",
       updatedAt: "2026-08-23T10:00:00.000Z",
     };
@@ -36,6 +37,7 @@ describe("Comment Mapper (mapCommentResponseToComment)", () => {
     expect(result.isResolved).toBe(false);
     expect(result.isEdited).toBe(false);
     expect(result.isDeleted).toBe(false);
+    expect(result.version).toBe(1);
   });
 
   it("should mask content when comment is soft-deleted", () => {
@@ -49,6 +51,7 @@ describe("Comment Mapper (mapCommentResponseToComment)", () => {
       isResolved: false,
       isEdited: false,
       isDeleted: true,
+      version: 2,
       createdAt: "2026-08-23T10:00:00.000Z",
       updatedAt: "2026-08-23T10:05:00.000Z",
     };
@@ -57,5 +60,6 @@ describe("Comment Mapper (mapCommentResponseToComment)", () => {
 
     expect(result.isDeleted).toBe(true);
     expect(result.content).toBe("");
+    expect(result.version).toBe(2);
   });
 });

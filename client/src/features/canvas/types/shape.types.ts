@@ -19,6 +19,7 @@ export type BaseShape = {
   rotation: number;
   opacity: number;
   zIndex: number;
+  version?: number;
 };
 
 export type RectangleShape = BaseShape & {

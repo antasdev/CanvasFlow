@@ -20,6 +20,7 @@ export type Comment = {
   isResolved: boolean;
   isEdited: boolean;
   deletedAt?: Date | null;
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -35,6 +36,7 @@ export type CreateCommentData = {
   content: string;
   isResolved?: boolean;
   isEdited?: boolean;
+  version?: number;
 };
 
 /**

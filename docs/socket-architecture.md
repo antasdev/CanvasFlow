@@ -611,3 +611,163 @@ Client components and hooks (`useCanvasSocket`, `useCommentSocket`) route incomi
 ### 6. Undo/Redo Isolation Guarantees
 - Monotonic revision checks, epoch updates, and recovery hydration execute in `useCollaborationStore` and dedicated remote store actions (`replaceShapesFromRecovery`, `applyRemoteShapeCreated`, `applyRemoteShapeUpdated`, `applyRemoteShapeDeleted`).
 - Undo/redo stacks (`past` / `future` in `useCanvasStore`) are reserved strictly for local user edits, maintaining pristine edit histories across real-time collaboration.
+
+---
+
+## Slice 12: Concurrent Mutation Conflict Protection (Optimistic Concurrency Control)
+
+Slice 12 introduces server-authoritative **Optimistic Concurrency Control (OCC)** for all durable whiteboard entities (`Shapes` and `Comments`).
+
+### 1. The Concurrency Problem
+While Slice 11 orders durable mutations globally across a board room (`collaborationRevision`), Slice 12 solves entity-level concurrent mutation races:
+> *What happens when two collaborators read version 1 of an entity and concurrently attempt to update or delete it with different data?*
+
+```text
+                  Entity (Shape/Comment) [Version: 1]
+                                  │
+         ┌────────────────────────┴────────────────────────┐
+         │                                                 │
+   Client A: Update                                  Client B: Update
+   expectedVersion: 1                                expectedVersion: 1
+         │                                                 │
+         ▼                                                 ▼
+   [WINNER - FIRST]                                  [LOSER - CONFLICT]
+   Version becomes 2                                 Predicate { version: 1 } fails
+   Board revision incremented                        409 CONFLICT returned
+   Broadcast sent to room                            Transaction aborted
+                                                     Zero revision increment
+                                                     Zero broadcast
+                                                     Triggers Slice 10 recovery
+```
+
+### 2. Multi-Tier Concurrency Architecture
+CanvasFlow cleanly separates three distinct versioning and concurrency controls:
+
+| Control | Scope | Source | Persistence | Role |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Shape.version` / `Comment.version`** | Entity Lifecycle | Server MongoDB | Persisted on Entity (`min: 1`) | **Optimistic Concurrency Control (OCC)**. Validates that the client's write was based on the latest entity state. |
+| **`collaborationRevision`** | Board Room | Server MongoDB | Persisted on Board (`min: 0`) | **Global Event Ordering & Gap Detection**. Enforces causal event ordering and stale event rejection across room. |
+| **`shapeLocks`** | Collaborative Interaction | Server Memory | Ephemeral in-memory | **UX Conflict Avoidance**. Prevents visual fighting during active drag/resize or text edit sessions. |
+
+> **Key Rule**: Ephemeral soft-locks are a UX optimization, NOT a database concurrency guarantee. OCC functions reliably even if a shape is unlocked or if lock heartbeats expire.
+
+### 3. Atomic Compare-and-Modify Pattern
+OCC checks are executed directly within MongoDB query predicates to prevent read-then-write race conditions:
+
+```typescript
+// Atomically match entity ID AND expected version, then increment version
+const updated = await ShapeModel.findOneAndUpdate(
+  {
+    _id: shapeId,
+    version: expectedVersion,
+  },
+  {
+    $set: updateFields,
+    $inc: { version: 1 },
+  },
+  { new: true, session }
+);
+
+if (!updated) {
+  const existing = await ShapeModel.findById(shapeId, null, { session });
+  if (!existing) {
+    throw new ApiError(HttpStatus.NOT_FOUND, "Shape not found.");
+  }
+  // Mismatch detected -> trigger 409 Conflict
+  throw new ConflictError("shape", shapeId.toString(), existing.version);
+}
+```
+
+### 4. Structured Conflict Protocol
+When an OCC predicate fails, the server responds with a structured 409 conflict acknowledgement:
+
+```typescript
+export type CollaborationConflictPayload = {
+  code: "CONFLICT";
+  resourceType: "shape" | "comment";
+  resourceId: string;
+  currentVersion: number;
+  message?: string;
+};
+```
+
+### 5. Zero-Pollution Semantics
+When an OCC conflict occurs:
+1. **Zero Entity Mutation**: The loser's modifications are completely discarded.
+2. **Zero Version Increment**: Entity version is not modified by the failed attempt.
+3. **Zero Board Revision Increment**: The MongoDB transaction aborts, ensuring `collaborationRevision` is not consumed.
+4. **Zero Broadcast**: No socket events (`shape:updated`, `comment:updated`, etc.) are broadcast to peer clients.
+5. **Zero History Pollution**: The loser's local undo/redo stack is not corrupted.
+6. **Automatic Recovery**: The conflicting client handles the 409 conflict by querying authoritative state via Slice 10 recovery (`useBoardRecovery`), synchronizing to the winner's version, and presenting fresh state to the user.
+
+---
+
+## Senior Engineering Interview Questions & Deep Architecture Guide
+
+### Q1: Why do we maintain both an entity-level `version` and a board-level `collaborationRevision`?
+**Answer:**
+They solve two fundamentally different distributed systems problems:
+1. **Entity-level `version` (Optimistic Concurrency Control)**: Protects against write-after-write conflicts on a specific record (e.g. two users trying to change the background color of Shape #123 at the same time). It operates per entity, starting at `1` and incrementing on every mutation of that specific document.
+2. **Board-level `collaborationRevision` (Global Event Ordering & Freshness)**: Enforces causal ordering across the entire board room. It enables peer clients to detect dropped socket messages (revision gaps) and discard stale out-of-order frames across all shape and comment mutations on that canvas.
+
+If we only used board revision for OCC, updating Shape A would falsely conflict with a concurrent update to Shape B! If we only used entity version for ordering, clients could not detect missed events for newly created or deleted entities.
+
+### Q2: Why is "find entity in JS -> compare version -> update entity" an anti-pattern in high-concurrency systems?
+**Answer:**
+This is the classic **Time-of-Check to Time-of-Use (TOCTOU)** race condition. If two requests execute the find query simultaneously:
+1. Request A reads Version 1.
+2. Request B reads Version 1.
+3. Request A validates that version === 1, and issues an update writing Version 2.
+4. Request B validates that its in-memory variable version === 1, and also issues an update writing Version 2 with its own data.
+
+Request B silently overwrites Request A's changes (Lost Update Problem). By placing `{ _id: id, version: expectedVersion }` in the atomic MongoDB `findOneAndUpdate` predicate with `$inc: { version: 1 }`, the database engine's row-level lock guarantees that only the first write matches and executes. The second write finds 0 matching documents and is rejected.
+
+### Q3: How does CanvasFlow handle database write conflicts when running in a replica set vs standalone MongoDB?
+**Answer:**
+In `CollaborationVersionService.executeWithRevision`, transactions are used when MongoDB runs with replica set support enabled. If two transactions attempt to update the same board document concurrently, MongoDB raises a `WriteConflict` / `TransientTransactionError`.
+`CollaborationVersionService` wraps the transaction in an automatic exponential backoff retry loop (up to 5 attempts).
+If MongoDB is operating in standalone mode (where replica set transactions are unsupported), the service seamlessly falls back to direct execution without breaking functionality, ensuring zero developer friction in local development while maintaining transaction isolation in production clusters.
+
+### Q4: If an OCC conflict occurs inside a transaction, how do we guarantee zero state pollution?
+**Answer:**
+When an OCC predicate fails, the repository returns `null`, and the service immediately throws a `ConflictError`. Because this error is thrown before the transaction commits, the transaction driver (`withTransaction`) aborts the entire transaction.
+As a result:
+- Any partial database writes in that session are rolled back.
+- The `Board.collaborationRevision` increment is rolled back.
+- The revision number is not consumed or skipped.
+- The handler catches `ConflictError` before calling `socket.to(room).emit(...)`, guaranteeing no peer client receives a phantom socket event.
+
+### Q5: How do ephemeral soft-locks differ from optimistic concurrency control?
+**Answer:**
+- **Soft-Locks**: An ephemeral in-memory lease (`ShapeLockManager`) acquired by a client when starting a drag/resize or opening an inline text editor. Its purpose is **collaborative UX**: preventing two users from visually fighting over the same element. Locks are stored in Redis/memory with TTLs and release on disconnect.
+- **OCC**: A persistent, ACID-backed database constraint enforcing data integrity during state persistence. Even if a user bypasses the UI, loses their soft-lock due to a network stutter, or mutates an unlocked entity, OCC prevents lost updates at the database tier.
+
+### Q6: What is the client-side recovery loop when an OCC 409 CONFLICT is received?
+**Answer:**
+1. The client mutation promise rejects with an error containing `{ code: 'CONFLICT', resourceType, resourceId, currentVersion }`.
+2. The UI / collaboration store sets `lastConflict` to log the conflict event and suppress optimistic reconciliation errors.
+3. The client calls `useBoardRecovery(boardId, canvasId)`.
+4. `useBoardRecovery` fetches the authoritative snapshot via REST API (`/api/v1/boards/:boardId`), synchronizing all local shapes and comments to their latest server versions.
+5. If the user desires, the mutation can be safely re-attempted using the newly acquired version (`recoveredShape.version`).
+
+### Q7: Why must soft-deletions on comments also participate in OCC?
+**Answer:**
+Soft-deleting a comment modifies its state (`deletedAt`, `content` masked, `version` incremented). If User A soft-deletes a comment while User B concurrently edits its content:
+1. If delete did not check `expectedVersion`, User A might delete a comment that User B just significantly updated or corrected.
+2. Conversely, if User B's edit arrives after User A's delete, User B could un-delete or resurrect deleted content.
+With OCC, whichever mutation reaches the database first increments the version; the second mutation is rejected with 409 CONFLICT and must re-hydrate before taking further action.
+
+### Q8: Why is the `version` field initialized to `1` rather than `0` on creation?
+**Answer:**
+In JavaScript and TypeScript, `0` is falsy. If `version` is `0`, checks like `if (shape.version)` or DTO validations that verify positive integers (`z.number().int().min(1)`) require verbose explicit undefined checks. Initializing entities at version `1` upon creation provides clear semantic meaning: Version 1 represents the initial creation state, while Version $N$ represents the $N-1$-th update.
+
+### Q9: How does CanvasFlow prevent undo/redo history corruption when an OCC conflict occurs?
+**Answer:**
+In `useCanvasStore`, local user actions push undo entries onto the `past` stack *only* upon successful local completion or with rollback handlers. When mutations are emitted over the socket, if the server returns a 409 CONFLICT, the rejected promise or error handler reverts the optimistic state change and triggers authoritative recovery without leaving ghost operations on the local undo stack. Remote operations never push to the local undo/redo stack.
+
+### Q10: How does the combination of Slice 10 (Recovery), Slice 11 (Ordering), and Slice 12 (Conflict Protection) achieve end-to-end distributed consistency?
+**Answer:**
+The three slices form a layered consistency defense:
+1. **Slice 10 (Transport Recovery)**: Restores socket connection, re-binds rooms, hydrates authoritative state, and resets ephemeral presence when networks drop.
+2. **Slice 11 (Broadcast Freshness)**: Ensures that all peer-to-peer broadcasts are delivered with monotonic board revisions, dropping out-of-order or duplicate frames and detecting network packet gaps.
+3. **Slice 12 (Storage OCC)**: Ensures that when multiple clients submit concurrent writes to the same record, only one atomic transaction succeeds, while conflicting writes fail cleanly with 409 CONFLICT and trigger authoritative state realignment.

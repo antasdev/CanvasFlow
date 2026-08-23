@@ -82,6 +82,7 @@ export const createCommentSocketSchema = z.object({
 export const updateCommentSocketSchema = z.object({
   boardId: objectIdSchema,
   commentId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
   content: z
     .string()
     .trim()
@@ -92,10 +93,12 @@ export const updateCommentSocketSchema = z.object({
 export const resolveCommentSocketSchema = z.object({
   boardId: objectIdSchema,
   commentId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
   isResolved: z.boolean(),
 });
 
 export const deleteCommentSocketSchema = z.object({
   boardId: objectIdSchema,
   commentId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
 });

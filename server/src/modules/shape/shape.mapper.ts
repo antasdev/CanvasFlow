@@ -23,6 +23,7 @@ export class ShapeMapper {
       rotation: doc.rotation ?? 0,
       zIndex: doc.zIndex,
       createdBy: doc.createdBy.toString(),
+      version: doc.version ?? 1,
       createdAt:
         doc.createdAt instanceof Date
           ? doc.createdAt.toISOString()

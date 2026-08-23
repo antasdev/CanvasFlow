@@ -60,6 +60,13 @@ const shapeSchema = new Schema<Shape>(
       ref: "User",
       required: true,
     },
+
+    version: {
+      type: Number,
+      required: true,
+      default: 1,
+      min: 1,
+    },
   },
   {
     timestamps: true,

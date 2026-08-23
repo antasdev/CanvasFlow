@@ -36,6 +36,7 @@ export type BaseShapeResponseDto = {
   rotation: number;
   zIndex: number;
   createdBy: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -110,6 +111,7 @@ export type CreateShapeDto = {
  * Shape Update DTO (Service/Internal)
  */
 export type UpdateShapeDto = {
+  expectedVersion?: number;
   x?: number;
   y?: number;
   width?: number;

@@ -5,7 +5,7 @@ import { shapeService } from "@/modules/shape";
 import { workspaceRepository } from "@/modules/workspace/workspace.repository";
 import { workspaceMemberRepository } from "@/modules/workspace/workspaceMember.repository";
 import { WorkspaceRole } from "@/modules/workspace/workspace.types";
-import { ApiError } from "@/shared/utils";
+import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
 
 import { commentRepository } from "./comment.repository";
@@ -89,6 +89,7 @@ export class CommentService {
         content: dto.content,
         isResolved: false,
         isEdited: false,
+        version: 1,
       },
       session
     );
@@ -138,9 +139,10 @@ export class CommentService {
     commentId: Types.ObjectId,
     userId: Types.ObjectId,
     dto: UpdateCommentDto,
-    session?: ClientSession
+    session?: ClientSession,
+    expectedVersion?: number
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
-    const comment = await commentRepository.findById(commentId);
+    const comment = await commentRepository.findById(commentId, session);
 
     if (!comment) {
       throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
@@ -168,20 +170,48 @@ export class CommentService {
       );
     }
 
-    const updated = await commentRepository.updateById(
-      commentId,
-      {
-        content: dto.content,
-        isEdited: true,
-      },
-      session
-    );
+    const effectiveExpectedVersion = expectedVersion ?? dto.expectedVersion;
+    let updated: CommentDocument | null = null;
 
-    if (!updated) {
-      throw new ApiError(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to update comment."
+    if (effectiveExpectedVersion !== undefined) {
+      updated = await commentRepository.updateWithExpectedVersion(
+        commentId,
+        effectiveExpectedVersion,
+        {
+          content: dto.content,
+          isEdited: true,
+        },
+        session
       );
+
+      if (!updated) {
+        const existing = await commentRepository.findById(commentId, session);
+        if (!existing) {
+          throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
+        }
+        throw new ConflictError(
+          "comment",
+          commentId.toString(),
+          existing.version,
+          "Comment has been modified by another collaborator."
+        );
+      }
+    } else {
+      updated = await commentRepository.updateById(
+        commentId,
+        {
+          content: dto.content,
+          isEdited: true,
+        },
+        session
+      );
+
+      if (!updated) {
+        throw new ApiError(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Failed to update comment."
+        );
+      }
     }
 
     return {
@@ -197,9 +227,10 @@ export class CommentService {
     commentId: Types.ObjectId,
     userId: Types.ObjectId,
     dto: ResolveCommentDto,
-    session?: ClientSession
+    session?: ClientSession,
+    expectedVersion?: number
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
-    const comment = await commentRepository.findById(commentId);
+    const comment = await commentRepository.findById(commentId, session);
 
     if (!comment) {
       throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
@@ -214,19 +245,46 @@ export class CommentService {
       );
     }
 
-    const updated = await commentRepository.updateById(
-      commentId,
-      {
-        isResolved: dto.isResolved,
-      },
-      session
-    );
+    const effectiveExpectedVersion = expectedVersion ?? dto.expectedVersion;
+    let updated: CommentDocument | null = null;
 
-    if (!updated) {
-      throw new ApiError(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to resolve comment."
+    if (effectiveExpectedVersion !== undefined) {
+      updated = await commentRepository.updateWithExpectedVersion(
+        commentId,
+        effectiveExpectedVersion,
+        {
+          isResolved: dto.isResolved,
+        },
+        session
       );
+
+      if (!updated) {
+        const existing = await commentRepository.findById(commentId, session);
+        if (!existing) {
+          throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
+        }
+        throw new ConflictError(
+          "comment",
+          commentId.toString(),
+          existing.version,
+          "Comment has been modified by another collaborator."
+        );
+      }
+    } else {
+      updated = await commentRepository.updateById(
+        commentId,
+        {
+          isResolved: dto.isResolved,
+        },
+        session
+      );
+
+      if (!updated) {
+        throw new ApiError(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Failed to resolve comment."
+        );
+      }
     }
 
     return {
@@ -241,9 +299,10 @@ export class CommentService {
   async deleteComment(
     commentId: Types.ObjectId,
     userId: Types.ObjectId,
-    session?: ClientSession
+    session?: ClientSession,
+    expectedVersion?: number
   ): Promise<{ comment: CommentDocument; boardId: Types.ObjectId }> {
-    const comment = await commentRepository.findById(commentId);
+    const comment = await commentRepository.findById(commentId, session);
 
     if (!comment) {
       throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
@@ -283,13 +342,36 @@ export class CommentService {
       );
     }
 
-    const deleted = await commentRepository.softDeleteById(commentId, session);
+    let deleted: CommentDocument | null = null;
 
-    if (!deleted) {
-      throw new ApiError(
-        HttpStatus.INTERNAL_SERVER_ERROR,
-        "Failed to delete comment."
+    if (expectedVersion !== undefined) {
+      deleted = await commentRepository.softDeleteWithExpectedVersion(
+        commentId,
+        expectedVersion,
+        session
       );
+
+      if (!deleted) {
+        const existing = await commentRepository.findById(commentId, session);
+        if (!existing) {
+          throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
+        }
+        throw new ConflictError(
+          "comment",
+          commentId.toString(),
+          existing.version,
+          "Comment has been modified by another collaborator."
+        );
+      }
+    } else {
+      deleted = await commentRepository.softDeleteById(commentId, session);
+
+      if (!deleted) {
+        throw new ApiError(
+          HttpStatus.INTERNAL_SERVER_ERROR,
+          "Failed to delete comment."
+        );
+      }
     }
 
     return {
