@@ -43,12 +43,24 @@ export class MutationManager {
     mutationData: Omit<PendingMutation, "status" | "createdAt" | "updatedAt" | "retryCount"> & {
       status?: PendingMutation["status"];
       retryCount?: number;
+      attemptCount?: number;
+      lastAttemptAt?: string;
     }
   ): PendingMutation {
+    const existing = useMutationStore.getState().mutations[mutationData.mutationId];
+
+    if (existing) {
+      useMutationStore.getState().markAttempted(mutationData.mutationId);
+      this.scheduleTimeout(mutationData.mutationId);
+      return useMutationStore.getState().mutations[mutationData.mutationId];
+    }
+
     const mutation: PendingMutation = {
       ...mutationData,
       status: mutationData.status ?? "pending",
       retryCount: mutationData.retryCount ?? 0,
+      attemptCount: mutationData.attemptCount ?? 1,
+      lastAttemptAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -144,6 +156,10 @@ export class MutationManager {
       this.clearTimeout(mutationId);
       if (err?.code === "CONFLICT") {
         useMutationStore.getState().markConflicted(mutationId, err);
+      } else if (err?.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (err?.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
         useMutationStore.getState().markFailed(mutationId, err?.message ?? "Creation failed");
       }
@@ -218,6 +234,10 @@ export class MutationManager {
       this.clearTimeout(mutationId);
       if (err?.code === "CONFLICT") {
         useMutationStore.getState().markConflicted(mutationId, err);
+      } else if (err?.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (err?.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
         useMutationStore.getState().markFailed(mutationId, err?.message ?? "Update failed");
       }
@@ -261,6 +281,10 @@ export class MutationManager {
       this.clearTimeout(mutationId);
       if (err?.code === "CONFLICT") {
         useMutationStore.getState().markConflicted(mutationId, err);
+      } else if (err?.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (err?.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
         useMutationStore.getState().markFailed(mutationId, err?.message ?? "Delete failed");
       }

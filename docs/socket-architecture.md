@@ -947,3 +947,168 @@ The user may begin dragging or modifying the newly created shape with `temp-uuid
 2. **Slice 11 (Broadcast Ordering)**: Orders durable broadcasts monotonically and discards stale/duplicate socket packets.
 3. **Slice 12 (Storage OCC)**: Prevents write-after-write conflicts at the database tier using atomic version predicates.
 4. **Slice 13 (Client Mutation Safety)**: Protects optimistic client updates across lost acks, timeouts, and network disconnects through a bounded journal and 4-case reconciliation.
+
+---
+
+## 24. Server-Side Mutation Idempotency & Duplicate Request Protection (Slice 14)
+
+### 1. The Core Invariant
+When a client experiences network instability, disconnects, or delayed socket acknowledgements, it re-emits pending mutations with the same `mutationId`.
+The backend guarantees:
+
+$$\text{Same } mutationId + \text{Same authenticated } actorId + \text{Same } boardId \implies \text{Execute At Most Once}$$
+
+If a duplicate request arrives with the same `mutationId`:
+1. **MongoDB Mutation**: Zero repeated database writes.
+2. **Entity Version**: Zero secondary version increments.
+3. **Board Revision**: Zero secondary `collaborationRevision` increments.
+4. **Socket Broadcast**: Zero duplicate broadcasts to peer collaborators in the room.
+5. **Sender Response**: The exact original canonical response DTO is returned with `success: true`.
+
+---
+
+### 2. Idempotency Execution Lifecycle & Transaction Boundary
+
+```text
+Incoming Socket Event (shape:*, comment:*)
+               │
+               ▼
+   Extract Actor & Validate Zod Schema
+               │
+               ├── Has mutationId?
+               │       │
+               │       ├── NO ──► Execute standard mutation (backward compatible)
+               │       │
+               │       └── YES ─► Evaluate Idempotency Record (MutationRecordModel)
+               │                     │
+               │                     ├── 1. Completed Record Found
+               │                     │     ├── Hash Matches  ──► Return Stored Response (Replay)
+               │                     │     │                     (Zero DB write, zero revision, zero broadcast)
+               │                     │     └── Hash Differs  ──► Reject 409 IDEMPOTENCY_KEY_REUSED
+               │                     │
+               │                     ├── 2. In-Progress Record Found
+               │                     │     ├── Hash Matches  ──► Reject 409 MUTATION_IN_PROGRESS
+               │                     │     │                     (If lease expired >30s -> Takeover)
+               │                     │     └── Hash Differs  ──► Reject 409 IDEMPOTENCY_KEY_REUSED
+               │                     │
+               │                     └── 3. No Record Found (Fresh Request)
+               │                           │
+               │                           ▼
+               │                  Reserve Record (status: 'processing')
+               │                  Compound Index enforces atomic uniqueness
+               │                           │
+               │                           ▼
+               │                  MongoDB Multi-Document Transaction
+               │                  ├── Apply Entity Mutation (OCC check)
+               │                  ├── Increment Board.collaborationRevision
+               │                  └── Update Mutation Record (status: 'completed', response, eventId, revision)
+               │                           │
+               │                           ├── ON COMMIT ──► Broadcast to Room (meta.isIdempotentReplay: false)
+               │                           │                 Return Ack to Sender
+               │                           │
+               │                           └── ON ABORT  ──► Delete/Fail Reservation Record
+               │                                             Return Error Ack to Sender
+```
+
+---
+
+### 3. Request Hash Generation (`generateMutationHash`)
+To prevent malicious or accidental reuse of a `mutationId` with altered payloads:
+1. Canonicalizes object keys recursively (deterministic JSON serialization).
+2. Strips ephemeral transport metadata (`socketId`, `occurredAt`, `connectionEpoch`, `recoveryGeneration`).
+3. Hashes the canonical payload with SHA-256:
+   $$\text{Hash} = \text{SHA-256}(\text{operation} + \text{boardId} + \text{actorId} + \text{mutationId} + \text{canonicalPayload})$$
+
+If a client sends an identical `mutationId` with a different payload hash, the server immediately rejects the request with `409 IDEMPOTENCY_KEY_REUSED`.
+
+---
+
+### 4. Storage Model & Concurrency Protection
+The `MutationRecordModel` uses MongoDB compound indexes:
+- Compound Unique Index: `{ actorId: 1, boardId: 1, mutationId: 1 }` (Unique).
+- TTL Index: `{ expiresAt: 1 }` with 24-hour retention for automatic pruning.
+- Lease Takeover: If a server crashes mid-flight leaving a record in `processing` state, any subsequent request after 30 seconds can atomically take over the stale reservation.
+
+---
+
+### 5. Interaction With Optimistic Concurrency Control (OCC)
+In Slice 12, the server enforces OCC: `expectedVersion === entity.version`.
+Without idempotency, when a client retries a mutation whose first attempt succeeded (advancing `version` from 1 to 2), the retry with `expectedVersion=1` would be falsely rejected as a 409 OCC Conflict.
+
+**Slice 14 Guarantee**: Idempotency evaluation occurs **prior to OCC execution**. The retry detects the completed record and returns the cached `version: 2` response without executing an OCC query or throwing a false conflict.
+
+---
+
+## 25. Slice 14 Senior Engineering Interview Questions
+
+### Q1: What exact problem does server-side mutation idempotency solve in real-time collaborative canvas systems?
+**Answer:**
+In distributed systems, networks are inherently unreliable. When a client emits a mutation (e.g. creating a shape, updating coordinates, or deleting a sticky note), the server might successfully persist the changes and commit the database transaction, but the network connection drops before the acknowledgement packet reaches the client.
+Without server-side idempotency, when the client reconnects and retries the mutation with the same `mutationId`, the server would treat it as a second distinct mutation: creating a duplicate shape, incrementing board revision again, and broadcasting a duplicate event. Server-side idempotency ensures at-most-once execution: retried requests return the original canonical result with zero redundant persistence and zero duplicate broadcasts.
+
+### Q2: Why is the compound unique index scoped to `(actorId, boardId, mutationId)` rather than just `mutationId`?
+**Answer:**
+1. **Multi-Tenant / Multi-User Isolation**: A UUID v4 collision between completely independent users or across separate boards should not cause one user's mutation to hijack or block another user's mutation.
+2. **Security & Authorization**: Scoping by `actorId` prevents an unauthorized client from learning or intercepting another user's mutation results by guessing or spoofing a `mutationId`.
+3. **Partitioning / Query Performance**: Scoping by board and actor ensures high-cardinality index clustering aligned with room-level collaboration patterns.
+
+### Q3: What is the difference between `IDEMPOTENCY_KEY_REUSED` and `MUTATION_IN_PROGRESS`?
+**Answer:**
+- **`409 IDEMPOTENCY_KEY_REUSED`**: Returned when a client sends a request with an existing `mutationId`, but the SHA-256 hash of the payload does not match the original request. This represents a client-side programming error or malicious intent (reusing an idempotency key for a completely different action). The mutation fails permanently.
+- **`409 MUTATION_IN_PROGRESS`**: Returned when a duplicate request arrives while the original request is still actively executing inside the database transaction (its reservation status is still `processing` within the 30-second lease). The client marks the mutation as `uncertain` and keeps the same `mutationId` to retry later or verify during board recovery.
+
+### Q4: How does CanvasFlow prevent duplicate Socket.IO broadcasts on idempotent replays?
+**Answer:**
+When `collaborationVersionService.executeWithRevision` detects an existing completed mutation record:
+1. It retrieves the saved canonical response DTO, `eventId`, and board `revision`.
+2. It sets `meta.isIdempotentReplay = true` in the returned event envelope metadata.
+3. The socket handler checks `if (!meta.isIdempotentReplay) socket.to(room).emit(...)`.
+4. The sender client receives the successful ack callback with the original DTO, but the room broadcast is skipped, ensuring other collaborators never receive duplicate socket events.
+
+### Q5: Why is deep key canonicalization necessary before hashing the mutation payload?
+**Answer:**
+In JavaScript and JSON, object keys have no guaranteed serialization order (e.g. `{ x: 100, y: 200 }` vs `{ y: 200, x: 100 }`). Furthermore, client transports may attach ephemeral timestamps or socket session IDs.
+`generateMutationHash` performs two vital operations:
+1. Strips ephemeral fields (`socketId`, `occurredAt`, `connectionEpoch`, `recoveryGeneration`).
+2. Recursively sorts all JSON object keys deterministically.
+This ensures that two identical semantic operations produce the exact same SHA-256 hash regardless of key ordering.
+
+### Q6: How does the server handle a crash or power failure while a mutation is in `processing` state?
+**Answer:**
+CanvasFlow implements a **30-second processing lease**:
+1. When a reservation is created, `createdAt` is timestamped with `status: 'processing'`.
+2. If the server node crashes before committing or rolling back, the record remains in `processing`.
+3. When the client retries after 30 seconds, `takeoverStaleReservation` atomically updates the reservation if `status === 'processing'` and `createdAt < Date.now() - 30000`.
+4. This avoids deadlocks and allows the recovery worker or retrying client to safely resume execution.
+
+### Q7: Why must the mutation completion record be saved in the SAME MongoDB transaction as the entity mutation?
+**Answer:**
+If the entity mutation and idempotency record update were executed in separate database operations, a failure between the two would cause data inconsistency:
+- If entity succeeds but idempotency record fails to write: a subsequent retry would execute the mutation a second time (double-execution bug).
+- If idempotency record is marked completed before entity mutation commits: a failure in the entity write would leave a fake "completed" record, permanently preventing the user from ever applying their change.
+Atomic multi-document transactions ensure that the entity mutation, board revision increment, and idempotency completion commit together or rollback together.
+
+### Q8: How does server-side idempotency prevent false Optimistic Concurrency Control (OCC) conflicts?
+**Answer:**
+Consider User A updating a shape from version 1 to version 2 (`expectedVersion: 1`).
+1. Request 1 arrives at the server. The server verifies `shape.version === 1`, updates the shape to version 2, and commits.
+2. The ack packet is lost in transit.
+3. User A retries with `mutationId: M1` and `expectedVersion: 1`.
+4. Without idempotency, OCC would check `shape.version (2) === expectedVersion (1)` and reject with `409 CONFLICT`.
+5. With idempotency, the handler intercepts `mutationId: M1`, finds the completed record, and returns the cached `version: 2` response. No OCC query is executed, preventing false conflict errors.
+
+### Q9: Why is a 24-hour TTL index used for completed mutation records instead of deleting them immediately?
+**Answer:**
+Clients may stay offline or backgrounded for minutes or hours before reconnecting and retrying pending mutations.
+- Deleting the record immediately upon completion would cause retries after temporary network blips to be treated as fresh mutations, destroying idempotency.
+- Retaining completed records for 24 hours via MongoDB TTL index (`expiresAt: Date.now() + 86400000`) provides a wide reliability window for mobile/web reconnections while ensuring database storage remains bounded and clean.
+
+### Q10: How do Slices 10 through 14 form an unbreakable real-time collaboration guarantee?
+**Answer:**
+Each slice addresses a distinct distributed systems failure mode:
+1. **Slice 10 (Recovery)**: Handles socket reconnections, room rejoining, and authoritative REST state hydration.
+2. **Slice 11 (Ordering)**: Monotonic `collaborationRevision` ensures gap detection and drops out-of-order/stale broadcast envelopes.
+3. **Slice 12 (Conflict Detection)**: Server-authoritative OCC (`entity.version`) prevents silent overwrites during concurrent edits.
+4. **Slice 13 (Client Journaling)**: Bounded pending mutation journal with 4-case reconciliation handles offline/optimistic updates.
+5. **Slice 14 (Server Idempotency)**: Atomic mutation reservations and replay caches guarantee at-most-once server execution across network retries and lost acks.
+Together, these 5 slices provide complete end-to-end distributed consistency for real-time collaborative canvas applications.

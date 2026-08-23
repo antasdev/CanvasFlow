@@ -42,11 +42,20 @@ export type CollaborationConflictPayload = {
   message?: string;
 };
 
+export type SocketAckErrorCode =
+  | "CONFLICT"
+  | "BAD_REQUEST"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "INTERNAL_ERROR"
+  | "IDEMPOTENCY_KEY_REUSED"
+  | "MUTATION_IN_PROGRESS";
+
 /**
  * Structured socket acknowledgement error details.
  */
 export type SocketAckError = {
-  code?: string;
+  code?: SocketAckErrorCode | string;
   message: string;
   resourceType?: ConflictResourceType;
   resourceId?: string;
@@ -292,6 +301,7 @@ export type CollaborationEventMeta = {
   socketId: string;
   revision: number;
   occurredAt: string;
+  isIdempotentReplay?: boolean;
 };
 
 export type ShapeCreatedPayload = {

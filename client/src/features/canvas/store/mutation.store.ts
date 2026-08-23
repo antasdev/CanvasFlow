@@ -47,6 +47,10 @@ export type PendingMutation = {
   createdAt: string;
   updatedAt: string;
   retryCount: number;
+  attemptCount?: number;
+  lastAttemptAt?: string;
+  serverRevision?: number;
+  serverEventId?: string;
   error?: string;
   conflict?: CollaborationConflict;
 };
@@ -55,7 +59,8 @@ export interface MutationStoreState {
   mutations: Record<string, PendingMutation>;
 
   addMutation: (mutation: PendingMutation) => void;
-  markConfirmed: (mutationId: string) => void;
+  markAttempted: (mutationId: string) => void;
+  markConfirmed: (mutationId: string, serverRevision?: number, serverEventId?: string) => void;
   markFailed: (mutationId: string, error: string) => void;
   markConflicted: (mutationId: string, conflict?: CollaborationConflict) => void;
   markReconciling: (mutationId: string) => void;
@@ -77,6 +82,8 @@ export const useMutationStore = create<MutationStoreState>((set, get) => ({
           ...mutation,
           status: mutation.status ?? "pending",
           retryCount: mutation.retryCount ?? 0,
+          attemptCount: mutation.attemptCount ?? 1,
+          lastAttemptAt: mutation.lastAttemptAt ?? new Date().toISOString(),
           createdAt: mutation.createdAt ?? new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -84,7 +91,25 @@ export const useMutationStore = create<MutationStoreState>((set, get) => ({
     }));
   },
 
-  markConfirmed: (mutationId: string) => {
+  markAttempted: (mutationId: string) => {
+    set((state) => {
+      const existing = state.mutations[mutationId];
+      if (!existing) return state;
+      return {
+        mutations: {
+          ...state.mutations,
+          [mutationId]: {
+            ...existing,
+            attemptCount: (existing.attemptCount ?? 0) + 1,
+            lastAttemptAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      };
+    });
+  },
+
+  markConfirmed: (mutationId: string, _serverRevision?: number, _serverEventId?: string) => {
     set((state) => {
       // Upon confirmation, remove from journal to keep state bounded
       const next = { ...state.mutations };

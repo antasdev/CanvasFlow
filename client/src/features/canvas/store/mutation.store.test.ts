@@ -206,4 +206,29 @@ describe("Mutation Store (Slice 13) Unit Tests", () => {
     expect(useCanvasStore.getState().future).toHaveLength(0);
     expect(useCanvasStore.getState().canUndo()).toBe(false);
   });
+
+  it("tracks attemptCount and lastAttemptAt across retry attempts (Slice 14)", () => {
+    const mutation: PendingMutation = {
+      mutationId: "retry-mut-1",
+      boardId: "board-1",
+      resourceType: "shape",
+      resourceId: "shape-1",
+      operation: "update",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      retryCount: 0,
+      attemptCount: 1,
+    };
+
+    useMutationStore.getState().addMutation(mutation);
+    expect(useMutationStore.getState().mutations["retry-mut-1"].attemptCount).toBe(1);
+
+    useMutationStore.getState().markAttempted("retry-mut-1");
+    expect(useMutationStore.getState().mutations["retry-mut-1"].attemptCount).toBe(2);
+    expect(useMutationStore.getState().mutations["retry-mut-1"].lastAttemptAt).toBeDefined();
+
+    useMutationStore.getState().markAttempted("retry-mut-1");
+    expect(useMutationStore.getState().mutations["retry-mut-1"].attemptCount).toBe(3);
+  });
 });

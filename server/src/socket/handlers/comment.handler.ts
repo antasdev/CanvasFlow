@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 
 import { commentService, CommentMapper } from "@/modules/comment";
+import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import {
   createCommentSocketSchema,
   updateCommentSocketSchema,
@@ -85,20 +86,26 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               session
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "comment:create",
+          parsed.data
         );
 
         // 3. Transform to canonical response DTO
-        const responseDto = CommentMapper.toResponseDto(
-          result.comment,
-          result.comment.authorId as any
-        );
+        const responseDto = (result as any)?.comment
+          ? CommentMapper.toResponseDto(
+              (result as any).comment,
+              (result as any).comment.authorId as any
+            )
+          : (result as unknown as CommentResponseDto);
 
-        // 4. Broadcast envelope to other collaborators in the room (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_CREATED, {
-          meta,
-          comment: responseDto,
-        });
+        // 4. Broadcast envelope to other collaborators in the room (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.COMMENT_CREATED, {
+            meta,
+            comment: responseDto,
+          });
+        }
 
         // 5. Acknowledge creator with canonical persisted DTO & mutationId
         callback?.({
@@ -109,11 +116,14 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
       } catch (error) {
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
@@ -166,6 +176,67 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         const commentObjectId = new Types.ObjectId(parsed.data.commentId);
         const boardObjectId = new Types.ObjectId(parsed.data.boardId);
 
+        // Pre-check idempotency record for completed or in-progress duplicate requests
+        if (parsed.data.mutationId) {
+          const existingRecord = await mutationRepository.findByActorAndMutation(
+            userId,
+            parsed.data.mutationId
+          );
+          if (existingRecord) {
+            const expectedHash = generateMutationHash({
+              operation: "comment:update",
+              boardId: existingRecord.boardId,
+              mutationId: parsed.data.mutationId,
+              actorId: userId,
+              payload: parsed.data,
+            });
+
+            if (existingRecord.requestHash !== expectedHash) {
+              callback?.({
+                success: false,
+                mutationId: parsed.data.mutationId,
+                error: {
+                  code: "IDEMPOTENCY_KEY_REUSED",
+                  message: "Idempotency key reused with different payload.",
+                },
+              });
+              return;
+            }
+
+            if (existingRecord.status === "completed") {
+              const responseDto = (existingRecord.response as any)?.comment
+                ? CommentMapper.toResponseDto(
+                    (existingRecord.response as any).comment,
+                    (existingRecord.response as any).comment.authorId as any
+                  )
+                : (existingRecord.response as CommentResponseDto);
+
+              callback?.({
+                success: true,
+                mutationId: parsed.data.mutationId,
+                data: responseDto,
+              });
+              return;
+            }
+
+            if (existingRecord.status === "processing") {
+              const isStale =
+                Date.now() - new Date(existingRecord.createdAt).getTime() > 30000;
+              if (!isStale) {
+                callback?.({
+                  success: false,
+                  mutationId: parsed.data.mutationId,
+                  error: {
+                    code: "MUTATION_IN_PROGRESS",
+                    message: "Mutation is currently in progress.",
+                  },
+                });
+                return;
+              }
+            }
+          }
+        }
+
         // 1. Verify socket is joined to the board room
         const room = getBoardRoom(parsed.data.boardId);
         if (!socket.rooms.has(room)) {
@@ -191,20 +262,26 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               parsed.data.expectedVersion
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "comment:update",
+          parsed.data
         );
 
         // 3. Transform to canonical response DTO
-        const responseDto = CommentMapper.toResponseDto(
-          result.comment,
-          result.comment.authorId as any
-        );
+        const responseDto = (result as any)?.comment
+          ? CommentMapper.toResponseDto(
+              (result as any).comment,
+              (result as any).comment.authorId as any
+            )
+          : (result as unknown as CommentResponseDto);
 
-        // 4. Broadcast envelope to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_UPDATED, {
-          meta,
-          comment: responseDto,
-        });
+        // 4. Broadcast envelope to other room members (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.COMMENT_UPDATED, {
+            meta,
+            comment: responseDto,
+          });
+        }
 
         // 5. Acknowledge sender with mutationId
         callback?.({
@@ -231,11 +308,14 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
 
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
@@ -288,6 +368,67 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         const commentObjectId = new Types.ObjectId(parsed.data.commentId);
         const boardObjectId = new Types.ObjectId(parsed.data.boardId);
 
+        // Pre-check idempotency record for completed or in-progress duplicate requests
+        if (parsed.data.mutationId) {
+          const existingRecord = await mutationRepository.findByActorAndMutation(
+            userId,
+            parsed.data.mutationId
+          );
+          if (existingRecord) {
+            const expectedHash = generateMutationHash({
+              operation: "comment:resolve",
+              boardId: existingRecord.boardId,
+              mutationId: parsed.data.mutationId,
+              actorId: userId,
+              payload: parsed.data,
+            });
+
+            if (existingRecord.requestHash !== expectedHash) {
+              callback?.({
+                success: false,
+                mutationId: parsed.data.mutationId,
+                error: {
+                  code: "IDEMPOTENCY_KEY_REUSED",
+                  message: "Idempotency key reused with different payload.",
+                },
+              });
+              return;
+            }
+
+            if (existingRecord.status === "completed") {
+              const responseDto = (existingRecord.response as any)?.comment
+                ? CommentMapper.toResponseDto(
+                    (existingRecord.response as any).comment,
+                    (existingRecord.response as any).comment.authorId as any
+                  )
+                : (existingRecord.response as CommentResponseDto);
+
+              callback?.({
+                success: true,
+                mutationId: parsed.data.mutationId,
+                data: responseDto,
+              });
+              return;
+            }
+
+            if (existingRecord.status === "processing") {
+              const isStale =
+                Date.now() - new Date(existingRecord.createdAt).getTime() > 30000;
+              if (!isStale) {
+                callback?.({
+                  success: false,
+                  mutationId: parsed.data.mutationId,
+                  error: {
+                    code: "MUTATION_IN_PROGRESS",
+                    message: "Mutation is currently in progress.",
+                  },
+                });
+                return;
+              }
+            }
+          }
+        }
+
         // 1. Verify socket is joined to the board room
         const room = getBoardRoom(parsed.data.boardId);
         if (!socket.rooms.has(room)) {
@@ -313,20 +454,26 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               parsed.data.expectedVersion
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "comment:resolve",
+          parsed.data
         );
 
         // 3. Transform to canonical response DTO
-        const responseDto = CommentMapper.toResponseDto(
-          result.comment,
-          result.comment.authorId as any
-        );
+        const responseDto = (result as any)?.comment
+          ? CommentMapper.toResponseDto(
+              (result as any).comment,
+              (result as any).comment.authorId as any
+            )
+          : (result as unknown as CommentResponseDto);
 
-        // 4. Broadcast envelope to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_RESOLVED, {
-          meta,
-          comment: responseDto,
-        });
+        // 4. Broadcast envelope to other room members (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.COMMENT_RESOLVED, {
+            meta,
+            comment: responseDto,
+          });
+        }
 
         // 5. Acknowledge sender with mutationId
         callback?.({
@@ -353,11 +500,14 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
 
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
@@ -410,6 +560,67 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         const commentObjectId = new Types.ObjectId(parsed.data.commentId);
         const boardObjectId = new Types.ObjectId(parsed.data.boardId);
 
+        // Pre-check idempotency record for completed or in-progress duplicate requests
+        if (parsed.data.mutationId) {
+          const existingRecord = await mutationRepository.findByActorAndMutation(
+            userId,
+            parsed.data.mutationId
+          );
+          if (existingRecord) {
+            const expectedHash = generateMutationHash({
+              operation: "comment:delete",
+              boardId: existingRecord.boardId,
+              mutationId: parsed.data.mutationId,
+              actorId: userId,
+              payload: parsed.data,
+            });
+
+            if (existingRecord.requestHash !== expectedHash) {
+              callback?.({
+                success: false,
+                mutationId: parsed.data.mutationId,
+                error: {
+                  code: "IDEMPOTENCY_KEY_REUSED",
+                  message: "Idempotency key reused with different payload.",
+                },
+              });
+              return;
+            }
+
+            if (existingRecord.status === "completed") {
+              const responseDto = (existingRecord.response as any)?.comment
+                ? CommentMapper.toResponseDto(
+                    (existingRecord.response as any).comment,
+                    (existingRecord.response as any).comment.authorId as any
+                  )
+                : (existingRecord.response as CommentResponseDto);
+
+              callback?.({
+                success: true,
+                mutationId: parsed.data.mutationId,
+                data: responseDto,
+              });
+              return;
+            }
+
+            if (existingRecord.status === "processing") {
+              const isStale =
+                Date.now() - new Date(existingRecord.createdAt).getTime() > 30000;
+              if (!isStale) {
+                callback?.({
+                  success: false,
+                  mutationId: parsed.data.mutationId,
+                  error: {
+                    code: "MUTATION_IN_PROGRESS",
+                    message: "Mutation is currently in progress.",
+                  },
+                });
+                return;
+              }
+            }
+          }
+        }
+
         // 1. Verify socket is joined to the board room
         const room = getBoardRoom(parsed.data.boardId);
         if (!socket.rooms.has(room)) {
@@ -432,28 +643,34 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               parsed.data.expectedVersion
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "comment:delete",
+          parsed.data
         );
 
         // 3. Transform to canonical response DTO
-        const responseDto = CommentMapper.toResponseDto(
-          result.comment,
-          result.comment.authorId as any
-        );
+        const responseDto = (result as any)?.comment
+          ? CommentMapper.toResponseDto(
+              (result as any).comment,
+              (result as any).comment.authorId as any
+            )
+          : (result as unknown as CommentResponseDto);
 
-        // 4. Broadcast deletion envelope to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.COMMENT_DELETED, {
-          meta,
-          boardId: parsed.data.boardId,
-          commentId: parsed.data.commentId,
-          comment: responseDto,
-        });
+        // 4. Broadcast deletion envelope to other room members (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.COMMENT_DELETED, {
+            meta,
+            boardId: parsed.data.boardId,
+            commentId: parsed.data.commentId,
+            comment: responseDto,
+          });
 
-        // Also broadcast comment:updated with masked soft-deleted payload
-        socket.to(room).emit(SocketEvents.COMMENT_UPDATED, {
-          meta,
-          comment: responseDto,
-        });
+          // Also broadcast comment:updated with masked soft-deleted payload
+          socket.to(room).emit(SocketEvents.COMMENT_UPDATED, {
+            meta,
+            comment: responseDto,
+          });
+        }
 
         // 5. Acknowledge sender with mutationId
         callback?.({
@@ -480,11 +697,14 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
 
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({

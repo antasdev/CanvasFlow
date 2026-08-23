@@ -4,6 +4,7 @@ import { z } from "zod";
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
 import { shapeService, ShapeMapper, ShapeType } from "@/modules/shape";
+import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
 
@@ -171,17 +172,23 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
               session
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "shape:create",
+          parsed.data
         );
 
         // 6. Transform to canonical response DTO
-        const responseDto = ShapeMapper.toResponseDto(result.shape);
+        const responseDto = (result as any)?.shape
+          ? ShapeMapper.toResponseDto((result as any).shape)
+          : (result as unknown as ShapeResponseDto);
 
-        // 7. Broadcast envelope to other collaborators in the room (excludes sender)
-        socket.to(room).emit(SocketEvents.SHAPE_CREATED, {
-          meta,
-          shape: responseDto,
-        });
+        // 7. Broadcast envelope to other collaborators in the room (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_CREATED, {
+            meta,
+            shape: responseDto,
+          });
+        }
 
         // 8. Acknowledge creator with canonical persisted shape & mutationId
         callback?.({
@@ -192,11 +199,14 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
       } catch (error) {
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
@@ -250,6 +260,64 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         const userId = socket.data.user.userId;
         const shapeObjectId = new Types.ObjectId(parsed.data.shapeId);
 
+        // Pre-check idempotency record for completed or in-progress duplicate requests
+        if (parsed.data.mutationId) {
+          const existingRecord = await mutationRepository.findByActorAndMutation(
+            userId,
+            parsed.data.mutationId
+          );
+          if (existingRecord) {
+            const expectedHash = generateMutationHash({
+              operation: "shape:update",
+              boardId: existingRecord.boardId,
+              mutationId: parsed.data.mutationId,
+              actorId: userId,
+              payload: parsed.data,
+            });
+
+            if (existingRecord.requestHash !== expectedHash) {
+              callback?.({
+                success: false,
+                mutationId: parsed.data.mutationId,
+                error: {
+                  code: "IDEMPOTENCY_KEY_REUSED",
+                  message: "Idempotency key reused with different payload.",
+                },
+              });
+              return;
+            }
+
+            if (existingRecord.status === "completed") {
+              const responseDto = (existingRecord.response as any)?.shape
+                ? ShapeMapper.toResponseDto((existingRecord.response as any).shape)
+                : (existingRecord.response as ShapeResponseDto);
+
+              callback?.({
+                success: true,
+                mutationId: parsed.data.mutationId,
+                data: responseDto,
+              });
+              return;
+            }
+
+            if (existingRecord.status === "processing") {
+              const isStale =
+                Date.now() - new Date(existingRecord.createdAt).getTime() > 30000;
+              if (!isStale) {
+                callback?.({
+                  success: false,
+                  mutationId: parsed.data.mutationId,
+                  error: {
+                    code: "MUTATION_IN_PROGRESS",
+                    message: "Mutation is currently in progress.",
+                  },
+                });
+                return;
+              }
+            }
+          }
+        }
+
         // 1. Resolve shape, canvas & board
         const shape = await shapeService.getShapeById(shapeObjectId);
         const canvas = await canvasRepository.findById(shape.canvasId);
@@ -289,17 +357,23 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
               parsed.data.expectedVersion
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "shape:update",
+          parsed.data
         );
 
         // 5. Transform to canonical response DTO
-        const responseDto = ShapeMapper.toResponseDto(result.shape);
+        const responseDto = (result as any)?.shape
+          ? ShapeMapper.toResponseDto((result as any).shape)
+          : (result as unknown as ShapeResponseDto);
 
-        // 6. Broadcast envelope to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.SHAPE_UPDATED, {
-          meta,
-          shape: responseDto,
-        });
+        // 6. Broadcast envelope to other room members (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_UPDATED, {
+            meta,
+            shape: responseDto,
+          });
+        }
 
         // 7. Acknowledge sender with canonical response & mutationId
         callback?.({
@@ -326,11 +400,14 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
 
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
@@ -384,6 +461,59 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         const userId = socket.data.user.userId;
         const shapeObjectId = new Types.ObjectId(parsed.data.shapeId);
 
+        // Pre-check idempotency record for completed or in-progress duplicate requests
+        if (parsed.data.mutationId) {
+          const existingRecord = await mutationRepository.findByActorAndMutation(
+            userId,
+            parsed.data.mutationId
+          );
+          if (existingRecord) {
+            const expectedHash = generateMutationHash({
+              operation: "shape:delete",
+              boardId: existingRecord.boardId,
+              mutationId: parsed.data.mutationId,
+              actorId: userId,
+              payload: parsed.data,
+            });
+
+            if (existingRecord.requestHash !== expectedHash) {
+              callback?.({
+                success: false,
+                mutationId: parsed.data.mutationId,
+                error: {
+                  code: "IDEMPOTENCY_KEY_REUSED",
+                  message: "Idempotency key reused with different payload.",
+                },
+              });
+              return;
+            }
+
+            if (existingRecord.status === "completed") {
+              callback?.({
+                success: true,
+                mutationId: parsed.data.mutationId,
+              });
+              return;
+            }
+
+            if (existingRecord.status === "processing") {
+              const isStale =
+                Date.now() - new Date(existingRecord.createdAt).getTime() > 30000;
+              if (!isStale) {
+                callback?.({
+                  success: false,
+                  mutationId: parsed.data.mutationId,
+                  error: {
+                    code: "MUTATION_IN_PROGRESS",
+                    message: "Mutation is currently in progress.",
+                  },
+                });
+                return;
+              }
+            }
+          }
+        }
+
         // 1. Resolve shape, canvas & board
         const shape = await shapeService.getShapeById(shapeObjectId);
         const canvas = await canvasRepository.findById(shape.canvasId);
@@ -422,14 +552,18 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
               parsed.data.expectedVersion
             );
           },
-          parsed.data.mutationId
+          parsed.data.mutationId,
+          "shape:delete",
+          parsed.data
         );
 
-        // 5. Broadcast deletion envelope to other room members (excludes sender)
-        socket.to(room).emit(SocketEvents.SHAPE_DELETED, {
-          meta,
-          shapeId: parsed.data.shapeId,
-        });
+        // 5. Broadcast deletion envelope to other room members (excludes sender, omitted on replay)
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_DELETED, {
+            meta,
+            shapeId: parsed.data.shapeId,
+          });
+        }
 
         // 6. Acknowledge sender with mutationId
         callback?.({
@@ -455,11 +589,14 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
 
         if (error instanceof ApiError) {
           const code =
-            error.statusCode === HttpStatus.NOT_FOUND
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
               ? "NOT_FOUND"
               : error.statusCode === HttpStatus.FORBIDDEN
               ? "FORBIDDEN"
-              : "BAD_REQUEST";
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
 
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({

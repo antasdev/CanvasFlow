@@ -344,4 +344,71 @@ describe("Mutation Manager (Slice 13) Unit & Integration Tests", () => {
       expect(item.status).toBe("conflicted");
     });
   });
+
+  describe("Slice 14 Mutation Idempotency Client Behaviors", () => {
+    it("preserves stable mutationId and increments attemptCount across retries", async () => {
+      const stableId = "00000000-0000-4000-8000-000000000001";
+
+      mutationManager.registerMutation({
+        mutationId: stableId,
+        boardId: "board-1",
+        resourceType: "shape",
+        resourceId: "shape-1",
+        operation: "update",
+      });
+
+      expect(useMutationStore.getState().mutations[stableId].attemptCount).toBe(1);
+
+      // Re-registering existing mutation increments attemptCount
+      mutationManager.registerMutation({
+        mutationId: stableId,
+        boardId: "board-1",
+        resourceType: "shape",
+        resourceId: "shape-1",
+        operation: "update",
+      });
+
+      expect(useMutationStore.getState().mutations[stableId].attemptCount).toBe(2);
+      expect(useMutationStore.getState().mutations[stableId].mutationId).toBe(stableId);
+    });
+
+    it("handles MUTATION_IN_PROGRESS by marking uncertain without generating new mutationId", async () => {
+      const stableId = "00000000-0000-4000-8000-000000000002";
+      vi.mocked(socketClientService.updateShape).mockRejectedValueOnce({
+        code: "MUTATION_IN_PROGRESS",
+        message: "Mutation is currently in progress.",
+      });
+
+      await expect(
+        mutationManager.executeShapeUpdate("board-1", "shape-1", { x: 50 }, 1, stableId)
+      ).rejects.toEqual({
+        code: "MUTATION_IN_PROGRESS",
+        message: "Mutation is currently in progress.",
+      });
+
+      const mutation = useMutationStore.getState().mutations[stableId];
+      expect(mutation).toBeDefined();
+      expect(mutation.status).toBe("uncertain");
+      expect(mutation.mutationId).toBe(stableId);
+    });
+
+    it("handles IDEMPOTENCY_KEY_REUSED by marking mutation failed", async () => {
+      const stableId = "00000000-0000-4000-8000-000000000003";
+      vi.mocked(socketClientService.updateShape).mockRejectedValueOnce({
+        code: "IDEMPOTENCY_KEY_REUSED",
+        message: "Idempotency key reused with different payload.",
+      });
+
+      await expect(
+        mutationManager.executeShapeUpdate("board-1", "shape-1", { x: 999 }, 1, stableId)
+      ).rejects.toEqual({
+        code: "IDEMPOTENCY_KEY_REUSED",
+        message: "Idempotency key reused with different payload.",
+      });
+
+      const mutation = useMutationStore.getState().mutations[stableId];
+      expect(mutation).toBeDefined();
+      expect(mutation.status).toBe("failed");
+    });
+  });
 });

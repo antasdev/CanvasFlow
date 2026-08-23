@@ -2,33 +2,83 @@ import crypto from "crypto";
 import mongoose, { Types } from "mongoose";
 
 import { boardRepository } from "@/modules/board/board.repository";
+import { mutationService, MutationOperation } from "@/modules/mutation";
 import { CollaborationEventMeta } from "../socket.types";
 import { ApiError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
 
 /**
- * Collaboration Version Service (Slice 11)
+ * Collaboration Version Service (Slice 11 & Slice 14)
  *
- * Manages atomic MongoDB revision increments and server-side metadata generation
- * for all authoritative collaboration mutations.
+ * Manages atomic MongoDB revision increments, mutation idempotency reservations,
+ * and server-side metadata generation for all authoritative collaboration mutations.
  */
 export class CollaborationVersionService {
   /**
-   * Executes an authoritative mutation callback and atomically increments the board's
-   * collaboration revision within a single database transaction.
-   *
-   * If transactions are not supported by the current MongoDB deployment topology (e.g. standalone test server),
-   * it falls back gracefully to sequential execution without session.
+   * Executes an authoritative mutation callback, manages at-most-once idempotency reservation,
+   * and atomically increments the board's collaboration revision within a single database transaction.
    */
   async executeWithRevision<T>(
     boardId: Types.ObjectId,
     actorId: Types.ObjectId | string,
     socketId: string,
     mutationFn: (session?: mongoose.ClientSession) => Promise<T>,
-    mutationId?: string
+    mutationId?: string,
+    operation?: MutationOperation,
+    payload?: unknown
   ): Promise<{ result: T; meta: CollaborationEventMeta }> {
+    const actorObjectId =
+      typeof actorId === "string" ? new Types.ObjectId(actorId) : actorId;
+
+    // 1. Check Idempotency Reservation when mutationId & operation are provided
+    if (mutationId && operation) {
+      const reservation = await mutationService.prepareReservation(
+        actorObjectId,
+        boardId,
+        mutationId,
+        operation,
+        payload
+      );
+
+      if (reservation.status === "hash-mismatch") {
+        throw new ApiError(
+          HttpStatus.CONFLICT,
+          "Idempotency key reused with different payload.",
+          "IDEMPOTENCY_KEY_REUSED"
+        );
+      }
+
+      if (reservation.status === "processing") {
+        throw new ApiError(
+          HttpStatus.CONFLICT,
+          "Mutation is currently in progress.",
+          "MUTATION_IN_PROGRESS"
+        );
+      }
+
+      if (reservation.status === "completed") {
+        // Return stored canonical result and original event metadata without re-executing
+        const meta: CollaborationEventMeta = {
+          eventId: reservation.record.eventId ?? crypto.randomUUID(),
+          mutationId,
+          boardId: boardId.toString(),
+          actorId: actorObjectId.toString(),
+          socketId,
+          revision: reservation.record.revision ?? 1,
+          occurredAt:
+            reservation.record.completedAt?.toISOString() ??
+            reservation.record.createdAt.toISOString(),
+          isIdempotentReplay: true,
+        };
+
+        return { result: reservation.record.response as T, meta };
+      }
+    }
+
+    // 2. Execute new mutation transaction
     const maxRetries = 5;
     let attempt = 0;
+    const eventId = crypto.randomUUID();
 
     while (attempt < maxRetries) {
       attempt++;
@@ -52,10 +102,29 @@ export class CollaborationVersionService {
 
           try {
             result = await mutationFn(session);
-            updatedBoard = await boardRepository.incrementCollaborationRevision(boardId, session);
+            updatedBoard = await boardRepository.incrementCollaborationRevision(
+              boardId,
+              session
+            );
             if (!updatedBoard) {
-              throw new ApiError(HttpStatus.NOT_FOUND, "Board not found during revision increment.");
+              throw new ApiError(
+                HttpStatus.NOT_FOUND,
+                "Board not found during revision increment."
+              );
             }
+
+            if (mutationId) {
+              await mutationService.completeMutation(
+                actorObjectId,
+                boardId,
+                mutationId,
+                result,
+                eventId,
+                updatedBoard.collaborationRevision ?? 1,
+                session
+              );
+            }
+
             await session.commitTransaction();
           } catch (error: any) {
             if (session.inTransaction()) {
@@ -69,61 +138,125 @@ export class CollaborationVersionService {
               error?.message?.includes("WriteConflict");
 
             if (isWriteConflict && attempt < maxRetries) {
-              // Retry on concurrent transaction write conflict
-              await new Promise((resolve) => setTimeout(resolve, Math.random() * 30 + 10));
+              await new Promise((resolve) =>
+                setTimeout(resolve, Math.random() * 30 + 10)
+              );
               continue;
             }
 
-            // If transaction failed due to standalone topology, retry without transaction
+            // Standalone fallback
             if (
-              error?.message?.includes("Transaction numbers are only allowed on a replica set member or mongos") ||
+              error?.message?.includes(
+                "Transaction numbers are only allowed on a replica set member or mongos"
+              ) ||
               error?.message?.includes("Transactions are not supported")
             ) {
               result = await mutationFn();
-              updatedBoard = await boardRepository.incrementCollaborationRevision(boardId);
+              updatedBoard =
+                await boardRepository.incrementCollaborationRevision(boardId);
               if (!updatedBoard) {
-                throw new ApiError(HttpStatus.NOT_FOUND, "Board not found during revision increment.");
+                throw new ApiError(
+                  HttpStatus.NOT_FOUND,
+                  "Board not found during revision increment."
+                );
+              }
+
+              if (mutationId) {
+                await mutationService.completeMutation(
+                  actorObjectId,
+                  boardId,
+                  mutationId,
+                  result,
+                  eventId,
+                  updatedBoard.collaborationRevision ?? 1
+                );
               }
             } else {
+              if (mutationId) {
+                await mutationService.failMutation(
+                  actorObjectId,
+                  boardId,
+                  mutationId,
+                  error?.message ?? "Mutation failed"
+                );
+              }
               throw error;
             }
           }
 
           const meta: CollaborationEventMeta = {
-            eventId: crypto.randomUUID(),
+            eventId,
             mutationId: mutationId ?? undefined,
             boardId: boardId.toString(),
-            actorId: actorId.toString(),
+            actorId: actorObjectId.toString(),
             socketId,
             revision: updatedBoard.collaborationRevision ?? 1,
             occurredAt: new Date().toISOString(),
+            isIdempotentReplay: false,
           };
 
           return { result, meta };
         } else {
-          const result = await mutationFn();
-          const updatedBoard = await boardRepository.incrementCollaborationRevision(boardId);
-          if (!updatedBoard) {
-            throw new ApiError(HttpStatus.NOT_FOUND, "Board not found during revision increment.");
+          try {
+            const result = await mutationFn();
+            const updatedBoard =
+              await boardRepository.incrementCollaborationRevision(boardId);
+            if (!updatedBoard) {
+              throw new ApiError(
+                HttpStatus.NOT_FOUND,
+                "Board not found during revision increment."
+              );
+            }
+
+            if (mutationId) {
+              await mutationService.completeMutation(
+                actorObjectId,
+                boardId,
+                mutationId,
+                result,
+                eventId,
+                updatedBoard.collaborationRevision ?? 1
+              );
+            }
+
+            const meta: CollaborationEventMeta = {
+              eventId,
+              mutationId: mutationId ?? undefined,
+              boardId: boardId.toString(),
+              actorId: actorObjectId.toString(),
+              socketId,
+              revision: updatedBoard.collaborationRevision ?? 1,
+              occurredAt: new Date().toISOString(),
+              isIdempotentReplay: false,
+            };
+
+            return { result, meta };
+          } catch (error: any) {
+            if (mutationId) {
+              await mutationService.failMutation(
+                actorObjectId,
+                boardId,
+                mutationId,
+                error?.message ?? "Mutation failed"
+              );
+            }
+            throw error;
           }
-
-          const meta: CollaborationEventMeta = {
-            eventId: crypto.randomUUID(),
-            mutationId: mutationId ?? undefined,
-            boardId: boardId.toString(),
-            actorId: actorId.toString(),
-            socketId,
-            revision: updatedBoard.collaborationRevision ?? 1,
-            occurredAt: new Date().toISOString(),
-          };
-
-          return { result, meta };
         }
       } finally {
         if (session) {
           await session.endSession();
         }
       }
+    }
+
+    if (mutationId) {
+      await mutationService.failMutation(
+        actorObjectId,
+        boardId,
+        mutationId,
+        "Failed to execute authoritative mutation after multiple transaction retry attempts."
+      );
     }
 
     throw new ApiError(
