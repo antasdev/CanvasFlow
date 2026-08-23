@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
 import { shapeService, ShapeMapper } from "@/modules/shape";
+import { userRepository } from "@/modules/user/user.repository";
 import { ApiError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
 
@@ -115,24 +116,52 @@ export const registerBoardHandlers = (socket: AuthSocket): void => {
         const room = getBoardRoom(payload.boardId);
         socket.join(room);
 
-        const { activeUsers } = presenceManager.joinBoard(
-          payload.boardId,
-          socket.id,
-          socket.data.user
-        );
+        // Fetch user profile for display metadata
+        let fullName = `User ${userId.toString().slice(-4)}`;
+        let avatar: string | undefined;
+        try {
+          const userDoc = await userRepository.findById(userId.toString());
+          if (userDoc?.fullName) {
+            fullName = userDoc.fullName;
+          }
+          if (userDoc?.profile?.avatar) {
+            avatar = userDoc.profile.avatar;
+          }
+        } catch {
+          // Graceful fallback for mock/test users
+        }
 
-        // 5. Send initial canvas state ONLY to the joining socket
+        const { isFirstSocketForUser, presenceUser, snapshot } =
+          presenceManager.registerSession(payload.boardId, socket.id, {
+            userId: userId.toString(),
+            fullName,
+            avatar,
+          });
+
+        const activeUsers = presenceManager.getActiveUsers(payload.boardId);
+
+        // 5. Send initial canvas state & presence snapshot ONLY to the joining socket
         socket.emit(SocketEvents.CANVAS_SYNC, {
           boardId: payload.boardId,
           canvasId: resolvedCanvasId.toString(),
           shapes,
         });
 
-        // 6. Broadcast user:joined to OTHER clients in the room
-        socket.to(room).emit(SocketEvents.USER_JOINED, {
-          userId: userId.toString(),
-          activeUsers,
-        });
+        socket.emit(SocketEvents.PRESENCE_SNAPSHOT, snapshot);
+
+        // 6. Broadcast user:joined & presence:user-joined to OTHER clients in the room (only on 1st session)
+        if (isFirstSocketForUser) {
+          socket.to(room).emit(SocketEvents.USER_JOINED, {
+            userId: userId.toString(),
+            activeUsers,
+          });
+
+          socket.to(room).emit(SocketEvents.PRESENCE_USER_JOINED, {
+            boardId: payload.boardId,
+            user: presenceUser,
+            sessionId: snapshot.users.find((u) => u.userId === userId.toString())?.userId ?? socket.id,
+          });
+        }
 
         // 7. Structured acknowledgement
         callback?.({
@@ -202,6 +231,12 @@ export const registerBoardHandlers = (socket: AuthSocket): void => {
           socket.to(room).emit(SocketEvents.USER_LEFT, {
             userId: socket.data.user.userId.toString(),
             activeUsers,
+          });
+
+          socket.to(room).emit(SocketEvents.PRESENCE_USER_LEFT, {
+            boardId: payload.boardId,
+            userId: socket.data.user.userId.toString(),
+            remainingSessions: 0,
           });
         }
 

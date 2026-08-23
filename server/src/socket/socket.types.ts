@@ -6,6 +6,20 @@ import type { CommentResponseDto } from "@/modules/comment/comment.dto";
 
 export type { ShapeResponseDto, CommentResponseDto };
 
+import type {
+  PresenceActivity,
+  PresenceActivityBroadcastPayload,
+  PresenceActivityPayload,
+  PresenceCursorBroadcastPayload,
+  PresenceCursorPayload,
+  PresenceHeartbeatPayload,
+  PresenceSnapshotPayload,
+  PresenceUserJoinedPayload,
+  PresenceUserLeftPayload,
+} from "./presence/presence.types";
+
+export * from "./presence/presence.types";
+
 /**
  * Authenticated user data attached to Socket.IO instances.
  */
@@ -426,6 +440,23 @@ export interface ClientToServerEvents {
     payload: DeleteCommentPayload,
     callback?: (response: SocketAck<CommentResponseDto>) => void
   ) => void;
+
+  "presence:heartbeat": (
+    payload: PresenceHeartbeatPayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "presence:cursor": (payload: PresenceCursorPayload) => void;
+
+  "presence:activity": (
+    payload: PresenceActivityPayload,
+    callback?: (response: SocketAck) => void
+  ) => void;
+
+  "presence:snapshot": (
+    payload: { boardId: string },
+    callback?: (response: SocketAck<PresenceSnapshotPayload>) => void
+  ) => void;
 }
 
 /**
@@ -449,6 +480,13 @@ export interface ServerToClientEvents {
   "comment:deleted": (payload: CommentDeletedPayload | { boardId: string; commentId: string }) => void;
   "user:joined": (payload: UserJoinedPayload) => void;
   "user:left": (payload: UserLeftPayload) => void;
+
+  "presence:snapshot": (payload: PresenceSnapshotPayload) => void;
+  "presence:user-joined": (payload: PresenceUserJoinedPayload) => void;
+  "presence:user-left": (payload: PresenceUserLeftPayload) => void;
+  "presence:cursor": (payload: PresenceCursorBroadcastPayload) => void;
+  "presence:activity": (payload: PresenceActivityBroadcastPayload) => void;
+
   error: (message: string) => void;
 }
 

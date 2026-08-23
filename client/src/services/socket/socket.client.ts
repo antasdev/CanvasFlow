@@ -19,6 +19,14 @@ import type {
   DeleteShapePayload,
   JoinBoardPayload,
   LeaveBoardPayload,
+  PresenceActivity,
+  PresenceActivityBroadcastPayload,
+  PresenceActivityPayload,
+  PresenceCursorBroadcastPayload,
+  PresenceCursorPayload,
+  PresenceSnapshotPayload,
+  PresenceUserJoinedPayload,
+  PresenceUserLeftPayload,
   ResolveCommentPayload,
   SelectionChangePayload,
   ShapeLockedPayload,
@@ -722,6 +730,174 @@ export class SocketClientService {
 
     return () => {
       socket.off(SocketEvents.COMMENT_DELETED, handler);
+    };
+  }
+
+  // -------------------------------------------------------------
+  // Slice 15: Collaborative Presence & Session Lifecycle
+  // -------------------------------------------------------------
+
+  /**
+   * Emits a presence heartbeat to maintain active session validity.
+   */
+  public sendPresenceHeartbeat(boardId: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.socket?.connected) {
+        resolve(false);
+        return;
+      }
+
+      this.socket.emit(
+        SocketEvents.PRESENCE_HEARTBEAT,
+        { boardId },
+        (response) => {
+          resolve(Boolean(response?.success));
+        }
+      );
+    });
+  }
+
+  /**
+   * Emits live collaborator cursor position over high-frequency presence channel.
+   */
+  public sendPresenceCursor(
+    boardId: string,
+    position: { x: number; y: number }
+  ): void {
+    if (!this.socket?.connected) {
+      return;
+    }
+
+    const payload: PresenceCursorPayload = {
+      boardId,
+      x: position.x,
+      y: position.y,
+    };
+
+    this.socket.emit(SocketEvents.PRESENCE_CURSOR, payload);
+  }
+
+  /**
+   * Emits collaborator active interaction state change.
+   */
+  public sendPresenceActivity(
+    boardId: string,
+    activity: PresenceActivity
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.socket?.connected) {
+        resolve(false);
+        return;
+      }
+
+      const payload: PresenceActivityPayload = {
+        boardId,
+        activity,
+      };
+
+      this.socket.emit(
+        SocketEvents.PRESENCE_ACTIVITY,
+        payload,
+        (response) => {
+          resolve(Boolean(response?.success));
+        }
+      );
+    });
+  }
+
+  /**
+   * Requests a fresh presence snapshot from the server.
+   */
+  public getPresenceSnapshot(
+    boardId: string
+  ): Promise<PresenceSnapshotPayload | null> {
+    return new Promise((resolve) => {
+      if (!this.socket?.connected) {
+        resolve(null);
+        return;
+      }
+
+      this.socket.emit(
+        SocketEvents.PRESENCE_SNAPSHOT,
+        { boardId },
+        (response) => {
+          if (response?.success && response.data) {
+            resolve(response.data);
+          } else {
+            resolve(null);
+          }
+        }
+      );
+    });
+  }
+
+  /**
+   * Subscribes to board presence snapshot broadcasts.
+   */
+  public onPresenceSnapshot(
+    handler: (payload: PresenceSnapshotPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.PRESENCE_SNAPSHOT, handler);
+
+    return () => {
+      socket.off(SocketEvents.PRESENCE_SNAPSHOT, handler);
+    };
+  }
+
+  /**
+   * Subscribes to collaborator presence joined broadcasts.
+   */
+  public onPresenceUserJoined(
+    handler: (payload: PresenceUserJoinedPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.PRESENCE_USER_JOINED, handler);
+
+    return () => {
+      socket.off(SocketEvents.PRESENCE_USER_JOINED, handler);
+    };
+  }
+
+  /**
+   * Subscribes to collaborator presence left broadcasts.
+   */
+  public onPresenceUserLeft(
+    handler: (payload: PresenceUserLeftPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.PRESENCE_USER_LEFT, handler);
+
+    return () => {
+      socket.off(SocketEvents.PRESENCE_USER_LEFT, handler);
+    };
+  }
+
+  /**
+   * Subscribes to collaborator live cursor position broadcasts.
+   */
+  public onPresenceCursor(
+    handler: (payload: PresenceCursorBroadcastPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.PRESENCE_CURSOR, handler);
+
+    return () => {
+      socket.off(SocketEvents.PRESENCE_CURSOR, handler);
+    };
+  }
+
+  /**
+   * Subscribes to collaborator interaction activity broadcasts.
+   */
+  public onPresenceActivity(
+    handler: (payload: PresenceActivityBroadcastPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.PRESENCE_ACTIVITY, handler);
+
+    return () => {
+      socket.off(SocketEvents.PRESENCE_ACTIVITY, handler);
     };
   }
 

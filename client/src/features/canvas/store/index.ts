@@ -10,3 +10,5 @@ export type {
   CommentMutationIntent,
   MutationStoreState,
 } from "./mutation.store";
+export { usePresenceStore } from "./presence.store";
+export type { PresenceState } from "./presence.store";

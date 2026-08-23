@@ -1112,3 +1112,277 @@ Each slice addresses a distinct distributed systems failure mode:
 4. **Slice 13 (Client Journaling)**: Bounded pending mutation journal with 4-case reconciliation handles offline/optimistic updates.
 5. **Slice 14 (Server Idempotency)**: Atomic mutation reservations and replay caches guarantee at-most-once server execution across network retries and lost acks.
 Together, these 5 slices provide complete end-to-end distributed consistency for real-time collaborative canvas applications.
+
+---
+
+## 26. Collaborative Presence & Session Lifecycle (Slice 15)
+
+### 26.1 Purpose & Guarantees
+
+CanvasFlow implements a server-authoritative, ephemeral **Collaborative Presence and Session Lifecycle Engine**.
+
+```text
+Collaborator Tab 1 (Socket S1) ──┐
+                                 ├──► Logical User (PresenceUser) ──► Board Presence Snapshot
+Collaborator Tab 2 (Socket S2) ──┘
+```
+
+The system provides the following architectural guarantees:
+1. **Multi-Tab Awareness**: A user opening 3 tabs on the same board appears as a single online collaborator with `sessionCount = 3`.
+2. **Graceful Partial Disconnection**: Closing 1 tab decrements `sessionCount` to 2; the user remains `online`. Only closing the final tab triggers `presence:user-left`.
+3. **Real-Time Cursor & Activity Sync**: Collaborator mouse positions and active interaction states (`idle`, `cursor`, `selecting`, `moving`, `resizing`, `editing-text`, `commenting`) stream in real time without lag.
+4. **Ephemeral Purity**: Presence operations NEVER write to MongoDB, NEVER increment `collaborationRevision`, NEVER increment `entity.version`, NEVER generate mutation records, and NEVER alter undo/redo history.
+5. **Stale Session Expiration**: Background pruning terminates zombie sessions after 45 seconds of lost heartbeats.
+
+---
+
+### 26.2 User Identity vs Socket Identity Architecture
+
+A fundamental architectural distinction in CanvasFlow is the separation between **Logical User Identity** and **Physical Socket Session Identity**:
+
+```text
+Logical User (userId)
+  │
+  ├── Physical Session A: Socket ID `sock_alpha` (Tab 1, Desktop)
+  │     └── connectedAt: 12:00:00, lastHeartbeatAt: 12:01:20
+  │
+  └── Physical Session B: Socket ID `sock_beta`  (Tab 2, Laptop)
+        └── connectedAt: 12:00:45, lastHeartbeatAt: 12:01:30
+```
+
+```typescript
+export interface PresenceUser {
+  userId: string;
+  fullName: string;
+  avatar?: string;
+  status: "online" | "away" | "offline";
+  activity: "idle" | "cursor" | "selecting" | "moving" | "resizing" | "editing-text" | "commenting";
+  sessionCount: number;
+  lastSeenAt: string;
+}
+
+export interface PresenceSession {
+  sessionId: string; // UUID v4 generated on connect
+  socketId: string;  // Socket.IO connection id
+  userId: string;    // Logical user id
+  boardId: string;   // Board scope
+  connectedAt: string;
+  lastHeartbeatAt: string;
+}
+```
+
+---
+
+### 26.3 PresenceManager Domain Service
+
+The server encapsulates all presence state in an in-memory domain service `PresenceManager` utilizing five indexing maps for $O(1)$ operations:
+
+```text
+PresenceManager
+  │
+  ├── sessions: Map<socketId, PresenceSession>
+  ├── boardSockets: Map<boardId, Set<socketId>>
+  ├── userSockets: Map<userId, Set<socketId>>
+  ├── boardUsers: Map<boardId, Map<userId, PresenceUser>>
+  └── boardCursors: Map<boardId, Map<userId, PresenceCursor>>
+```
+
+#### Core Operational Invariants:
+1. `registerSession(boardId, socketId, user)`:
+   - Registers physical session in `sessions` and `boardSockets`.
+   - Adds `socketId` to `userSockets.get(userId)`.
+   - Computes `sessionCount = userSockets.get(userId).size`.
+   - If first socket for user (`sessionCount === 1`), flags `isFirstSocketForUser = true`.
+2. `unregisterSession(socketId)`:
+   - Deletes session from `sessions` and `boardSockets`.
+   - Removes `socketId` from `userSockets.get(userId)`.
+   - If `userSockets.get(userId).size === 0`, removes user from `boardUsers` and cursors from `boardCursors`, flagging `isLastSocketForUser = true`.
+   - If remaining sessions > 0, updates `user.sessionCount = remainingSessions`.
+3. `touchSession(socketId)`:
+   - Updates `lastHeartbeatAt` and user's `lastSeenAt` to current timestamp.
+4. `removeExpiredSessions(maxInactivityMs)`:
+   - Iterates sessions and unregisters any session where `Date.now() - lastHeartbeatAt > maxInactivityMs`.
+
+---
+
+### 26.4 End-to-End Presence Lifecycle Sequences
+
+#### A. Board Join & Presence Hydration Flow
+
+```text
+Client (Alice Tab 1)                     Server (SocketServer + PresenceManager)
+  │                                                        │
+  ├─── board:join { boardId } ────────────────────────────►│
+  │                                                        ├── 1. Authorize Board Access
+  │                                                        ├── 2. Fetch User Profile (fullName, avatar)
+  │                                                        ├── 3. presenceManager.registerSession()
+  │                                                        │       (isFirstSocketForUser = true)
+  │◄── presence:snapshot { users: [Alice], cursors: [] }───┤ (Sent ONLY to Alice)
+  │                                                        │
+  │                                                        ├── 4. Broadcast presence:user-joined
+  │                                                        │       to OTHER board room members
+```
+
+#### B. Multi-Tab Deduplication & Partial Disconnection Flow
+
+```text
+Client (Alice Tab 2)                               Server
+  │                                                  │
+  ├─── board:join { boardId } ──────────────────────►│
+  │                                                  ├── presenceManager.registerSession()
+  │                                                  │    (sessionCount = 2, isFirstSocket = false)
+  │◄── presence:snapshot { users: [Alice (x2)] } ────┤
+  │                                                  │ (NO presence:user-joined broadcast)
+  │
+  ─── [Alice closes Tab 2] ──────────────────────────►
+  │                                                  ├── presenceManager.unregisterSession()
+  │                                                  │    (remainingSessions = 1, isLast = false)
+  │                                                  │ (NO presence:user-left broadcast)
+  │
+  ─── [Alice closes Tab 1] ──────────────────────────►
+  │                                                  ├── presenceManager.unregisterSession()
+  │                                                  │    (remainingSessions = 0, isLast = true)
+  │                                                  ├── Broadcast presence:user-left to room
+```
+
+#### C. Periodic Heartbeat & Stale Session Expiration
+
+```text
+Client                                             Server
+  │                                                  │
+  ├─── [Every 20s] presence:heartbeat { boardId } ──►│
+  │                                                  ├── presenceManager.touchSession(socket.id)
+  │                                                  │
+  ├─── [Network drop / Tab crash] ───────────────────► (No heartbeats sent)
+  │                                                  │
+  │                                                  ├── [Background Timer - Every 30s]
+  │                                                  ├── presenceManager.removeExpiredSessions(45000)
+  │                                                  ├── Session pruned -> isLastSocketForUser?
+  │                                                  └── Broadcast presence:user-left to room
+```
+
+---
+
+### 26.5 Live Collaborator Cursor & Activity Synchronization
+
+Collaborator cursor positions and interactions stream across active room members with strict performance optimizations:
+
+```text
+Client Pointer Move (~60-120 Hz)
+  │
+  ├── 1. Local Konva Cursor updates immediately (0ms latency)
+  ├── 2. emitCursor throttled to ~30 FPS (33ms interval)
+  ├── 3. socket.emit("presence:cursor", { boardId, x, y })
+  ▼
+Server presence.handler.ts
+  │
+  ├── 1. Validates coordinate boundaries (-1,000,000 <= x, y <= 1,000,000)
+  ├── 2. presenceManager.updateCursor(boardId, userId, x, y)
+  └── 3. socket.to(room).emit("presence:cursor", { userId, x, y })
+         (Sender strictly excluded from broadcast)
+```
+
+#### Activity State Transitions
+- Activity values: `"idle" | "cursor" | "selecting" | "moving" | "resizing" | "editing-text" | "commenting"`
+- When user performs canvas operations (drag selection, shape moving), client sets `localActivity` and emits `presence:activity`.
+- An auto-idle timer resets `localActivity` to `"idle"` after 5 seconds of user inactivity.
+
+---
+
+### 26.6 Ephemeral Purity Invariant
+
+Presence data is **ephemeral runtime telemetry**, distinct from durable domain entity data.
+
+| System Characteristic | Durable Domain State (Shapes, Comments) | Ephemeral Presence (Users, Cursors, Activities) |
+| :--- | :--- | :--- |
+| **Storage Engine** | MongoDB Multi-Document Transactions | In-Memory `PresenceManager` (RAM) |
+| **Board Revision** | Increments monotonic `collaborationRevision` | **ZERO** revision bump |
+| **OCC Versioning** | Increments `Shape.version` / `Comment.version` | **ZERO** version changes |
+| **Idempotency Log** | Enters `MutationRecordModel` with 24h TTL | **ZERO** mutation records |
+| **Undo/Redo Stack** | Tracked in `useCanvasStore.past / future` | **ZERO** history modifications |
+| **Network Delivery** | Reliable ordered broadcast with ACK verification | Loss-tolerant real-time UDP-style broadcast |
+
+---
+
+### 26.7 Future Redis Migration Strategy
+
+The `PresenceManager` is decoupled behind domain interfaces (`RegisterSessionResult`, `UnregisterSessionResult`, `BoardSnapshot`). In a clustered multi-node deployment:
+
+```text
+Socket Node 1 ──┐
+                 ├──► Redis Hashes (`board:{id}:presence`, `board:{id}:cursors`)
+Socket Node 2 ──┤     Redis Sorted Sets (`board:{id}:heartbeats` for ZREMRANGEBYSCORE)
+                 ├──► Redis Pub/Sub (`presence:broadcasts`)
+Socket Node N ──┘
+```
+
+The client-server Socket.IO event schema (`presence:snapshot`, `presence:user-joined`, `presence:user-left`, `presence:cursor`, `presence:activity`, `presence:heartbeat`) remains 100% identical.
+
+---
+
+## 27. Senior Engineering Interview Q&A: Collaborative Presence & Distributed Lifecycle
+
+### Q1: Why must user identity and socket connection identity be strictly decoupled in collaborative whiteboards?
+**Answer:**
+A user is a logical identity, whereas a socket is a physical transport connection. A user frequently opens multiple tabs on the same board, uses dual monitors, or joins simultaneously from a desktop and a tablet.
+- If socket and user were 1-to-1, opening a second tab would duplicate the user in the presence stack or trigger false "user left" events when one tab is closed.
+- Decoupling enables **reference-counted session management**: the user appears once in the UI with a `sessionCount` badge, and is only marked offline when all active socket sessions are terminated.
+
+### Q2: Why is presence state maintained entirely in memory rather than written to MongoDB?
+**Answer:**
+1. **High Write Frequency**: Mouse cursor streaming generates ~30 updates per second per collaborator. With 50 concurrent users on a board, that equates to 1,500 operations/sec. Writing high-frequency ephemeral telemetry to MongoDB would thrash disk I/O, exhaust write concern pools, and inflate database storage with useless data.
+2. **Ephemeral Nature**: When all users leave a board, active cursor positions and editing activity have zero historical value. Reconnection and fresh join sequences automatically construct pristine presence state from active sockets.
+
+### Q3: Why must presence operations NEVER increment `collaborationRevision`?
+**Answer:**
+`collaborationRevision` is the board's monotonic ordering counter used by clients to detect missed durable mutations and trigger board recovery.
+- If cursor moves incremented `collaborationRevision`, a client dropping a single 33ms cursor packet would observe a revision gap and trigger a heavyweight HTTP/WebSocket board recovery.
+- Keeping presence isolated from `collaborationRevision` guarantees that durable canvas entity synchronization and lightweight presence telemetry never interfere with each other.
+
+### Q4: How does CanvasFlow prevent ghost/zombie presence entries if a client abruptly loses power or drops Wi-Fi?
+**Answer:**
+TCP half-open connections can remain un-notified at the OS level for minutes. CanvasFlow enforces a **dual heartbeat and pruning model**:
+1. Clients emit `presence:heartbeat` every 20 seconds.
+2. The server runs an unreferenced background interval every 30 seconds, executing `presenceManager.removeExpiredSessions(45000)`.
+3. Any session with no heartbeat for > 45 seconds is pruned, and if it was the user's last session, `presence:user-left` is automatically broadcast to room members.
+
+### Q5: How is sender exclusion implemented in cursor and activity broadcasts, and why is it critical?
+**Answer:**
+The server uses `socket.to(room).emit(...)` instead of `io.to(room).emit(...)`.
+- The sender client renders its own cursor locally at 60–120 FPS with 0ms latency.
+- Echoing cursor coordinates back to the sender would waste network bandwidth, increase client CPU overhead, and cause cursor jitter if the echoed position overwrote a newer local mouse position.
+
+### Q6: How does the client prevent re-render cascades when high-frequency remote cursors stream into the application?
+**Answer:**
+1. **Isolated Zustand Store**: Cursor and presence state are stored in a dedicated `usePresenceStore`, isolated from `useCanvasStore` and `useCommentStore`.
+2. **Selective State Subscriptions**: Konva components subscribe only to individual user cursor slices (`usePresenceStore((s) => s.cursors[userId])`) or render within dedicated overlay layers (`RemoteCursorLayer`).
+3. **Throttled Emitters**: Client cursor emits are throttled via timestamp comparisons (`now - lastEmit >= 33ms`) to cap network transmission at ~30 FPS.
+
+### Q7: What happens to presence state when a client triggers Board Recovery (Slice 10)?
+**Answer:**
+During `board:recovery-request`:
+1. The server re-authenticates board access and re-registers the socket in `presenceManager.registerSession(...)`.
+2. The recovery response payload includes an authoritative `presence:snapshot` alongside the shapes and comments.
+3. The client wipes its local ephemeral remote cursors/locks and hydrates the authoritative snapshot, guaranteeing zero presence drift across reconnections.
+
+### Q8: How does the system prevent cross-board presence leakage?
+**Answer:**
+1. **Payload Room Verification**: Every presence event (`presence:cursor`, `presence:activity`, `presence:heartbeat`) validates that `socket.rooms.has("board:" + payload.boardId)`. Sockets not joined to the board room are rejected with `FORBIDDEN`.
+2. **Internal Scoping**: `PresenceManager` maps (`boardSockets`, `boardUsers`, `boardCursors`) are strictly partitioned by `boardId`.
+3. **Room-Scoped Broadcasts**: Socket.IO events are emitted strictly to `board:<boardId>` rooms.
+
+### Q9: Why is coordinate bounds validation critical on cursor payloads?
+**Answer:**
+Clients send raw coordinate pairs `(x, y)` from mouse events. Without validation:
+- Malicious clients could emit `NaN`, `Infinity`, or extreme values (`1e308`) causing client rendering engines (HTML5 Canvas / Konva) to crash, hang, or enter infinite layout recalculation loops.
+- CanvasFlow uses Zod to validate that coordinates are finite numbers within valid whiteboard bounds (`-1,000,000 <= x, y <= 1,000,000`).
+
+### Q10: How would you migrate CanvasFlow's presence engine from a single node to a horizontally scaled cluster?
+**Answer:**
+1. **Data Store**: Replace the in-memory maps in `PresenceManager` with a Redis cluster:
+   - User sessions: Redis Hash `board:{boardId}:presence` storing serialized `PresenceUser`.
+   - Cursors: Redis Hash `board:{boardId}:cursors`.
+   - Heartbeats: Redis Sorted Set `board:{boardId}:heartbeats` with timestamp scores.
+2. **Pub/Sub Broker**: Use Redis Pub/Sub (or the Socket.IO Redis Adapter) to broadcast `presence:cursor` and `presence:user-joined` across all server nodes.
+3. **Pruning Worker**: Run a scheduled cron job executing `ZREMRANGEBYSCORE` to atomically remove expired heartbeats and publish `presence:user-left` messages.
+4. **Zero Client Changes**: Because the WebSocket event contracts and payload schemas are strictly abstracted, client code requires zero modification.

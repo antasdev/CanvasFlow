@@ -10,3 +10,5 @@ export { default as ShapeRenderer } from "./ShapeRenderer";
 export { default as CollaboratorCursor } from "./CollaboratorCursor";
 export { default as CollaboratorSelection } from "./CollaboratorSelection";
 export { default as CollaboratorShapeLock } from "./CollaboratorShapeLock";
+export { default as PresenceAvatars } from "./PresenceAvatars";
+export { default as RemoteCursorLayer } from "./RemoteCursorLayer";

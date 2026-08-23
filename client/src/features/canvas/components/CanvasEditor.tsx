@@ -10,6 +10,7 @@ import {
     useCanvasSocket,
     useShapes,
     useBoardRecovery,
+    usePresenceSocket,
 } from "../hooks";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
@@ -20,6 +21,7 @@ import CanvasGrid from "./CanvasGrid";
 import CollaboratorCursor from "./CollaboratorCursor";
 import CollaboratorSelection from "./CollaboratorSelection";
 import CollaboratorShapeLock from "./CollaboratorShapeLock";
+import RemoteCursorLayer from "./RemoteCursorLayer";
 import InlineTextEditor from "./InlineTextEditor";
 import ShapeRenderer from "./ShapeRenderer";
 import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
@@ -96,6 +98,9 @@ export default function CanvasEditor({
     // Initialize real-time comments subscriptions and data loading
     useComments(boardId);
     useCommentSocket(boardId);
+
+    // Initialize collaborative presence & session lifecycle
+    const { emitCursor, emitActivity } = usePresenceSocket(boardId);
 
     // Initialize keyboard undo/redo shortcuts
     useCanvasHistory();
@@ -608,9 +613,14 @@ export default function CanvasEditor({
                 x: worldPoint.x,
                 y: worldPoint.y,
             });
+            emitCursor({
+                x: worldPoint.x,
+                y: worldPoint.y,
+            });
         }
 
         if (selectionBox) {
+            emitActivity("selecting");
             setSelectionBox((current) => {
                 if (!current) {
                     return null;
@@ -630,6 +640,7 @@ export default function CanvasEditor({
             return;
         }
 
+        emitActivity("moving");
         setDrawing((current) => {
             if (!current) {
                 return null;
@@ -912,6 +923,8 @@ export default function CanvasEditor({
                                 cursor={cursor}
                             />
                         ))}
+
+                        <RemoteCursorLayer />
                     </Layer>
                 </Stage>
             ) : null}

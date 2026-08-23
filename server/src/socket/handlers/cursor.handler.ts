@@ -2,6 +2,7 @@ import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
 import { AuthSocket, CursorMovePayload } from "../socket.types";
 import { cursorMoveSchema } from "../validation/cursor.validation";
+import { presenceManager } from "../presence/presence.manager";
 
 /**
  * Registers real-time collaborator cursor event handlers on an authenticated socket.
@@ -28,6 +29,14 @@ export const registerCursorHandlers = (socket: AuthSocket): void => {
       }
 
       const userId = socket.data.user.userId.toString();
+
+      // Update in-memory presence manager state
+      presenceManager.updateCursor(
+        parsed.data.boardId,
+        userId,
+        parsed.data.x,
+        parsed.data.y
+      );
 
       // Broadcast exclusively to other collaborators in the board room (excludes sender)
       socket.to(boardRoom).emit(SocketEvents.CURSOR_MOVED, {

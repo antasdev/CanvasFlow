@@ -53,6 +53,13 @@ export const SocketEvents = {
   USER_JOINED: "user:joined",
   USER_LEFT: "user:left",
 
+  PRESENCE_SNAPSHOT: "presence:snapshot",
+  PRESENCE_USER_JOINED: "presence:user-joined",
+  PRESENCE_USER_LEFT: "presence:user-left",
+  PRESENCE_CURSOR: "presence:cursor",
+  PRESENCE_ACTIVITY: "presence:activity",
+  PRESENCE_HEARTBEAT: "presence:heartbeat",
+
   ERROR: "error",
 } as const;
 

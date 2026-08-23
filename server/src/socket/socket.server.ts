@@ -12,6 +12,7 @@ import { registerLockHandlers } from "./handlers/lock.handler";
 import { registerTransformHandlers } from "./handlers/transform.handler";
 import { registerCommentHandlers } from "./handlers/comment.handler";
 import { registerRecoveryHandlers } from "./handlers/recovery.handler";
+import { registerPresenceHandlers } from "./handlers/presence.handler";
 import { presenceManager } from "./presence/presence.manager";
 import { shapeLockManager } from "./locks/shape-lock.manager";
 import { getBoardRoom } from "./socket.rooms";
@@ -30,6 +31,7 @@ export class SocketServer {
     InterServerEvents,
     SocketData
   >;
+  private cleanupInterval?: NodeJS.Timeout;
 
   constructor(httpServer: HttpServer) {
     this.io = new Server<
@@ -47,6 +49,36 @@ export class SocketServer {
     this.io.use(socketAuthMiddleware);
 
     this.registerConnection();
+    this.startStaleSessionPruning();
+  }
+
+  private startStaleSessionPruning(): void {
+    // Periodically prune stale presence sessions every 30 seconds
+    this.cleanupInterval = setInterval(() => {
+      this.pruneStaleSessions();
+    }, 30000);
+    // Unref so timer does not prevent process exit in test runners
+    if (this.cleanupInterval.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  public pruneStaleSessions(timeoutMs: number = 45000): void {
+    const expiredSessions = presenceManager.removeExpiredSessions(timeoutMs);
+    for (const expired of expiredSessions) {
+      if (expired.isLastSocketForUser) {
+        const room = getBoardRoom(expired.boardId);
+        this.io.to(room).emit(SocketEvents.USER_LEFT, {
+          userId: expired.userId,
+          activeUsers: presenceManager.getActiveUsers(expired.boardId),
+        });
+        this.io.to(room).emit(SocketEvents.PRESENCE_USER_LEFT, {
+          boardId: expired.boardId,
+          userId: expired.userId,
+          remainingSessions: 0,
+        });
+      }
+    }
   }
 
   private registerConnection(): void {
@@ -79,6 +111,9 @@ export class SocketServer {
       // Register Slice 10 Real-Time Reconnection & Board State Recovery Handlers
       registerRecoveryHandlers(socket);
 
+      // Register Slice 15 Collaborative Presence & Session Lifecycle Handlers
+      registerPresenceHandlers(this.io, socket);
+
       // Handle Socket Disconnection Lifecycle, Lock Release & Presence Cleanup
       socket.on(SocketEvents.DISCONNECT, (reason) => {
         // 1. Release any shape locks held by this specific socket
@@ -104,6 +139,12 @@ export class SocketServer {
             userId: removeResult.removedUserId,
             activeUsers: removeResult.activeUsers,
           });
+
+          this.io.to(room).emit(SocketEvents.PRESENCE_USER_LEFT, {
+            boardId: removeResult.boardId,
+            userId: removeResult.removedUserId,
+            remainingSessions: 0,
+          });
         }
 
         console.log(
@@ -123,6 +164,9 @@ export class SocketServer {
   }
 
   public close(): Promise<void> {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+    }
     return new Promise((resolve) => {
       this.io.close(() => {
         resolve();

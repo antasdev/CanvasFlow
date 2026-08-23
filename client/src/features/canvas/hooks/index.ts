@@ -7,3 +7,4 @@ export * from "./useDeleteShape";
 export * from "./useCanvasSocket";
 export * from "./useShapeTransform";
 export * from "./useBoardRecovery";
+export * from "./usePresenceSocket";

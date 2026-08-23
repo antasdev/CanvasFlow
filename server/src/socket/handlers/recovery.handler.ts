@@ -1,6 +1,7 @@
 import { Types } from "mongoose";
 
 import { boardService } from "@/modules/board";
+import { userRepository } from "@/modules/user/user.repository";
 import { ApiError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
 
@@ -55,11 +56,28 @@ export const registerRecoveryHandlers = (socket: AuthSocket): void => {
         socket.join(room);
 
         // 4. Update / Rebuild Presence State
-        const { isFirstSocketForUser, activeUsers } = presenceManager.joinBoard(
-          parsed.data.boardId,
-          socket.id,
-          socket.data.user
-        );
+        let fullName = `User ${userId.toString().slice(-4)}`;
+        let avatar: string | undefined;
+        try {
+          const userDoc = await userRepository.findById(userId.toString());
+          if (userDoc?.fullName) {
+            fullName = userDoc.fullName;
+          }
+          if (userDoc?.profile?.avatar) {
+            avatar = userDoc.profile.avatar;
+          }
+        } catch {
+          // Graceful fallback for mock/test users
+        }
+
+        const { isFirstSocketForUser, presenceUser, snapshot } =
+          presenceManager.registerSession(parsed.data.boardId, socket.id, {
+            userId: userId.toString(),
+            fullName,
+            avatar,
+          });
+
+        const activeUsers = presenceManager.getActiveUsers(parsed.data.boardId);
 
         // 5. If this is a new or revived connection for this user, notify peers
         if (isFirstSocketForUser) {
@@ -67,7 +85,16 @@ export const registerRecoveryHandlers = (socket: AuthSocket): void => {
             userId: userId.toString(),
             activeUsers,
           });
+
+          socket.to(room).emit(SocketEvents.PRESENCE_USER_JOINED, {
+            boardId: parsed.data.boardId,
+            user: presenceUser,
+            sessionId: snapshot.users.find((u) => u.userId === userId.toString())?.userId ?? socket.id,
+          });
         }
+
+        // Emit current presence snapshot to recovered client
+        socket.emit(SocketEvents.PRESENCE_SNAPSHOT, snapshot);
 
         // 6. Query authoritative collaboration revision
         const revision = await collaborationVersionService.getBoardRevision(boardObjectId);
