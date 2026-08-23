@@ -1,5 +1,5 @@
 import type Konva from "konva";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Layer, Rect, Stage } from "react-konva";
 import { toast } from "sonner";
 
@@ -21,6 +21,13 @@ import CollaboratorSelection from "./CollaboratorSelection";
 import CollaboratorShapeLock from "./CollaboratorShapeLock";
 import InlineTextEditor from "./InlineTextEditor";
 import ShapeRenderer from "./ShapeRenderer";
+import {
+    useComments,
+    useCommentSocket,
+    useCommentStore,
+    CommentBadge,
+    CommentPanel,
+} from "@/features/comments";
 
 type CanvasEditorProps = {
     canvasId?: string;
@@ -77,8 +84,35 @@ export default function CanvasEditor({
     // Initialize real-time WebSocket room subscriptions and synchronization
     useCanvasSocket(boardId, canvasId);
 
+    // Initialize real-time comments subscriptions and data loading
+    useComments(boardId);
+    useCommentSocket(boardId);
+
     // Initialize keyboard undo/redo shortcuts
     useCanvasHistory();
+
+    const comments = useCommentStore((state) => state.comments);
+    const toggleCommentPanel = useCommentStore((state) => state.togglePanel);
+    const setCommentSelectedShapeId = useCommentStore(
+        (state) => state.setSelectedShapeId
+    );
+    const selectShape = useCanvasStore((state) => state.selectShape);
+
+    const shapeCommentsMap = useMemo(() => {
+        const map: Record<string, { count: number; hasUnresolved: boolean }> = {};
+        for (const c of Object.values(comments)) {
+            if (c.shapeId && !c.isDeleted) {
+                if (!map[c.shapeId]) {
+                    map[c.shapeId] = { count: 0, hasUnresolved: false };
+                }
+                map[c.shapeId].count++;
+                if (!c.isResolved) {
+                    map[c.shapeId].hasUnresolved = true;
+                }
+            }
+        }
+        return map;
+    }, [comments]);
 
     const {
         data: serverShapes,
@@ -872,6 +906,35 @@ export default function CanvasEditor({
                     </Layer>
                 </Stage>
             ) : null}
+
+            {/* Shape Comment Badges Overlay */}
+            {shapes.map((shape) => {
+                const info = shapeCommentsMap[shape.id];
+                if (!info || info.count <= 0) return null;
+
+                // Calculate screen position for badge at top-right of shape
+                const badgeScreenX = (shape.x + shape.width) * zoom + pan.x;
+                const badgeScreenY = shape.y * zoom + pan.y;
+
+                return (
+                    <CommentBadge
+                        key={`comment-badge-${shape.id}`}
+                        x={badgeScreenX}
+                        y={badgeScreenY}
+                        count={info.count}
+                        hasUnresolved={info.hasUnresolved}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            selectShape(shape.id);
+                            setCommentSelectedShapeId(shape.id);
+                            toggleCommentPanel(true);
+                        }}
+                    />
+                );
+            })}
+
+            {/* Real-time Collaborative Comments Panel */}
+            <CommentPanel boardId={boardId} />
         </div>
     );
 }

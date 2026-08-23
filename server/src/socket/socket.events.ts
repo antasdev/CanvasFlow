@@ -35,6 +35,18 @@ export const SocketEvents = {
   SHAPE_TRANSFORMING: "shape:transforming",
   SHAPE_TRANSFORM_END: "shape:transform-end",
 
+  COMMENT_CREATE: "comment:create",
+  COMMENT_CREATED: "comment:created",
+
+  COMMENT_UPDATE: "comment:update",
+  COMMENT_UPDATED: "comment:updated",
+
+  COMMENT_DELETE: "comment:delete",
+  COMMENT_DELETED: "comment:deleted",
+
+  COMMENT_RESOLVE: "comment:resolve",
+  COMMENT_RESOLVED: "comment:resolved",
+
   USER_JOINED: "user:joined",
   USER_LEFT: "user:left",
 

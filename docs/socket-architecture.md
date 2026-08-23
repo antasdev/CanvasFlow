@@ -383,25 +383,75 @@ LOCAL POINTER / TRANSFORM
 
 ---
 
-## 16. Security & Hardening
+## 17. Real-Time Comments & Collaborative Annotations (Slice 9)
+
+Collaborative annotations introduce persistent discussion threads attached to either the **canvas** (`shapeId: null`) or a **specific shape** (`shapeId: "<shapeId>"`).
+
+### A. Architectural Principles & Invariants:
+1. **Durable Persistence & Threading**:
+   - Comments are persisted in MongoDB in `comments` collection with compound indexes (`{ boardId: 1, createdAt: -1 }`, `{ boardId: 1, shapeId: 1 }`, `{ parentCommentId: 1 }`).
+   - Threading is strictly 1-level (root comment $\rightarrow$ replies). Reply-to-reply nesting is rejected at domain service level.
+2. **Author Identity Enforcement**:
+   - `authorId` is strictly extracted from verified session JWT (`socket.data.user.userId` / `req.user.userId`).
+   - Sockets cannot spoof author identity or edit/delete comments authored by others.
+3. **Soft-Deletion Model**:
+   - When a comment is deleted, its record remains in MongoDB with `isDeleted: true`, `deletedAt: Date`, and `content: ""`.
+   - Replies to deleted comments remain preserved and readable. Soft-deleted comments cannot be edited or replied to.
+4. **Shape Deletion Decoupling**:
+   - When a shape is deleted, attached comments are not deleted. Their `shapeId` is gracefully nullified (`shapeId: null`), converting them into canvas-level comments.
+5. **Undo/Redo History Isolation**:
+   - Comments live in an independent Zustand store (`useCommentStore`) and React Query cache.
+   - Comment actions (create, reply, edit, delete, resolve) **never** enter the canvas undo/redo stack (`past` / `future`).
+
+### B. Comment Socket Event Lifecycles:
+
+```text
+1. COMMENT_CREATE (comment:create)
+   Client ──► Server (validates Zod schema, checks board access)
+            ├── commentRepository.create()
+            ├── CommentMapper.toResponseDto()
+            ├── socket.to(boardRoom).emit("comment:created", dto)
+            └── ack({ success: true, data: dto })
+
+2. COMMENT_UPDATE (comment:update)
+   Client ──► Server (author equality check, soft-delete lockout)
+            ├── commentRepository.updateById() (sets isEdited: true)
+            ├── socket.to(boardRoom).emit("comment:updated", dto)
+            └── ack({ success: true, data: dto })
+
+3. COMMENT_RESOLVE (comment:resolve)
+   Client ──► Server (checks board access, updates isResolved)
+            ├── socket.to(boardRoom).emit("comment:resolved", dto)
+            └── ack({ success: true, data: dto })
+
+4. COMMENT_DELETE (comment:delete)
+   Client ──► Server (author equality or board creator check)
+            ├── commentRepository.softDeleteById()
+            ├── socket.to(boardRoom).emit("comment:deleted", { boardId, commentId })
+            └── ack({ success: true, data: dto })
+```
+
+---
+
+## 18. Security & Hardening
 
 1. **Authentication**: All connections require a valid JWT access token verified against `JWT_ACCESS_SECRET`.
 2. **Authorization Boundary**: Board access authorization is verified server-side through `boardService.authorizeBoardAccess` before room entry or data sync.
 3. **Persisted Boundary Resolution**: Sockets cannot supply arbitrary `boardId` or `userId` values; the server derives `boardId` strictly from `Shape` → `Canvas` → `Board`.
-4. **Room Membership Enforcement**: Shape, cursor, selection, and lock handlers verify `socket.rooms.has(getBoardRoom(boardId))` before allowing actions.
+4. **Room Membership Enforcement**: Shape, cursor, selection, lock, and comment handlers verify `socket.rooms.has(getBoardRoom(boardId))` before allowing actions.
 5. **Shape Ownership Verification**: For selection and lock requests, `shapeService.verifyShapesBelongToBoard` guarantees foreign shapes cannot be locked or selected across boards.
-6. **Payload Bounds & Validation**: Zod validates all shape properties (`text` length $\le 5000$, `fontSize` 8–200, valid text alignment, finite coordinates).
-7. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all shape entities pass through `ShapeMapper.toResponseDto()`.
+6. **Payload Bounds & Validation**: Zod validates all shape properties (`text` length $\le 5000$, `fontSize` 8–200, valid text alignment, finite coordinates) and comment payloads (`content` 1–2000 chars, max length enforcement).
+7. **DTO Sanitization**: Raw Mongoose model instances are never broadcast over sockets; all entities pass through DTO mappers (`ShapeMapper`, `CommentMapper`) with soft-delete masking.
 
 ---
 
-## 17. Interview Concepts
+## 19. Interview Concepts
 
 ### 1. Discriminated Unions in Real-Time Systems
 Using a literal discriminator field (`type: "rectangle" | "text" | "sticky_note"`) enables TypeScript to perform exhaustive pattern matching and type narrowing. This eliminates optional-property soup and ensures component renderers receive guaranteed, non-null properties for specific shape types.
 
 ### 2. Ephemeral vs. Durable Collaboration State
-- **Durable State**: Shapes, text content, colors, z-indexes, board settings. Persisted authoritatively in MongoDB.
+- **Durable State**: Shapes, text content, colors, z-indexes, board settings, comment threads. Persisted authoritatively in MongoDB.
 - **Ephemeral State**: Cursor coordinates, shape selections, soft-locks, heartbeat refresh timers. Managed in-memory to prevent database write amplification.
 
 ### 3. Write Amplification Mitigation
@@ -409,4 +459,7 @@ Writing every text keystroke to MongoDB generates unsustainable I/O load. Canvas
 
 ### 4. Screen vs. World Coordinate Projection
 - **World Space**: The invariant infinite canvas coordinates where a shape lives at `(x, y)`.
-- **Screen Space**: The pixel position on the viewport computed via `screenX = worldX * zoom + pan.x`. HTML overlays like `<InlineTextEditor>` dynamically compute screen projections so editing controls match the visual canvas perfectly during pan and zoom.
+- **Screen Space**: The pixel position on the viewport computed via `screenX = worldX * zoom + pan.x`. HTML overlays like `<InlineTextEditor>` and `<CommentBadge>` dynamically compute screen projections so editing controls match the visual canvas perfectly during pan and zoom.
+
+### 5. Decoupled Persistence & Soft-Deletion Cascades
+In collaborative systems, hard-deleting records or cascading deletes can destroy contextual collaborator discussions. By adopting a soft-delete model with masked content on comments and a foreign-key nullification lifecycle (`shapeId: null` on shape deletion), the collaborative history remains resilient without orphaned dangling references.

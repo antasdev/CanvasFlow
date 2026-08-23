@@ -4,17 +4,23 @@ import { useAuthStore } from "@/store";
 import { SocketEvents } from "./socket.events";
 import type {
   BoardJoinAckData,
+  CommentDeletedPayload,
+  CommentResponseDto,
   ConnectionState,
+  CreateCommentPayload,
   CreateShapePayload,
   CursorMovePayload,
+  DeleteCommentPayload,
   DeleteShapePayload,
   JoinBoardPayload,
   LeaveBoardPayload,
+  ResolveCommentPayload,
   SelectionChangePayload,
   ShapeLockedPayload,
   ShapeResponseDto,
   TransformingShapePayload,
   TypedSocket,
+  UpdateCommentPayload,
   UpdateShapePayload,
 } from "./socket.types";
 
@@ -440,6 +446,154 @@ export class SocketClientService {
       return;
     }
     this.socket.emit(SocketEvents.SHAPE_TRANSFORM_END, { boardId, shapeId });
+  }
+
+  /**
+   * Creates a comment on a board or shape in real-time.
+   */
+  public createComment(
+    payload: CreateCommentPayload
+  ): Promise<CommentResponseDto> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      socket.emit(SocketEvents.COMMENT_CREATE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to create comment.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Updates an existing comment's content in real-time.
+   */
+  public updateComment(
+    payload: UpdateCommentPayload
+  ): Promise<CommentResponseDto> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      socket.emit(SocketEvents.COMMENT_UPDATE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to update comment.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Resolves or unresolves a comment in real-time.
+   */
+  public resolveComment(
+    payload: ResolveCommentPayload
+  ): Promise<CommentResponseDto> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      socket.emit(SocketEvents.COMMENT_RESOLVE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to resolve comment.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Soft-deletes a comment in real-time.
+   */
+  public deleteComment(
+    payload: DeleteCommentPayload
+  ): Promise<CommentResponseDto> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      socket.emit(SocketEvents.COMMENT_DELETE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to delete comment.";
+          reject(new Error(errorMessage));
+        }
+      });
+    });
+  }
+
+  /**
+   * Subscribes to remote comment creation broadcasts.
+   */
+  public onCommentCreated(
+    handler: (comment: CommentResponseDto) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.COMMENT_CREATED, handler);
+
+    return () => {
+      socket.off(SocketEvents.COMMENT_CREATED, handler);
+    };
+  }
+
+  /**
+   * Subscribes to remote comment update broadcasts.
+   */
+  public onCommentUpdated(
+    handler: (comment: CommentResponseDto) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.COMMENT_UPDATED, handler);
+
+    return () => {
+      socket.off(SocketEvents.COMMENT_UPDATED, handler);
+    };
+  }
+
+  /**
+   * Subscribes to remote comment resolved broadcasts.
+   */
+  public onCommentResolved(
+    handler: (comment: CommentResponseDto) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.COMMENT_RESOLVED, handler);
+
+    return () => {
+      socket.off(SocketEvents.COMMENT_RESOLVED, handler);
+    };
+  }
+
+  /**
+   * Subscribes to remote comment deletion broadcasts.
+   */
+  public onCommentDeleted(
+    handler: (payload: CommentDeletedPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.COMMENT_DELETED, handler);
+
+    return () => {
+      socket.off(SocketEvents.COMMENT_DELETED, handler);
+    };
   }
 
   /**

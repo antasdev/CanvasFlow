@@ -2,6 +2,7 @@ import { Types } from "mongoose";
 
 import { shapeRepository } from "./shape.repository";
 import { canvasRepository } from "@/modules/canvas";
+import { commentRepository } from "@/modules/comment/comment.repository";
 import {
   CreateShapeDto,
   UpdateShapeDto,
@@ -143,6 +144,7 @@ export class ShapeService {
     }
 
     await shapeRepository.deleteById(id);
+    await commentRepository.nullifyShapeId(id);
 
     return {
       boardId: canvas.boardId,

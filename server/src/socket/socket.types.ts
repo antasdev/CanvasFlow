@@ -2,8 +2,9 @@ import { Types } from "mongoose";
 import { Socket } from "socket.io";
 import type { UserRole } from "@/modules/user/user.types";
 import type { ShapeResponseDto } from "@/modules/shape/shape.dto";
+import type { CommentResponseDto } from "@/modules/comment/comment.dto";
 
-export type { ShapeResponseDto };
+export type { ShapeResponseDto, CommentResponseDto };
 
 /**
  * Authenticated user data attached to Socket.IO instances.
@@ -218,6 +219,38 @@ export type UserLeftPayload = {
 };
 
 /**
+ * Comment Event Payloads (Slice 9)
+ */
+export type CreateCommentPayload = {
+  boardId: string;
+  content: string;
+  shapeId?: string | null;
+  parentCommentId?: string | null;
+};
+
+export type UpdateCommentPayload = {
+  boardId: string;
+  commentId: string;
+  content: string;
+};
+
+export type ResolveCommentPayload = {
+  boardId: string;
+  commentId: string;
+  isResolved: boolean;
+};
+
+export type DeleteCommentPayload = {
+  boardId: string;
+  commentId: string;
+};
+
+export type CommentDeletedPayload = {
+  boardId: string;
+  commentId: string;
+};
+
+/**
  * Strongly typed Client-to-Server Event Contracts.
  */
 export interface ClientToServerEvents {
@@ -268,6 +301,26 @@ export interface ClientToServerEvents {
   "shape:transforming": (payload: TransformingShapePayload) => void;
 
   "shape:transform-end": (payload: TransformEndPayload) => void;
+
+  "comment:create": (
+    payload: CreateCommentPayload,
+    callback?: (response: SocketAck<CommentResponseDto>) => void
+  ) => void;
+
+  "comment:update": (
+    payload: UpdateCommentPayload,
+    callback?: (response: SocketAck<CommentResponseDto>) => void
+  ) => void;
+
+  "comment:resolve": (
+    payload: ResolveCommentPayload,
+    callback?: (response: SocketAck<CommentResponseDto>) => void
+  ) => void;
+
+  "comment:delete": (
+    payload: DeleteCommentPayload,
+    callback?: (response: SocketAck<CommentResponseDto>) => void
+  ) => void;
 }
 
 /**
@@ -284,6 +337,10 @@ export interface ServerToClientEvents {
   "shape:unlocked": (payload: ShapeUnlockedPayload) => void;
   "shape:transforming": (payload: ShapeTransformingPayload) => void;
   "shape:transform-end": (payload: ShapeTransformEndPayload) => void;
+  "comment:created": (comment: CommentResponseDto) => void;
+  "comment:updated": (comment: CommentResponseDto) => void;
+  "comment:resolved": (comment: CommentResponseDto) => void;
+  "comment:deleted": (payload: CommentDeletedPayload) => void;
   "user:joined": (payload: UserJoinedPayload) => void;
   "user:left": (payload: UserLeftPayload) => void;
   error: (message: string) => void;
