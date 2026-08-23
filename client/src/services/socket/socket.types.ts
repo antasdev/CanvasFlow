@@ -38,6 +38,7 @@ export type SocketAckError = {
 export type SocketAck<T = void> = {
   success: boolean;
   data?: T;
+  mutationId?: string;
   error?: SocketAckError | string;
 };
 
@@ -140,6 +141,7 @@ export type ShapeStylePayload = {
 
 export type CreateShapePayload = {
   canvasId: string;
+  mutationId?: string;
   type: "rectangle" | "text" | "sticky_note";
   x: number;
   y: number;
@@ -151,6 +153,7 @@ export type CreateShapePayload = {
 
 export type UpdateShapePayload = {
   shapeId: string;
+  mutationId?: string;
   expectedVersion?: number;
   data: {
     x?: number;
@@ -164,6 +167,7 @@ export type UpdateShapePayload = {
 
 export type DeleteShapePayload = {
   shapeId: string;
+  mutationId?: string;
   expectedVersion?: number;
 };
 
@@ -339,6 +343,7 @@ export type CommentResponseDto = {
 
 export type CreateCommentPayload = {
   boardId: string;
+  mutationId?: string;
   content: string;
   shapeId?: string | null;
   parentCommentId?: string | null;
@@ -347,6 +352,7 @@ export type CreateCommentPayload = {
 export type UpdateCommentPayload = {
   boardId: string;
   commentId: string;
+  mutationId?: string;
   expectedVersion?: number;
   content: string;
 };
@@ -354,6 +360,7 @@ export type UpdateCommentPayload = {
 export type ResolveCommentPayload = {
   boardId: string;
   commentId: string;
+  mutationId?: string;
   expectedVersion?: number;
   isResolved: boolean;
 };
@@ -361,6 +368,7 @@ export type ResolveCommentPayload = {
 export type DeleteCommentPayload = {
   boardId: string;
   commentId: string;
+  mutationId?: string;
   expectedVersion?: number;
 };
 
@@ -376,6 +384,7 @@ export type CommentDeletedPayload = {
  */
 export type CollaborationEventMeta = {
   eventId: string;
+  mutationId?: string;
   boardId: string;
   actorId: string;
   socketId: string;

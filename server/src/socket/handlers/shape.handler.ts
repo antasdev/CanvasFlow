@@ -52,6 +52,7 @@ const shapeStyleSocketSchema = z.object({
 
 const createShapeSocketSchema = z.object({
   canvasId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   type: z
     .enum(["rectangle", "RECTANGLE", "text", "TEXT", "sticky_note", "STICKY_NOTE"])
     .default("rectangle"),
@@ -65,6 +66,7 @@ const createShapeSocketSchema = z.object({
 
 const updateShapeSocketSchema = z.object({
   shapeId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   expectedVersion: z.number().int().min(1).optional(),
   data: z.object({
     x: z.number().finite("x must be a finite number.").optional(),
@@ -78,6 +80,7 @@ const updateShapeSocketSchema = z.object({
 
 const deleteShapeSocketSchema = z.object({
   shapeId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   expectedVersion: z.number().int().min(1).optional(),
 });
 
@@ -94,6 +97,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
       payload: CreateShapePayload,
       callback?: (response: SocketAck<ShapeResponseDto>) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = createShapeSocketSchema.safeParse(payload);
 
@@ -103,6 +107,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -165,7 +170,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
               },
               session
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 6. Transform to canonical response DTO
@@ -177,9 +183,10 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shape: responseDto,
         });
 
-        // 8. Acknowledge creator with canonical persisted shape
+        // 8. Acknowledge creator with canonical persisted shape & mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
           data: responseDto,
         });
       } catch (error) {
@@ -194,6 +201,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -207,6 +215,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }
@@ -222,6 +231,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
       payload: UpdateShapePayload,
       callback?: (response: SocketAck<ShapeResponseDto>) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = updateShapeSocketSchema.safeParse(payload);
 
@@ -231,6 +241,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -277,7 +288,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
               session,
               parsed.data.expectedVersion
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 5. Transform to canonical response DTO
@@ -289,9 +301,10 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shape: responseDto,
         });
 
-        // 7. Acknowledge sender
+        // 7. Acknowledge sender with canonical response & mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
           data: responseDto,
         });
       } catch (error) {
@@ -299,6 +312,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: {
               code: "CONFLICT",
               message: error.message,
@@ -321,6 +335,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -334,6 +349,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }
@@ -349,6 +365,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
       payload: DeleteShapePayload,
       callback?: (response: SocketAck) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = deleteShapeSocketSchema.safeParse(payload);
 
@@ -358,6 +375,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -403,7 +421,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
               session,
               parsed.data.expectedVersion
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 5. Broadcast deletion envelope to other room members (excludes sender)
@@ -412,15 +431,17 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shapeId: parsed.data.shapeId,
         });
 
-        // 6. Acknowledge sender
+        // 6. Acknowledge sender with mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
         });
       } catch (error) {
         if (error instanceof ConflictError) {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: {
               code: "CONFLICT",
               message: error.message,
@@ -443,6 +464,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -456,6 +478,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }

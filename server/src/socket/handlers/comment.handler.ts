@@ -36,6 +36,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
       payload: CreateCommentPayload,
       callback?: (response: SocketAck<CommentResponseDto>) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = createCommentSocketSchema.safeParse(payload);
 
@@ -45,6 +46,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -82,7 +84,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               },
               session
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 3. Transform to canonical response DTO
@@ -97,9 +100,10 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           comment: responseDto,
         });
 
-        // 5. Acknowledge creator with canonical persisted DTO
+        // 5. Acknowledge creator with canonical persisted DTO & mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
           data: responseDto,
         });
       } catch (error) {
@@ -114,6 +118,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -125,6 +130,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }
@@ -140,6 +146,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
       payload: UpdateCommentPayload,
       callback?: (response: SocketAck<CommentResponseDto>) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = updateCommentSocketSchema.safeParse(payload);
 
@@ -149,6 +156,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -182,7 +190,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               session,
               parsed.data.expectedVersion
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 3. Transform to canonical response DTO
@@ -197,9 +206,10 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           comment: responseDto,
         });
 
-        // 5. Acknowledge sender
+        // 5. Acknowledge sender with mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
           data: responseDto,
         });
       } catch (error) {
@@ -207,6 +217,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: {
               code: "CONFLICT",
               message: error.message,
@@ -229,6 +240,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -240,6 +252,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }
@@ -255,6 +268,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
       payload: ResolveCommentPayload,
       callback?: (response: SocketAck<CommentResponseDto>) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = resolveCommentSocketSchema.safeParse(payload);
 
@@ -264,6 +278,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -297,7 +312,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               session,
               parsed.data.expectedVersion
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 3. Transform to canonical response DTO
@@ -312,9 +328,10 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           comment: responseDto,
         });
 
-        // 5. Acknowledge sender
+        // 5. Acknowledge sender with mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
           data: responseDto,
         });
       } catch (error) {
@@ -322,6 +339,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: {
               code: "CONFLICT",
               message: error.message,
@@ -344,6 +362,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -355,6 +374,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }
@@ -370,6 +390,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
       payload: DeleteCommentPayload,
       callback?: (response: SocketAck<CommentResponseDto>) => void
     ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
         const parsed = deleteCommentSocketSchema.safeParse(payload);
 
@@ -379,6 +400,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code: "BAD_REQUEST", message },
           });
           return;
@@ -409,7 +431,8 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               session,
               parsed.data.expectedVersion
             );
-          }
+          },
+          parsed.data.mutationId
         );
 
         // 3. Transform to canonical response DTO
@@ -432,9 +455,10 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           comment: responseDto,
         });
 
-        // 5. Acknowledge sender
+        // 5. Acknowledge sender with mutationId
         callback?.({
           success: true,
+          mutationId: parsed.data.mutationId,
           data: responseDto,
         });
       } catch (error) {
@@ -442,6 +466,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: {
               code: "CONFLICT",
               message: error.message,
@@ -464,6 +489,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
           socket.emit(SocketEvents.ERROR, error.message);
           callback?.({
             success: false,
+            mutationId: fallbackMutationId,
             error: { code, message: error.message },
           });
           return;
@@ -475,6 +501,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,
+          mutationId: fallbackMutationId,
           error: { code: "INTERNAL_ERROR", message },
         });
       }

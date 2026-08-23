@@ -258,11 +258,19 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to create shape.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
+          }
+          reject(err);
         }
       });
     });
@@ -274,18 +282,21 @@ export class SocketClientService {
    * @param shapeId - Shape identifier
    * @param data - Partial shape update properties
    * @param expectedVersion - Expected OCC version
+   * @param mutationId - Optional client mutation UUID
    * @returns Promise resolving with canonical updated ShapeResponseDto
    */
   public updateShape(
     shapeId: string,
     data: UpdateShapePayload["data"],
-    expectedVersion?: number
+    expectedVersion?: number,
+    mutationId?: string
   ): Promise<ShapeResponseDto> {
     return new Promise((resolve, reject) => {
       const socket = this.socket ?? this.connect();
 
       const payload: UpdateShapePayload = {
         shapeId,
+        mutationId,
         expectedVersion,
         data,
       };
@@ -303,6 +314,9 @@ export class SocketClientService {
           if (errorObj) {
             Object.assign(err, errorObj);
           }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
+          }
           reject(err);
         }
       });
@@ -314,14 +328,20 @@ export class SocketClientService {
    *
    * @param shapeId - Shape identifier to delete
    * @param expectedVersion - Expected OCC version
+   * @param mutationId - Optional client mutation UUID
    * @returns Promise resolving on successful deletion acknowledgement
    */
-  public deleteShape(shapeId: string, expectedVersion?: number): Promise<void> {
+  public deleteShape(
+    shapeId: string,
+    expectedVersion?: number,
+    mutationId?: string
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = this.socket ?? this.connect();
 
       const payload: DeleteShapePayload = {
         shapeId,
+        mutationId,
         expectedVersion,
       };
 
@@ -337,6 +357,9 @@ export class SocketClientService {
           const err = new Error(errorMessage);
           if (errorObj) {
             Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
           }
           reject(err);
         }
@@ -535,11 +558,19 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
           const errorMessage =
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to create comment.";
-          reject(new Error(errorMessage));
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
+          }
+          reject(err);
         }
       });
     });
@@ -566,6 +597,9 @@ export class SocketClientService {
           const err = new Error(errorMessage);
           if (errorObj) {
             Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
           }
           reject(err);
         }
@@ -595,6 +629,9 @@ export class SocketClientService {
           if (errorObj) {
             Object.assign(err, errorObj);
           }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
+          }
           reject(err);
         }
       });
@@ -622,6 +659,9 @@ export class SocketClientService {
           const err = new Error(errorMessage);
           if (errorObj) {
             Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
           }
           reject(err);
         }

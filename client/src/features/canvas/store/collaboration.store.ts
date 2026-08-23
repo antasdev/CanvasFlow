@@ -6,9 +6,11 @@ export type FreshnessResult = {
 };
 
 export type CollaborationConflict = {
+  code?: string;
   resourceType: "shape" | "comment";
   resourceId: string;
   currentVersion: number;
+  message?: string;
 };
 
 export interface CollaborationState {

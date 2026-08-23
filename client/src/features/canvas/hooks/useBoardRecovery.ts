@@ -4,6 +4,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { socketClientService, SocketEvents } from "@/services/socket";
 import type { BoardRecoveryStatePayload } from "@/services/socket";
 import { useCanvasStore, useCollaborationStore } from "../store";
+import { useMutationStore } from "../store/mutation.store";
+import { mutationManager } from "../services/mutation-manager";
 import { shapeApi } from "../api/shape.api";
 import { mapShapeResponseToShape } from "../api/shape.mapper";
 import { commentApi } from "@/features/comments/api";
@@ -14,6 +16,8 @@ export type RecoveryStatus =
   | "idle"
   | "reconnecting"
   | "recovering"
+  | "reconciling"
+  | "conflict"
   | "recovered"
   | "error";
 
@@ -28,7 +32,7 @@ export interface UseBoardRecoveryReturn {
 /**
  * Hook managing authoritative board state recovery following network reconnects or tab wakes.
  * Coordinates single-flight mutex locks, generation counters, ephemeral cleanup,
- * and authoritative REST hydration without mutating undo/redo history.
+ * authoritative REST hydration, and pending mutation reconciliation without mutating undo/redo history.
  */
 export function useBoardRecovery(
   boardId?: string,
@@ -128,8 +132,31 @@ export function useBoardRecovery(
           useCollaborationStore.getState().setRevision(activeBoardId, recoveryState.revision);
         }
 
+        // 9. Reconcile Pending Mutations (Slice 13)
+        const pendingMutations = useMutationStore.getState().getPendingMutations(activeBoardId);
+        let hasConflict = false;
+
+        if (pendingMutations.length > 0) {
+          setStatus("reconciling");
+          const { conflictCount } = await mutationManager.reconcileBoard(
+            activeBoardId,
+            authoritativeShapes,
+            comments
+          );
+
+          if (currentGeneration !== recoveryGenerationRef.current) {
+            isRecoveringRef.current = false;
+            useCollaborationStore.getState().setRecovering(false);
+            return false;
+          }
+
+          if (conflictCount > 0) {
+            hasConflict = true;
+          }
+        }
+
         setRecoveredAt(recoveryState.recoveredAt);
-        setStatus("recovered");
+        setStatus(hasConflict ? "conflict" : "recovered");
         useCollaborationStore.getState().setRecovering(false);
 
         // Transition back to idle after 2.5s
@@ -140,7 +167,7 @@ export function useBoardRecovery(
           if (recoveryGenerationRef.current === currentGeneration) {
             setStatus("idle");
           }
-        }, 2500);
+        }, 3000);
 
         isRecoveringRef.current = false;
         return true;

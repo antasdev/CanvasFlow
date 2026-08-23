@@ -26,7 +26,7 @@ export const RecoveryStatusIndicator: React.FC<RecoveryStatusIndicatorProps> = (
         backgroundColor:
           status === "reconnecting"
             ? "rgba(245, 158, 11, 0.9)"
-            : status === "recovering"
+            : status === "recovering" || status === "reconciling"
             ? "rgba(59, 130, 246, 0.9)"
             : status === "recovered"
             ? "rgba(16, 185, 129, 0.9)"
@@ -34,7 +34,7 @@ export const RecoveryStatusIndicator: React.FC<RecoveryStatusIndicatorProps> = (
         borderColor:
           status === "reconnecting"
             ? "rgb(217, 119, 6)"
-            : status === "recovering"
+            : status === "recovering" || status === "reconciling"
             ? "rgb(37, 99, 235)"
             : status === "recovered"
             ? "rgb(5, 150, 105)"
@@ -53,6 +53,20 @@ export const RecoveryStatusIndicator: React.FC<RecoveryStatusIndicatorProps> = (
         <>
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
           <span>Synchronizing board state...</span>
+        </>
+      )}
+
+      {status === "reconciling" && (
+        <>
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          <span>Resolving changes...</span>
+        </>
+      )}
+
+      {status === "conflict" && (
+        <>
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span>Some changes could not be applied because the item was modified by another collaborator.</span>
         </>
       )}
 

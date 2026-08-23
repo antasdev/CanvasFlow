@@ -24,7 +24,8 @@ export class CollaborationVersionService {
     boardId: Types.ObjectId,
     actorId: Types.ObjectId | string,
     socketId: string,
-    mutationFn: (session?: mongoose.ClientSession) => Promise<T>
+    mutationFn: (session?: mongoose.ClientSession) => Promise<T>,
+    mutationId?: string
   ): Promise<{ result: T; meta: CollaborationEventMeta }> {
     const maxRetries = 5;
     let attempt = 0;
@@ -90,6 +91,7 @@ export class CollaborationVersionService {
 
           const meta: CollaborationEventMeta = {
             eventId: crypto.randomUUID(),
+            mutationId: mutationId ?? undefined,
             boardId: boardId.toString(),
             actorId: actorId.toString(),
             socketId,
@@ -107,6 +109,7 @@ export class CollaborationVersionService {
 
           const meta: CollaborationEventMeta = {
             eventId: crypto.randomUUID(),
+            mutationId: mutationId ?? undefined,
             boardId: boardId.toString(),
             actorId: actorId.toString(),
             socketId,

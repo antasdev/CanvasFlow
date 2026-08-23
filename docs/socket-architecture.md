@@ -771,3 +771,179 @@ The three slices form a layered consistency defense:
 1. **Slice 10 (Transport Recovery)**: Restores socket connection, re-binds rooms, hydrates authoritative state, and resets ephemeral presence when networks drop.
 2. **Slice 11 (Broadcast Freshness)**: Ensures that all peer-to-peer broadcasts are delivered with monotonic board revisions, dropping out-of-order or duplicate frames and detecting network packet gaps.
 3. **Slice 12 (Storage OCC)**: Ensures that when multiple clients submit concurrent writes to the same record, only one atomic transaction succeeds, while conflicting writes fail cleanly with 409 CONFLICT and trigger authoritative state realignment.
+
+---
+
+## 22. Slice 13: Offline Mutation Safety & Pending Mutation Reconciliation
+
+Slice 13 implements a production-grade **client-side mutation reconciliation layer** for network disconnections, lost acknowledgements, uncertain mutation results, and optimistic reconciliation.
+
+### 1. Core Problem: The Timeout $\neq$ Rejection Dilemma
+When an optimistic mutation is emitted over Socket.IO and the connection stutters:
+```text
+User Mutates Shape
+       │
+       ▼
+Optimistic UI Update
+       │
+       ▼
+Socket Disconnects / Drops
+       │
+       ▼
+Acknowledgement Never Arrives (Timeout)
+```
+
+**Critical Architectural Principle**:
+> *A network timeout or lost socket ack does NOT mean the server rejected the mutation.*
+> The server may have committed the mutation to MongoDB while the return packet was dropped on the network wire. Retrying blindly would create duplicate entities or trigger false OCC 409 conflicts.
+
+Therefore, CanvasFlow adheres to a strict rule:
+**Recovery First $\rightarrow$ Authoritative Comparison $\rightarrow$ Safe Reconciliation**.
+
+---
+
+### 2. Six System Identifiers Architecture
+CanvasFlow maintains six distinct identifiers across the collaboration stack:
+
+| Identifier | Scope | Source | Persistence | Purpose |
+| :--- | :--- | :--- | :--- | :--- |
+| **`mutationId`** | User Mutation Intent | Client UUID v4 | Across Retries & Acks | Tracks one user mutation intent across network retries and acks. |
+| **`eventId`** | Socket Event | Server UUID v4 | Socket Broadcast | Identifies a single broadcast event envelope. |
+| **`entity.version`** | Entity Lifecycle | Server MongoDB | Persisted on Entity | Optimistic Concurrency Control (OCC) conflict detection. |
+| **`collaborationRevision`** | Board Room | Server MongoDB | Persisted on Board | Global monotonic event ordering and gap detection. |
+| **`connectionEpoch`** | Socket Connection | Client Memory | Ephemeral | Tracks which socket connection session is active. |
+| **`recoveryGeneration`** | Async Recovery Cycle | Client Memory | Ephemeral | Discards stale async REST hydration responses. |
+
+---
+
+### 3. Mutation Lifecycle State Machine
+Every local mutation progresses through an explicit lifecycle managed in `useMutationStore`:
+
+```text
+                  ┌──────────────┐
+                  │   pending    │
+                  └──────┬───────┘
+                         │
+        ┌────────────────┼────────────────┐
+        ▼                ▼                ▼
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│  confirmed   │ │  uncertain   │ │    failed    │
+│  (ack ok)    │ │  (timeout)   │ │ (explicit)   │
+└──────────────┘ └───────┬──────┘ └──────────────┘
+                         │
+                         ▼
+                 ┌──────────────┐
+                 │  reconciling │
+                 └───────┬──────┘
+                         │
+        ┌────────────────┴────────────────┐
+        ▼                                 ▼
+┌──────────────┐                  ┌──────────────┐
+│  confirmed   │                  │  conflicted  │
+│(Case A or B) │                  │(Case C or D) │
+└──────────────┘                  └──────────────┘
+```
+
+- **`pending`**: Mutation emitted, awaiting socket ack.
+- **`uncertain`**: 6-second timeout elapsed without ack; mutation may or may not be on server.
+- **`confirmed`**: Mutation acknowledged by server or verified present in authoritative state. Removed from journal.
+- **`failed`**: Server rejected with non-conflict error (e.g. 400 Bad Request, 403 Forbidden).
+- **`conflicted`**: Concurrent modification conflict detected (Case C/D or 409 Conflict).
+- **`reconciling`**: Actively evaluating against authoritative REST hydration.
+
+---
+
+### 4. Bounded Mutation Journal
+- Implemented in `useMutationStore` (`client/src/features/canvas/store/mutation.store.ts`).
+- Separated completely from `useCanvasStore` and `useCollaborationStore`.
+- Confirmed mutations are pruned immediately to ensure journal memory stays bounded.
+- Zero undo/redo history pollution (`useCanvasStore.past` and `useCanvasStore.future` are untouched).
+
+---
+
+### 5. Four-Case Reconciliation Algorithm
+During board recovery (`useBoardRecovery`), `MutationManager.reconcileBoard` compares every pending/uncertain mutation against authoritative REST data:
+
+```text
+               authoritative board state + pending mutation journal
+                                       │
+                                       ▼
+                                Reconciliation
+     ┌──────────────────┬──────────────────┬──────────────────┬──────────────────┐
+     ▼                  ▼                  ▼                  ▼
+  Case A             Case B             Case C             Case D
+Already Applied    Safe to Retry      Version Advanced   Resource Deleted
+(version > expVer  (version === exp)  (version > expVer  (entity not found)
+ & changes match)                     & changes differ)
+     │                  │                  │                  │
+     ▼                  ▼                  ▼                  ▼
+ markConfirmed()    retryMutation()    markConflicted()   markConflicted()
+ removeMutation()   (same mutationId)
+```
+
+1. **Case A (Already Applied)**: Server version $> \text{expectedVersion}$ and changes match the entity. Server committed the mutation before disconnect! Mark confirmed and remove from journal.
+2. **Case B (Safe to Retry)**: Server version $== \text{expectedVersion}$. Mutation was lost in transit. Safe to re-emit to server using the **same original `mutationId`**.
+3. **Case C (Concurrent Modification Conflict)**: Server version $> \text{expectedVersion}$ but changes do not match. Another collaborator modified the entity in the meantime. Mark conflicted and notify UI.
+4. **Case D (Resource Deleted)**: Entity no longer exists on server. Another collaborator deleted the target item. Mark conflicted and notify UI.
+
+---
+
+### 6. Temporary Client ID Reconciliation
+When creating a shape while offline or optimistically:
+1. Client generates a local temporary ID (`temp-uuid`).
+2. Server persists shape and assigns canonical MongoDB `ObjectId`.
+3. On ack / recovery, `MutationManager.replaceTemporaryShapeId(tempId, serverId)` seamlessly updates `useCanvasStore.shapes` and `selectedShapeIds` without resetting canvas view or losing selections.
+
+---
+
+## 23. Slice 13 Senior Engineering Interview Questions
+
+### Q1: Why must a retry attempt reuse the original `mutationId` instead of generating a new one?
+**Answer:**
+A `mutationId` represents **one discrete user mutation intent**. If a client retries a mutation with a newly generated `mutationId`, the server has no way of correlating the retry with the previous attempt. In systems with deduplication or idempotency caches, generating a new ID causes duplicate execution. Reusing the original `mutationId` ensures that retries across network boundaries represent the exact same semantic intent.
+
+### Q2: What is the difference between an `eventId` and a `mutationId`?
+**Answer:**
+- **`mutationId`**: Generated on the **client** to represent the user's intent to perform a mutation. It remains constant across retries, re-emits, and acknowledgements.
+- **`eventId`**: Generated on the **server** for each unique broadcast packet transmitted to peer clients. It identifies that specific broadcast event envelope.
+
+### Q3: Why should the mutation journal be stored in a separate Zustand store rather than in `useCanvasStore`?
+**Answer:**
+`useCanvasStore` manages canvas rendering, shape arrays, viewport pan/zoom, and the local undo/redo history stacks (`past` / `future`).
+If mutation status transitions (`pending` $\rightarrow$ `uncertain` $\rightarrow$ `reconciling` $\rightarrow$ `confirmed`) were tracked inside `useCanvasStore`, every timer tick and status transition would trigger re-renders of the canvas workspace and risk polluting undo/redo history. Separating it into `useMutationStore` guarantees zero undo/redo pollution and optimal render performance.
+
+### Q4: Why is a network timeout treated as `uncertain` rather than `failed`?
+**Answer:**
+In a distributed network, packet loss can occur in the request path (client $\rightarrow$ server) OR the response path (server $\rightarrow$ client). If the request reached the server, the database transaction succeeded, and the return socket packet was lost, marking the mutation as `failed` would present a false state to the user. Marking it as `uncertain` signals that the client must verify authoritative server state during recovery before concluding what happened.
+
+### Q5: How does Case A reconciliation detect that a mutation was already applied?
+**Answer:**
+Case A checks if `serverEntity.version > mutation.expectedVersion` AND verifies that the intended changes (e.g. `x`, `y`, `width`, `height`, `text`, `style`) are reflected in the authoritative entity payload. If they match, the server clearly processed that specific mutation before the client disconnected.
+
+### Q6: How does Case B reconciliation safely retry without causing race conditions?
+**Answer:**
+In Case B, `serverEntity.version === mutation.expectedVersion`. This proves that no other collaborator has touched the entity and the server has not yet applied the mutation. The client can safely re-emit the socket request with `expectedVersion` and the original `mutationId`. If an intervening collaborator write happens during the retry flight, the server's OCC predicate will reject it with 409 CONFLICT, preserving data integrity.
+
+### Q7: Why do we clear confirmed mutations from the journal store instead of keeping a permanent log?
+**Answer:**
+In real-time collaborative whiteboards, users may create hundreds or thousands of shape transforms, drag updates, text edits, and comments per session. Keeping confirmed mutations in memory indefinitely causes an unbounded memory leak. Once a mutation is confirmed (acknowledged or reconciled), its purpose is fulfilled and it is safely pruned.
+
+### Q8: How does the UI indicate reconciliation states without disrupting the user?
+**Answer:**
+The `<RecoveryStatusIndicator>` floating pill displays discrete non-blocking states:
+- `"reconnecting"`: Amber pulse when socket is down.
+- `"recovering"`: Blue spinner when hydrating authoritative state from REST.
+- `"reconciling"`: Blue spinner with "Resolving changes..." when evaluating pending mutations.
+- `"conflict"`: Red alert pill ("Some changes could not be applied because the item was modified by another collaborator") when Case C/D occurs.
+- `"recovered"`: Green checkmark ("Board synchronized") for 2.5s before transitioning to idle.
+
+### Q9: What happens if a shape created with a temporary ID is selected by the user while the server ack is in flight?
+**Answer:**
+The user may begin dragging or modifying the newly created shape with `temp-uuid` selected in `useCanvasStore.selectedShapeIds`. When the server ack arrives with the canonical MongoDB `ObjectId`, `MutationManager.replaceTemporaryShapeId` replaces the ID in `useCanvasStore.shapes` and simultaneously updates the ID in `selectedShapeIds`, preventing deselection or dangling references.
+
+### Q10: How does the combination of Slices 10, 11, 12, and 13 complete the real-time reliability matrix?
+**Answer:**
+1. **Slice 10 (Transport Recovery)**: Re-establishes connectivity and hydrates clean authoritative state.
+2. **Slice 11 (Broadcast Ordering)**: Orders durable broadcasts monotonically and discards stale/duplicate socket packets.
+3. **Slice 12 (Storage OCC)**: Prevents write-after-write conflicts at the database tier using atomic version predicates.
+4. **Slice 13 (Client Mutation Safety)**: Protects optimistic client updates across lost acks, timeouts, and network disconnects through a bounded journal and 4-case reconciliation.

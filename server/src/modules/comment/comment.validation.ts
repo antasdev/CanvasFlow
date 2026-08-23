@@ -70,6 +70,7 @@ export const boardCommentsParamsSchema = z.object({
  */
 export const createCommentSocketSchema = z.object({
   boardId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   content: z
     .string()
     .trim()
@@ -82,6 +83,7 @@ export const createCommentSocketSchema = z.object({
 export const updateCommentSocketSchema = z.object({
   boardId: objectIdSchema,
   commentId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   expectedVersion: z.number().int().min(1).optional(),
   content: z
     .string()
@@ -93,6 +95,7 @@ export const updateCommentSocketSchema = z.object({
 export const resolveCommentSocketSchema = z.object({
   boardId: objectIdSchema,
   commentId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   expectedVersion: z.number().int().min(1).optional(),
   isResolved: z.boolean(),
 });
@@ -100,5 +103,6 @@ export const resolveCommentSocketSchema = z.object({
 export const deleteCommentSocketSchema = z.object({
   boardId: objectIdSchema,
   commentId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   expectedVersion: z.number().int().min(1).optional(),
 });

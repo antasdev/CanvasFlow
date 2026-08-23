@@ -13,6 +13,13 @@ vi.mock("@/services/socket", () => ({
     getSocket: vi.fn(),
     recoverBoard: vi.fn(),
     onRecoveryState: vi.fn(() => () => {}),
+    createShape: vi.fn(),
+    updateShape: vi.fn(),
+    deleteShape: vi.fn(),
+    createComment: vi.fn(),
+    updateComment: vi.fn(),
+    resolveComment: vi.fn(),
+    deleteComment: vi.fn(),
   },
   SocketEvents: {
     BOARD_RECOVERY_REQUEST: "board:recovery-request",
@@ -232,5 +239,119 @@ describe("Board Recovery Logic & State Integration Tests", () => {
 
     // Past undo history is preserved
     expect(useCanvasStore.getState().past).toHaveLength(1);
+  });
+
+  it("reconciles pending mutations during recovery (already applied -> confirmed, safe -> retried)", async () => {
+    const { useMutationStore } = await import("../../store/mutation.store");
+    const { mutationManager } = await import("../../services/mutation-manager");
+
+    // 1. Setup pending mutation A (already reflected on server: expectedVersion=1, server=2)
+    useMutationStore.getState().addMutation({
+      mutationId: "mut-recovery-a",
+      boardId: "board-1",
+      resourceType: "shape",
+      resourceId: "shape-recovered-1",
+      operation: "update",
+      expectedVersion: 1,
+      status: "uncertain",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      retryCount: 0,
+      intent: {
+        resourceType: "shape",
+        resourceId: "shape-recovered-1",
+        operation: "update",
+        expectedVersion: 1,
+        changes: { x: 300 },
+      },
+    });
+
+    // 2. Setup pending mutation B (still safe to retry: expectedVersion=1, server=1)
+    useMutationStore.getState().addMutation({
+      mutationId: "mut-recovery-b",
+      boardId: "board-1",
+      resourceType: "shape",
+      resourceId: "shape-recovered-2",
+      operation: "update",
+      expectedVersion: 1,
+      status: "uncertain",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      retryCount: 0,
+      intent: {
+        resourceType: "shape",
+        resourceId: "shape-recovered-2",
+        operation: "update",
+        expectedVersion: 1,
+        changes: { x: 450 },
+      },
+    });
+
+    const mockRecoveryShapes = [
+      {
+        id: "shape-recovered-1",
+        type: "rectangle" as const,
+        x: 300, // Matches mutation A!
+        y: 100,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        fill: "#ff0000",
+        stroke: "#000000",
+        strokeWidth: 1,
+        version: 2,
+      },
+      {
+        id: "shape-recovered-2",
+        type: "rectangle" as const,
+        x: 100, // Still at version 1
+        y: 100,
+        width: 100,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        fill: "#00ff00",
+        stroke: "#000000",
+        strokeWidth: 1,
+        version: 1,
+      },
+    ];
+
+    vi.mocked(socketClientService.updateShape).mockResolvedValue({
+      id: "shape-recovered-2",
+      canvasId: "canvas-1",
+      type: "rectangle",
+      x: 450,
+      y: 100,
+      width: 100,
+      height: 100,
+      rotation: 0,
+      zIndex: 1,
+      version: 2,
+      createdBy: "user-1",
+      createdAt: "2026-08-23T12:00:00.000Z",
+      updatedAt: "2026-08-23T12:00:00.000Z",
+      style: { fill: "#00ff00", stroke: "#000000", strokeWidth: 1, opacity: 1 },
+    });
+
+    const report = await mutationManager.reconcileBoard("board-1", mockRecoveryShapes);
+
+    expect(report.reconciledCount).toBe(1); // mut-recovery-a was confirmed
+    expect(report.retriedCount).toBe(1); // mut-recovery-b was retried
+    expect(report.conflictCount).toBe(0);
+
+    // Verified retry was called with stable mutationId
+    expect(socketClientService.updateShape).toHaveBeenCalledWith(
+      "shape-recovered-2",
+      { x: 450 },
+      1,
+      "mut-recovery-b"
+    );
+
+    // All confirmed mutations are cleared from journal
+    expect(useMutationStore.getState().getPendingMutations("board-1")).toHaveLength(0);
   });
 });
