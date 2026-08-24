@@ -26,6 +26,12 @@ export class WorkspaceRepository {
     return WorkspaceModel.findById(id);
   }
 
+  async findByIds(
+    ids: Types.ObjectId[]
+  ): Promise<WorkspaceDocument[]> {
+    return WorkspaceModel.find({ _id: { $in: ids } });
+  }
+
   async findByOwnerId(
     ownerId: Types.ObjectId
   ): Promise<WorkspaceDocument[]> {

@@ -3,8 +3,10 @@ import { Types } from "mongoose";
 
 import { workspaceService } from "./workspace.service";
 import {
+  AddWorkspaceMemberDto,
   CreateWorkspaceDto,
   UpdateWorkspaceDto,
+  UpdateWorkspaceMemberRoleDto,
 } from "./workspace.dto";
 
 import { HttpStatus } from "@/shared/constants/http-status";
@@ -27,11 +29,12 @@ export class WorkspaceController {
   }
 
   async getWorkspace(
-  req: Request<IdParams>,
-  res: Response
-): Promise<void> {
+    req: Request<IdParams>,
+    res: Response
+  ): Promise<void> {
     const result = await workspaceService.getWorkspaceById(
-      new Types.ObjectId(req.params.id)
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId)
     );
 
     res.status(HttpStatus.OK).json({
@@ -55,11 +58,12 @@ export class WorkspaceController {
   }
 
   async updateWorkspace(
-  req: Request<IdParams>,
-  res: Response
-): Promise<void> {
+    req: Request<IdParams>,
+    res: Response
+  ): Promise<void> {
     const result = await workspaceService.updateWorkspace(
       new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId),
       req.body as UpdateWorkspaceDto
     );
 
@@ -70,11 +74,12 @@ export class WorkspaceController {
   }
 
   async deleteWorkspace(
-  req: Request<IdParams>,
-  res: Response
-): Promise<void> {
+    req: Request<IdParams>,
+    res: Response
+  ): Promise<void> {
     await workspaceService.deleteWorkspace(
-      new Types.ObjectId(req.params.id)
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId)
     );
 
     res.status(HttpStatus.OK).json({
@@ -82,7 +87,70 @@ export class WorkspaceController {
       message: "Workspace deleted successfully.",
     });
   }
+
+  async getMembers(
+    req: Request<IdParams>,
+    res: Response
+  ): Promise<void> {
+    const result = await workspaceService.getWorkspaceMembers(
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId)
+    );
+
+    res.status(HttpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  }
+
+  async addMember(
+    req: Request<IdParams>,
+    res: Response
+  ): Promise<void> {
+    const result = await workspaceService.addWorkspaceMember(
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId),
+      req.body as AddWorkspaceMemberDto
+    );
+
+    res.status(HttpStatus.CREATED).json({
+      success: true,
+      data: result,
+    });
+  }
+
+  async updateMemberRole(
+    req: Request<{ id: string; memberUserId: string }>,
+    res: Response
+  ): Promise<void> {
+    const result = await workspaceService.updateMemberRole(
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId),
+      new Types.ObjectId(req.params.memberUserId),
+      req.body as UpdateWorkspaceMemberRoleDto
+    );
+
+    res.status(HttpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  }
+
+  async removeMember(
+    req: Request<{ id: string; memberUserId: string }>,
+    res: Response
+  ): Promise<void> {
+    await workspaceService.removeWorkspaceMember(
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId),
+      new Types.ObjectId(req.params.memberUserId)
+    );
+
+    res.status(HttpStatus.OK).json({
+      success: true,
+      message: "Workspace member removed successfully.",
+    });
+  }
 }
 
-export const workspaceController =
-  new WorkspaceController();
+export const workspaceController = new WorkspaceController();

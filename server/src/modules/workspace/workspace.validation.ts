@@ -35,3 +35,50 @@ export const workspaceParamsSchema = z.object({
       ),
   }),
 });
+
+export const addWorkspaceMemberSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid workspace ID."),
+  }),
+  body: z.object({
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email("Invalid email address."),
+    role: z.enum(
+      ["ADMIN", "EDITOR", "VIEWER"],
+      { message: "Role must be ADMIN, EDITOR, or VIEWER." }
+    ),
+  }),
+});
+
+export const updateWorkspaceMemberRoleSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid workspace ID."),
+    memberUserId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid member user ID."),
+  }),
+  body: z.object({
+    role: z.enum(
+      ["ADMIN", "EDITOR", "VIEWER"],
+      { message: "Role must be ADMIN, EDITOR, or VIEWER." }
+    ),
+  }),
+});
+
+export const workspaceMemberParamsSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid workspace ID."),
+    memberUserId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, "Invalid member user ID."),
+  }),
+});
