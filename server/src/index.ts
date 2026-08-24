@@ -6,14 +6,14 @@ import app from "./app";
 import env from "./config/env";
 import connectDatabase from "./config/database";
 
-import { initializeSocket } from "./socket";
+import { initializeSocketServer } from "./socket";
 
 const httpServer = createServer(app);
 
 const startServer = async (): Promise<void> => {
   await connectDatabase();
 
-  initializeSocket(httpServer);
+  initializeSocketServer(httpServer);
 
   httpServer.listen(env.PORT, () => {
     console.log(

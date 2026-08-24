@@ -1,47 +1,43 @@
-// import type { Shape } from "../types";
-
-// import RectangleNode from "./RectangleNode";
-
-// type ShapeRendererProps = {
-//     shape: Shape;
-// };
-
-// export default function ShapeRenderer({
-//     shape,
-// }: ShapeRendererProps): React.JSX.Element | null {
-//     switch (shape.type) {
-//     case "rectangle":
-//         return <RectangleNode shape={shape} />;
-
-//     // case "circle":
-//     //     return <CircleNode shape={shape} />;
-
-//     // case "line":
-//     //     return <LineNode shape={shape} />;
-
-//     // case "text":
-//     //     return <TextNode shape={shape} />;
-
-//     default:
-//         return null;
-// }
-// }
-import type { Shape } from "../types";
+import type { Shape, TextShape, StickyNoteShape } from "../types";
 
 import RectangleNode from "./RectangleNode";
+import TextNode from "./TextNode";
+import StickyNoteNode from "./StickyNoteNode";
 
 type ShapeRendererProps = {
-    shape: Shape;
+  shape: Shape;
+  boardId?: string;
+  onStartEditing?: (shape: TextShape | StickyNoteShape) => void;
 };
 
 export default function ShapeRenderer({
-    shape,
+  shape,
+  boardId,
+  onStartEditing,
 }: ShapeRendererProps): React.JSX.Element | null {
-    switch (shape.type) {
-        case "rectangle":
-            return <RectangleNode shape={shape} />;
+  switch (shape.type) {
+    case "rectangle":
+      return <RectangleNode shape={shape} boardId={boardId} />;
 
-        default:
-            return null;
-    }
+    case "text":
+      return (
+        <TextNode
+          shape={shape}
+          boardId={boardId}
+          onStartEditing={onStartEditing ?? (() => {})}
+        />
+      );
+
+    case "sticky_note":
+      return (
+        <StickyNoteNode
+          shape={shape}
+          boardId={boardId}
+          onStartEditing={onStartEditing ?? (() => {})}
+        />
+      );
+
+    default:
+      return null;
+  }
 }

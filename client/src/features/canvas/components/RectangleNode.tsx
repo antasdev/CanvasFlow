@@ -4,249 +4,243 @@ import { Rect, Transformer } from "react-konva";
 import { toast } from "sonner";
 
 import { CANVAS_TOOLS } from "../constants";
-import { useUpdateShape } from "../hooks";
+import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { RectangleShape } from "../types";
 
 type RectangleNodeProps = {
-    shape: RectangleShape;
+  shape: RectangleShape;
+  boardId?: string;
 };
 
 export default function RectangleNode({
-    shape,
+  shape,
+  boardId,
 }: RectangleNodeProps): React.JSX.Element {
-    const updateShapeMutation = useUpdateShape();
-    const rectRef = useRef<Konva.Rect | null>(null);
-    const transformerRef =
-        useRef<Konva.Transformer | null>(null);
+  const rectRef = useRef<Konva.Rect | null>(null);
+  const transformerRef = useRef<Konva.Transformer | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-    const dragStartRef = useRef<{
-        x: number;
-        y: number;
-    } | null>(null);
+  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
+  const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
 
-    const activeTool = useCanvasStore(
-        (state) => state.activeTool,
-    );
+  const {
+    activeTool,
+    isSelected,
+    isLockedByOther,
+    remoteLock,
+    displayTransform,
+    selectShape,
+    toggleShapeSelection,
+    acquireLock,
+    emitTransformFrame,
+    endTransform,
+  } = useShapeTransform({ shape, boardId });
 
-    const selectedShapeIds = useCanvasStore(
-        (state) => state.selectedShapeIds,
-    );
+  useEffect(() => {
+    const transformer = transformerRef.current;
+    const rect = rectRef.current;
 
-    const selectShape = useCanvasStore(
-        (state) => state.selectShape,
-    );
+    if (!transformer || !rect) {
+      return;
+    }
 
-    const toggleShapeSelection = useCanvasStore(
-        (state) => state.toggleShapeSelection,
-    );
+    if (!isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
+      transformer.nodes([]);
+      transformer.getLayer()?.batchDraw();
+      return;
+    }
 
-    // const updateShapePosition = useCanvasStore(
-    //     (state) => state.updateShapePosition,
-    // );
+    transformer.nodes([rect]);
+    transformer.getLayer()?.batchDraw();
+  }, [activeTool, isSelected, isLockedByOther]);
 
-    const updateRectangleTransform = useCanvasStore(
-        (state) => state.updateRectangleTransform,
-    );
+  return (
+    <>
+      <Rect
+        ref={rectRef}
+        x={displayTransform.x}
+        y={displayTransform.y}
+        width={displayTransform.width}
+        height={displayTransform.height}
+        rotation={displayTransform.rotation}
+        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
+        fill={shape.fill}
+        stroke={shape.stroke}
+        strokeWidth={shape.strokeWidth}
+        draggable={activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
+        onMouseDown={(event) => {
+          event.cancelBubble = true;
 
-    const moveSelectedShapes = useCanvasStore(
-        (state) => state.moveSelectedShapes,
-    );
-
-    const isSelected = selectedShapeIds.includes(shape.id);
-
-    useEffect(() => {
-        const transformer = transformerRef.current;
-        const rect = rectRef.current;
-
-        if (!transformer || !rect) {
+          if (isLockedByOther) {
+            toast.info(
+              `${remoteLock?.fullName || "Another collaborator"} is currently editing this shape.`
+            );
             return;
-        }
+          }
 
-        if (
-            !isSelected ||
-            activeTool !== CANVAS_TOOLS.SELECT
-        ) {
-            transformer.nodes([]);
-            transformer.getLayer()?.batchDraw();
+          if (activeTool !== CANVAS_TOOLS.SELECT) {
             return;
-        }
+          }
 
-        transformer.nodes([rect]);
-        transformer.getLayer()?.batchDraw();
-    }, [activeTool, isSelected]);
+          if (event.evt.shiftKey) {
+            toggleShapeSelection(shape.id);
+            return;
+          }
 
-    return (
-        <>
-            <Rect
-                ref={rectRef}
-                x={shape.x}
-                y={shape.y}
-                width={shape.width}
-                height={shape.height}
-                rotation={shape.rotation}
-                opacity={shape.opacity}
-                fill={shape.fill}
-                stroke={shape.stroke}
-                strokeWidth={shape.strokeWidth}
-                draggable={
-                    activeTool === CANVAS_TOOLS.SELECT
-                }
-                onMouseDown={(event) => {
-                    event.cancelBubble = true;
+          if (!selectedShapeIds.includes(shape.id)) {
+            selectShape(shape.id);
+          }
+        }}
+        onDragStart={async (event) => {
+          event.cancelBubble = true;
 
-                    if (activeTool !== CANVAS_TOOLS.SELECT) {
-                        return;
-                    }
+          if (activeTool !== CANVAS_TOOLS.SELECT) {
+            return;
+          }
 
-                    if (event.evt.shiftKey) {
-                        toggleShapeSelection(shape.id);
-                        return;
-                    }
+          if (isLockedByOther) {
+            event.target.stopDrag();
+            toast.info(
+              `${remoteLock?.fullName || "Another collaborator"} is currently editing this shape.`
+            );
+            return;
+          }
 
-                    if (!selectedShapeIds.includes(shape.id)) {
-                        selectShape(shape.id);
-                    }
-                }}
+          const isAlreadySelected = selectedShapeIds.includes(shape.id);
+          if (!isAlreadySelected) {
+            selectShape(shape.id);
+          }
 
-                onDragStart={(event) => {
-                    event.cancelBubble = true;
+          dragStartRef.current = {
+            x: event.target.x(),
+            y: event.target.y(),
+          };
 
-                    if (activeTool !== CANVAS_TOOLS.SELECT) {
-                        return;
-                    }
+          const lockAcquired = await acquireLock();
+          if (!lockAcquired) {
+            event.target.stopDrag();
+          }
+        }}
+        onDragMove={(event) => {
+          event.cancelBubble = true;
 
-                    const isAlreadySelected =
-                        selectedShapeIds.includes(shape.id);
+          const currentX = event.target.x();
+          const currentY = event.target.y();
 
-                    if (!isAlreadySelected) {
-                        selectShape(shape.id);
-                    }
+          if (selectedShapeIds.length > 1 && dragStartRef.current) {
+            const deltaX = currentX - dragStartRef.current.x;
+            const deltaY = currentY - dragStartRef.current.y;
 
-                    dragStartRef.current = {
-                        x: event.target.x(),
-                        y: event.target.y(),
-                    };
-                }}
+            dragStartRef.current = {
+              x: currentX,
+              y: currentY,
+            };
 
-                onDragEnd={(event) => {
-                    event.cancelBubble = true;
+            moveSelectedShapes(deltaX, deltaY);
+          }
 
-                    const dragStart = dragStartRef.current;
+          // Emit ephemeral transform frame via RAF
+          emitTransformFrame({
+            x: currentX,
+            y: currentY,
+            width: shape.width,
+            height: shape.height,
+            rotation: shape.rotation,
+          });
+        }}
+        onDragEnd={(event) => {
+          event.cancelBubble = true;
 
-                    if (!dragStart) {
-                        return;
-                    }
+          const currentX = event.target.x();
+          const currentY = event.target.y();
 
-                    const currentX = event.target.x();
-                    const currentY = event.target.y();
+          const dragStart = dragStartRef.current;
+          dragStartRef.current = null;
 
-                    const deltaX = currentX - dragStart.x;
-                    const deltaY = currentY - dragStart.y;
+          const delta = dragStart
+            ? { x: currentX - dragStart.x, y: currentY - dragStart.y }
+            : undefined;
 
-                    moveSelectedShapes(deltaX, deltaY);
+          endTransform(
+            {
+              x: currentX,
+              y: currentY,
+              width: shape.width,
+              height: shape.height,
+              rotation: shape.rotation,
+            },
+            delta
+          );
+        }}
+        onTransformStart={async (event) => {
+          event.cancelBubble = true;
+          await acquireLock();
+        }}
+        onTransform={(event) => {
+          event.cancelBubble = true;
+          const node = rectRef.current;
+          if (!node) {
+            return;
+          }
 
-                    dragStartRef.current = null;
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
 
-                    updateShapeMutation.mutate(
-                        {
-                            id: shape.id,
-                            data: {
-                                x: shape.x + deltaX,
-                                y: shape.y + deltaY,
-                            },
-                        },
-                        {
-                            onError: (err) => {
-                                toast.error(
-                                    err instanceof Error
-                                        ? err.message
-                                        : "Failed to save shape position.",
-                                );
-                            },
-                        },
-                    );
-                }}
-                onTransformEnd={(event) => {
-                    event.cancelBubble = true;
+          const nextWidth = Math.max(5, node.width() * scaleX);
+          const nextHeight = Math.max(5, node.height() * scaleY);
 
-                    const node = event.target as Konva.Rect;
+          emitTransformFrame({
+            x: node.x(),
+            y: node.y(),
+            width: nextWidth,
+            height: nextHeight,
+            rotation: node.rotation(),
+          });
+        }}
+        onTransformEnd={(event) => {
+          event.cancelBubble = true;
+          const node = rectRef.current;
 
-                    const scaleX = node.scaleX();
-                    const scaleY = node.scaleY();
+          if (!node) {
+            return;
+          }
 
-                    const width = Math.max(
-                        5,
-                        node.width() * scaleX,
-                    );
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
 
-                    const height = Math.max(
-                        5,
-                        node.height() * scaleY,
-                    );
+          node.scaleX(1);
+          node.scaleY(1);
 
-                    const x = node.x();
-                    const y = node.y();
-                    const rotation = node.rotation();
+          const nextWidth = Math.max(5, node.width() * scaleX);
+          const nextHeight = Math.max(5, node.height() * scaleY);
+          const nextRotation = node.rotation();
+          const nextX = node.x();
+          const nextY = node.y();
 
-                    node.scaleX(1);
-                    node.scaleY(1);
+          endTransform({
+            x: nextX,
+            y: nextY,
+            width: nextWidth,
+            height: nextHeight,
+            rotation: nextRotation,
+          });
+        }}
+      />
 
-                    updateRectangleTransform(shape.id, {
-                        x,
-                        y,
-                        width,
-                        height,
-                        rotation,
-                    });
-
-                    updateShapeMutation.mutate(
-                        {
-                            id: shape.id,
-                            data: {
-                                x,
-                                y,
-                                width,
-                                height,
-                                rotation,
-                            },
-                        },
-                        {
-                            onError: (err) => {
-                                toast.error(
-                                    err instanceof Error
-                                        ? err.message
-                                        : "Failed to save shape transform.",
-                                );
-                            },
-                        },
-                    );
-                }}
-            />
-
-            {isSelected &&
-                activeTool === CANVAS_TOOLS.SELECT ? (
-                <Transformer
-                    ref={transformerRef}
-                    rotateEnabled
-                    enabledAnchors={[
-                        "top-left",
-                        "top-right",
-                        "bottom-left",
-                        "bottom-right",
-                    ]}
-                    boundBoxFunc={(oldBox, newBox) => {
-                        if (
-                            newBox.width < 5 ||
-                            newBox.height < 5
-                        ) {
-                            return oldBox;
-                        }
-
-                        return newBox;
-                    }}
-                />
-            ) : null}
-        </>
-    );
+      {isSelected && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther && (
+        <Transformer
+          ref={transformerRef}
+          rotateEnabled={true}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 5 || newBox.height < 5) {
+              return oldBox;
+            }
+            return newBox;
+          }}
+        />
+      )}
+    </>
+  );
 }

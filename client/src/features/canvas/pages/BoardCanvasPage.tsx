@@ -2,6 +2,7 @@ import { useParams } from "react-router-dom";
 
 import CanvasEditor from "../components/CanvasEditor";
 import CanvasToolbar from "../components/CanvasToolbar";
+import PresenceAvatars from "../components/PresenceAvatars";
 import { useBoardCanvases } from "../hooks";
 
 export default function BoardCanvasPage(): React.JSX.Element {
@@ -56,9 +57,12 @@ export default function BoardCanvasPage(): React.JSX.Element {
   const activeCanvas = canvases[0];
 
   return (
-    <main className="h-screen w-screen overflow-hidden bg-slate-700">
-      <CanvasEditor canvasId={activeCanvas.id} />
+    <main className="h-screen w-screen overflow-hidden bg-slate-700 relative">
+      <CanvasEditor boardId={boardId} canvasId={activeCanvas.id} />
       <CanvasToolbar />
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <PresenceAvatars />
+      </div>
     </main>
   );
 }

@@ -2,41 +2,85 @@ import { api } from "@/services/api";
 
 const SHAPE_ENDPOINT = "/shapes";
 
-export type ShapeResponseDto = {
+export type BaseShapeResponseDto = {
   id: string;
   canvasId: string;
-  type: "rectangle";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation: number;
   zIndex: number;
+  createdBy: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RectangleShapeResponseDto = BaseShapeResponseDto & {
+  type: "rectangle";
   style: {
     fill: string;
     stroke: string;
     strokeWidth: number;
     opacity: number;
   };
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
+};
+
+export type TextShapeResponseDto = BaseShapeResponseDto & {
+  type: "text";
+  style: {
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    fontWeight: string | number;
+    fontStyle: string;
+    textAlign: "left" | "center" | "right";
+    fill: string;
+    opacity: number;
+  };
+};
+
+export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
+  type: "sticky_note";
+  style: {
+    text: string;
+    fontSize: number;
+    backgroundColor: string;
+    textColor: string;
+    opacity: number;
+  };
+};
+
+export type ShapeResponseDto =
+  | RectangleShapeResponseDto
+  | TextShapeResponseDto
+  | StickyNoteShapeResponseDto;
+
+export type ShapeStyleRequest = {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  opacity?: number;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: string;
+  textAlign?: "left" | "center" | "right";
+  backgroundColor?: string;
+  textColor?: string;
 };
 
 export type CreateShapeRequest = {
   canvasId: string;
-  type: "rectangle";
+  type: "rectangle" | "text" | "sticky_note";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
-  style?: {
-    fill?: string;
-    stroke?: string;
-    strokeWidth?: number;
-    opacity?: number;
-  };
+  style?: ShapeStyleRequest;
 };
 
 export type UpdateShapeRequest = {
@@ -45,12 +89,7 @@ export type UpdateShapeRequest = {
   width?: number;
   height?: number;
   rotation?: number;
-  style?: {
-    fill?: string;
-    stroke?: string;
-    strokeWidth?: number;
-    opacity?: number;
-  };
+  style?: ShapeStyleRequest;
 };
 
 export const shapeApi = {

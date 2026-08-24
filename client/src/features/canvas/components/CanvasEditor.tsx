@@ -1,24 +1,42 @@
 import type Konva from "konva";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Layer, Rect, Stage } from "react-konva";
 import { toast } from "sonner";
 
-import { mapShapeResponseToRectangleShape, shapeApi } from "../api";
+import { mapShapeResponseToShape, shapeApi } from "../api";
 import { CANVAS_TOOLS } from "../constants";
 import {
     useCanvasHistory,
-    useCreateShape,
-    useDeleteShape,
+    useCanvasSocket,
     useShapes,
+    useBoardRecovery,
+    usePresenceSocket,
+    useInteractionSocket,
 } from "../hooks";
-import { useCanvasStore } from "../store";
+import { socketClientService } from "@/services/socket";
+import { useCanvasStore, usePresenceStore } from "../store";
+import type { TextShape, StickyNoteShape } from "../types";
 import { screenToWorld } from "../utils/canvas.coordinates";
 
 import CanvasGrid from "./CanvasGrid";
+import CollaboratorCursor from "./CollaboratorCursor";
+import CollaboratorSelection from "./CollaboratorSelection";
+import CollaboratorShapeLock from "./CollaboratorShapeLock";
+import RemoteCursorLayer from "./RemoteCursorLayer";
+import InlineTextEditor from "./InlineTextEditor";
 import ShapeRenderer from "./ShapeRenderer";
+import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
+import {
+    useComments,
+    useCommentSocket,
+    useCommentStore,
+    CommentBadge,
+    CommentPanel,
+} from "@/features/comments";
 
 type CanvasEditorProps = {
     canvasId?: string;
+    boardId?: string;
     className?: string;
 };
 
@@ -47,25 +65,120 @@ const ZOOM_BY = 1.05;
 
 export default function CanvasEditor({
     canvasId,
+    boardId,
     className,
 }: CanvasEditorProps): React.JSX.Element {
-    useCanvasHistory();
-    const containerRef =
-        useRef<HTMLDivElement | null>(null);
-
-    const stageRef =
-        useRef<Konva.Stage | null>(null);
+    const stageRef = useRef<Konva.Stage | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+    const activeTextInteractionIdRef = useRef<string | null>(null);
 
     const hydratedCanvasIdRef =
         useRef<string | null>(null);
 
-    const { data: serverShapes } = useShapes(canvasId);
-    const createShapeMutation = useCreateShape(canvasId);
-    const deleteShapeMutation = useDeleteShape(canvasId);
+    const lastCursorEmitTimeRef =
+        useRef<number>(0);
+
+    const lastBroadcastSelectionRef =
+        useRef<string>("");
+
+    const [editingShape, setEditingShape] =
+        useState<TextShape | StickyNoteShape | null>(null);
+
+    // Initialize real-time board socket handlers
+    useCanvasSocket(boardId, canvasId);
+
+    // Initialize real-time board state recovery and reconnect synchronization
+    const {
+        status: recoveryStatus,
+        error: recoveryError,
+        triggerRecovery,
+    } = useBoardRecovery(boardId, canvasId);
+
+    // Initialize real-time comments subscriptions and data loading
+    useComments(boardId);
+    useCommentSocket(boardId);
+
+    // Initialize collaborative presence & session lifecycle
+    const { emitCursor, emitActivity } = usePresenceSocket(boardId);
+
+    // Initialize collaborative interaction state & gesture coordination
+    const {
+        startInteraction,
+        endInteraction,
+        isTargetLockedByPeer,
+        getTargetOwner,
+    } = useInteractionSocket(boardId);
+
+    // Initialize keyboard undo/redo shortcuts
+    useCanvasHistory();
+
+    const comments = useCommentStore((state) => state.comments);
+    const toggleCommentPanel = useCommentStore((state) => state.togglePanel);
+    const setCommentSelectedShapeId = useCommentStore(
+        (state) => state.setSelectedShapeId
+    );
+    const selectShape = useCanvasStore((state) => state.selectShape);
+
+    const shapeCommentsMap = useMemo(() => {
+        const map: Record<string, { count: number; hasUnresolved: boolean }> = {};
+        for (const c of Object.values(comments)) {
+            if (c.shapeId && !c.isDeleted) {
+                if (!map[c.shapeId]) {
+                    map[c.shapeId] = { count: 0, hasUnresolved: false };
+                }
+                map[c.shapeId].count++;
+                if (!c.isResolved) {
+                    map[c.shapeId].hasUnresolved = true;
+                }
+            }
+        }
+        return map;
+    }, [comments]);
+
+    const {
+        data: serverShapes,
+    } = useShapes(canvasId);
 
     const setShapes = useCanvasStore(
         (state) => state.setShapes,
     );
+
+    const selectedShapeIds = useCanvasStore(
+        (state) => state.selectedShapeIds,
+    );
+
+    const remoteCursors = useCanvasStore(
+        (state) => state.remoteCursors,
+    );
+
+    const remoteSelections = useCanvasStore(
+        (state) => state.remoteSelections,
+    );
+
+    const remoteShapeLocks = useCanvasStore(
+        (state) => state.remoteShapeLocks,
+    );
+
+    const setActiveTool = useCanvasStore(
+        (state) => state.setActiveTool,
+    );
+
+    const updateShapeText = useCanvasStore(
+        (state) => state.updateShapeText,
+    );
+
+    // Broadcast selection changes to other collaborators over Socket.IO
+    useEffect(() => {
+        if (!boardId) {
+            return;
+        }
+
+        const currentKey = selectedShapeIds.slice().sort().join(",");
+        if (currentKey !== lastBroadcastSelectionRef.current) {
+            lastBroadcastSelectionRef.current = currentKey;
+            socketClientService.changeSelection(boardId, selectedShapeIds);
+        }
+    }, [boardId, selectedShapeIds]);
 
     const [size, setSize] = useState<CanvasSize>({
         width: 0,
@@ -103,10 +216,6 @@ export default function CanvasEditor({
         (state) => state.setPan,
     );
 
-    const selectedShapeIds = useCanvasStore(
-        (state) => state.selectedShapeIds,
-    );
-
     const deleteShape = useCanvasStore(
         (state) => state.deleteShape,
     );
@@ -141,7 +250,7 @@ export default function CanvasEditor({
         ) {
             hydratedCanvasIdRef.current = canvasId;
             const mapped = serverShapes.map(
-                mapShapeResponseToRectangleShape,
+                mapShapeResponseToShape,
             );
             setShapes(mapped);
         }
@@ -202,32 +311,32 @@ export default function CanvasEditor({
 
                 event.preventDefault();
 
-                selectedShapeIds.forEach((shapeId) => {
+                selectedShapeIds.forEach(async (shapeId) => {
                     deleteShape(shapeId);
-                    deleteShapeMutation.mutate(shapeId, {
-                        onError: async (err) => {
-                            toast.error(
-                                err instanceof Error
-                                    ? err.message
-                                    : "Failed to delete shape.",
-                            );
-                            if (canvasId) {
-                                try {
-                                    const canonical =
-                                        await shapeApi.getShapes(
-                                            canvasId,
-                                        );
-                                    setShapes(
-                                        canonical.map(
-                                            mapShapeResponseToRectangleShape,
-                                        ),
+                    try {
+                        await socketClientService.deleteShape(shapeId);
+                    } catch (err) {
+                        toast.error(
+                            err instanceof Error
+                                ? err.message
+                                : "Failed to delete shape.",
+                        );
+                        if (canvasId) {
+                            try {
+                                const canonical =
+                                    await shapeApi.getShapes(
+                                        canvasId,
                                     );
-                                } catch {
-                                    // Ignore secondary fetch errors
-                                }
+                                setShapes(
+                                    canonical.map(
+                                        mapShapeResponseToShape,
+                                    ),
+                                );
+                            } catch {
+                                // Ignore secondary fetch errors
                             }
-                        },
-                    });
+                        }
+                    }
                 });
 
                 return;
@@ -371,6 +480,94 @@ export default function CanvasEditor({
             clearSelection();
         }
 
+        if (activeTool === CANVAS_TOOLS.TEXT && isEmptyCanvas) {
+            if (!canvasId) {
+                toast.error("No active canvas available.");
+                return;
+            }
+
+            const pointer = stage.getPointerPosition();
+            if (!pointer) return;
+
+            const worldPoint = screenToWorld(pointer, { pan, zoom });
+
+            socketClientService
+                .createShape({
+                    canvasId,
+                    type: "text",
+                    x: worldPoint.x,
+                    y: worldPoint.y,
+                    width: 160,
+                    height: 36,
+                    rotation: 0,
+                    style: {
+                        text: "Type something...",
+                        fontSize: 24,
+                        fontFamily: "Inter",
+                        fill: "#1f2937",
+                        opacity: 1,
+                    },
+                })
+                .then((savedShape) => {
+                    const shape = mapShapeResponseToShape(savedShape);
+                    addShape(shape);
+                    setSelectedShapeIds([shape.id]);
+                    setActiveTool(CANVAS_TOOLS.SELECT);
+                })
+                .catch((err) => {
+                    toast.error(
+                        err instanceof Error
+                            ? err.message
+                            : "Failed to create text shape."
+                    );
+                });
+            return;
+        }
+
+        if (activeTool === CANVAS_TOOLS.STICKY_NOTE && isEmptyCanvas) {
+            if (!canvasId) {
+                toast.error("No active canvas available.");
+                return;
+            }
+
+            const pointer = stage.getPointerPosition();
+            if (!pointer) return;
+
+            const worldPoint = screenToWorld(pointer, { pan, zoom });
+
+            socketClientService
+                .createShape({
+                    canvasId,
+                    type: "sticky_note",
+                    x: worldPoint.x,
+                    y: worldPoint.y,
+                    width: 180,
+                    height: 180,
+                    rotation: 0,
+                    style: {
+                        text: "New note",
+                        fontSize: 18,
+                        backgroundColor: "#fef08a",
+                        textColor: "#1f2937",
+                        opacity: 1,
+                    },
+                })
+                .then((savedShape) => {
+                    const shape = mapShapeResponseToShape(savedShape);
+                    addShape(shape);
+                    setSelectedShapeIds([shape.id]);
+                    setActiveTool(CANVAS_TOOLS.SELECT);
+                })
+                .catch((err) => {
+                    toast.error(
+                        err instanceof Error
+                            ? err.message
+                            : "Failed to create sticky note."
+                    );
+                });
+            return;
+        }
+
         if (activeTool !== CANVAS_TOOLS.RECTANGLE) {
             return;
         }
@@ -415,7 +612,22 @@ export default function CanvasEditor({
             zoom,
         });
 
+        // Throttle cursor:move emissions to ~30 fps (~33ms)
+        const now = Date.now();
+        if (boardId && now - lastCursorEmitTimeRef.current >= 33) {
+            lastCursorEmitTimeRef.current = now;
+            socketClientService.moveCursor(boardId, {
+                x: worldPoint.x,
+                y: worldPoint.y,
+            });
+            emitCursor({
+                x: worldPoint.x,
+                y: worldPoint.y,
+            });
+        }
+
         if (selectionBox) {
+            emitActivity("selecting");
             setSelectionBox((current) => {
                 if (!current) {
                     return null;
@@ -435,6 +647,7 @@ export default function CanvasEditor({
             return;
         }
 
+        emitActivity("moving");
         setDrawing((current) => {
             if (!current) {
                 return null;
@@ -480,15 +693,10 @@ export default function CanvasEditor({
 
             const selectedIds = shapes
                 .filter((shape) => {
-                    if (shape.type !== "rectangle") {
-                        return false;
-                    }
-
-                    const shapeRight =
-                        shape.x + shape.width;
-
-                    const shapeBottom =
-                        shape.y + shape.height;
+                    const shapeWidth = shape.width || 100;
+                    const shapeHeight = shape.height || 40;
+                    const shapeRight = shape.x + shapeWidth;
+                    const shapeBottom = shape.y + shapeHeight;
 
                     return (
                         shape.x >= selectionLeft &&
@@ -544,8 +752,8 @@ export default function CanvasEditor({
             return;
         }
 
-        createShapeMutation.mutate(
-            {
+        socketClientService
+            .createShape({
                 canvasId,
                 type: "rectangle",
                 x,
@@ -559,24 +767,21 @@ export default function CanvasEditor({
                     strokeWidth: 2,
                     opacity: 1,
                 },
-            },
-            {
-                onSuccess: (savedShape) => {
-                    const rectangle =
-                        mapShapeResponseToRectangleShape(
-                            savedShape,
-                        );
-                    addShape(rectangle);
-                },
-                onError: (err) => {
-                    toast.error(
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to create shape.",
+            })
+            .then((savedShape) => {
+                const rectangle =
+                    mapShapeResponseToShape(
+                        savedShape,
                     );
-                },
-            },
-        );
+                addShape(rectangle);
+            })
+            .catch((err) => {
+                toast.error(
+                    err instanceof Error
+                        ? err.message
+                        : "Failed to create shape.",
+                );
+            });
     };
 
 
@@ -584,9 +789,33 @@ export default function CanvasEditor({
     return (
         <div
             ref={containerRef}
-            className={`h-full w-full overflow-hidden ${className ?? ""
+            className={`h-full w-full overflow-hidden relative ${className ?? ""
                 }`}
         >
+            {editingShape && (
+                <InlineTextEditor
+                    shape={editingShape}
+                    pan={pan}
+                    zoom={zoom}
+                    boardId={boardId}
+                    onCommit={(shapeId, text) => {
+                        updateShapeText(shapeId, text);
+                        if (activeTextInteractionIdRef.current) {
+                            endInteraction(activeTextInteractionIdRef.current);
+                            activeTextInteractionIdRef.current = null;
+                        }
+                        setEditingShape(null);
+                    }}
+                    onClose={() => {
+                        if (activeTextInteractionIdRef.current) {
+                            endInteraction(activeTextInteractionIdRef.current);
+                            activeTextInteractionIdRef.current = null;
+                        }
+                        setEditingShape(null);
+                    }}
+                />
+            )}
+
             {size.width > 0 &&
                 size.height > 0 ? (
                 <Stage
@@ -628,6 +857,23 @@ export default function CanvasEditor({
                             <ShapeRenderer
                                 key={shape.id}
                                 shape={shape}
+                                boardId={boardId}
+                                onStartEditing={(targetShape) => {
+                                    if (isTargetLockedByPeer("shape", targetShape.id)) {
+                                        const ownerId = getTargetOwner("shape", targetShape.id);
+                                        const ownerName = ownerId
+                                            ? (usePresenceStore.getState().users[ownerId]?.fullName || "Another collaborator")
+                                            : "Another collaborator";
+                                        toast.info(`${ownerName} is currently editing this shape.`);
+                                        return;
+                                    }
+                                    startInteraction("editing-text", [{ type: "shape", id: targetShape.id }]).then((res) => {
+                                        if (res.success && res.interactionId) {
+                                            activeTextInteractionIdRef.current = res.interactionId;
+                                        }
+                                    });
+                                    setEditingShape(targetShape);
+                                }}
                             />
                         ))}
 
@@ -682,8 +928,76 @@ export default function CanvasEditor({
                             />
                         ) : null}
                     </Layer>
+
+                    {/* Dedicated Collaborator Overlay Layer */}
+                    <Layer listening={false}>
+                        {Object.values(remoteSelections).map((selection) => (
+                            <CollaboratorSelection
+                                key={selection.userId}
+                                selection={selection}
+                                shapes={shapes}
+                            />
+                        ))}
+
+                        {Object.values(remoteShapeLocks).map((lock) => (
+                            <CollaboratorShapeLock
+                                key={lock.shapeId}
+                                lock={lock}
+                                shapes={shapes}
+                            />
+                        ))}
+
+                        {Object.values(remoteCursors).map((cursor) => (
+                            <CollaboratorCursor
+                                key={cursor.userId}
+                                cursor={cursor}
+                            />
+                        ))}
+
+                        <RemoteCursorLayer />
+                    </Layer>
                 </Stage>
             ) : null}
+
+            {/* Shape Comment Badges Overlay */}
+            {shapes.map((shape) => {
+                const info = shapeCommentsMap[shape.id];
+                if (!info || info.count <= 0) return null;
+
+                // Calculate screen position for badge at top-right of shape
+                const badgeScreenX = (shape.x + shape.width) * zoom + pan.x;
+                const badgeScreenY = shape.y * zoom + pan.y;
+
+                return (
+                    <CommentBadge
+                        key={`comment-badge-${shape.id}`}
+                        x={badgeScreenX}
+                        y={badgeScreenY}
+                        count={info.count}
+                        hasUnresolved={info.hasUnresolved}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            selectShape(shape.id);
+                            setCommentSelectedShapeId(shape.id);
+                            toggleCommentPanel(true);
+                        }}
+                    />
+                );
+            })}
+
+            {/* Real-time Connection & Board State Recovery Status Indicator */}
+            <RecoveryStatusIndicator
+                status={recoveryStatus}
+                error={recoveryError}
+                onRetry={() => {
+                    if (boardId && canvasId) {
+                        triggerRecovery(boardId, canvasId);
+                    }
+                }}
+            />
+
+            {/* Real-time Collaborative Comments Panel */}
+            <CommentPanel boardId={boardId} />
         </div>
     );
 }

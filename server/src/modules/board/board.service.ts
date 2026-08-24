@@ -7,11 +7,15 @@ import {
 import { boardRepository } from "./board.repository";
 
 import { workspaceRepository } from "../workspace/workspace.repository";
+import { workspaceMemberRepository } from "../workspace/workspaceMember.repository";
 import { canvasService } from "../canvas/canvas.service";
 
 import {
   CreateBoardData,
+  BoardDocument,
+  BoardVisibility,
 } from "./board.types";
+import { WorkspaceVisibility } from "../workspace/workspace.types";
 
 import {
   ApiError,
@@ -23,6 +27,64 @@ import {
 } from "@/shared/constants";
 
 export class BoardService {
+  async authorizeBoardAccess(
+    boardId: Types.ObjectId,
+    userId: Types.ObjectId
+  ): Promise<BoardDocument> {
+    const board = await boardRepository.findById(boardId);
+
+    if (!board || board.isArchived) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.BOARD_NOT_FOUND
+      );
+    }
+
+    // 1. Board creator always has access
+    if (board.createdBy.equals(userId)) {
+      return board;
+    }
+
+    // 2. Public board is accessible
+    if (board.visibility === BoardVisibility.PUBLIC) {
+      return board;
+    }
+
+    // 3. Check Workspace access
+    const workspace = await workspaceRepository.findById(board.workspaceId);
+
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND
+      );
+    }
+
+    // Workspace owner has access
+    if (workspace.ownerId.equals(userId)) {
+      return board;
+    }
+
+    // Public workspace is accessible
+    if (workspace.visibility === WorkspaceVisibility.PUBLIC) {
+      return board;
+    }
+
+    // Check workspace membership
+    const member = await workspaceMemberRepository.findByWorkspaceAndUser(
+      board.workspaceId,
+      userId
+    );
+
+    if (member) {
+      return board;
+    }
+
+    throw new ApiError(
+      HttpStatus.FORBIDDEN,
+      "You do not have permission to access this board."
+    );
+  }
   async createBoard(
     createdBy: Types.ObjectId,
     dto: CreateBoardDto

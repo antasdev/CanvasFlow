@@ -66,6 +66,25 @@ export class BoardRepository {
       { session }
     );
   }
+
+  async incrementCollaborationRevision(
+    id: Types.ObjectId,
+    session?: ClientSession
+  ): Promise<BoardDocument | null> {
+    return BoardModel.findByIdAndUpdate(
+      id,
+      {
+        $inc: {
+          collaborationRevision: 1,
+        },
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+        session,
+      }
+    );
+  }
 }
 
 export const boardRepository =

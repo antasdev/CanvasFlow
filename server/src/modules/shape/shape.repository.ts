@@ -23,9 +23,10 @@ export class ShapeRepository {
   }
 
   async findById(
-    id: Types.ObjectId
+    id: Types.ObjectId,
+    session?: ClientSession
   ): Promise<ShapeDocument | null> {
-    return ShapeModel.findById(id);
+    return ShapeModel.findById(id, null, { session });
   }
 
   async findByCanvasId(
@@ -44,14 +45,56 @@ export class ShapeRepository {
       .sort({ zIndex: -1 });
   }
 
+  async updateWithExpectedVersion(
+    id: Types.ObjectId,
+    expectedVersion: number,
+    data: UpdateShapeDto,
+    session?: ClientSession
+  ): Promise<ShapeDocument | null> {
+    const { expectedVersion: _, ...updateData } = data;
+    return ShapeModel.findOneAndUpdate(
+      {
+        _id: id,
+        version: expectedVersion,
+      },
+      {
+        $set: updateData,
+        $inc: { version: 1 },
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+        session,
+      }
+    );
+  }
+
+  async deleteWithExpectedVersion(
+    id: Types.ObjectId,
+    expectedVersion: number,
+    session?: ClientSession
+  ): Promise<ShapeDocument | null> {
+    return ShapeModel.findOneAndDelete(
+      {
+        _id: id,
+        version: expectedVersion,
+      },
+      { session }
+    );
+  }
+
   async updateById(
     id: Types.ObjectId,
     data: UpdateShapeDto,
     session?: ClientSession
   ): Promise<ShapeDocument | null> {
+    const { expectedVersion: _, ...updateData } = data;
     return ShapeModel.findByIdAndUpdate(
       id,
-      data,
+      {
+        $set: updateData,
+        $inc: { version: 1 },
+      },
       {
         returnDocument: "after",
         runValidators: true,
@@ -68,6 +111,19 @@ export class ShapeRepository {
       id,
       { session }
     );
+  }
+
+  async countByShapeIdsAndCanvasIds(
+    shapeIds: Types.ObjectId[],
+    canvasIds: Types.ObjectId[]
+  ): Promise<number> {
+    if (shapeIds.length === 0 || canvasIds.length === 0) {
+      return 0;
+    }
+    return ShapeModel.countDocuments({
+      _id: { $in: shapeIds },
+      canvasId: { $in: canvasIds },
+    });
   }
 }
 

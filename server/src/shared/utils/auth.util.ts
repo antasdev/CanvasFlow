@@ -10,5 +10,6 @@ export const authenticateToken = (
 
   return {
     userId: new Types.ObjectId(payload.userId),
+    role: payload.role,
   };
 };

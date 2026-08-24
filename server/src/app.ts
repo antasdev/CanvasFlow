@@ -17,6 +17,7 @@ import { workspaceRouter } from "./modules/workspace";
 import { boardRouter } from "@/modules/board";
 import { canvasRouter } from "@/modules/canvas";
 import { shapeRouter } from "@/modules/shape";
+import { commentRouter } from "@/modules/comment";
 
 
 const app:Application=express();
@@ -43,6 +44,8 @@ app.use("/api/v1/users", userRouter);
 app.use("/api/v1/workspaces", workspaceRouter);
 
 app.use("/api/v1/boards", boardRouter);
+
+app.use("/api/v1/boards/:boardId/comments", commentRouter);
 
 app.use("/api/v1/canvases", canvasRouter);
 

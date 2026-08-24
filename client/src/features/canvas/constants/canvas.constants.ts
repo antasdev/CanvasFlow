@@ -5,6 +5,7 @@ export const CANVAS_TOOLS = {
   LINE: "line",
   ARROW: "arrow",
   TEXT: "text",
+  STICKY_NOTE: "sticky_note",
   FREEHAND: "freehand",
 } as const;
 

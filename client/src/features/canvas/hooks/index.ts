@@ -4,3 +4,8 @@ export * from "./useShapes";
 export * from "./useCreateShape";
 export * from "./useUpdateShape";
 export * from "./useDeleteShape";
+export * from "./useCanvasSocket";
+export * from "./useShapeTransform";
+export * from "./useBoardRecovery";
+export * from "./usePresenceSocket";
+export * from "./useInteractionSocket";

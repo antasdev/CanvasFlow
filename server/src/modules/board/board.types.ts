@@ -24,6 +24,7 @@ export type Board = {
   visibility: BoardVisibility;
 
   isArchived: boolean;
+  collaborationRevision: number;
 
   createdAt: Date;
   updatedAt: Date;
