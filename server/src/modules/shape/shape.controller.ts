@@ -84,11 +84,17 @@ export class ShapeController {
         const id = new Types.ObjectId(
             req.params.id
         );
+        const userId = new Types.ObjectId(
+            req.user!.userId
+        );
 
         const result =
             await shapeService.updateShape(
                 id,
-                req.body as UpdateShapeDto
+                req.body as UpdateShapeDto,
+                undefined,
+                undefined,
+                userId
             );
 
         res.status(HttpStatus.OK).json({
@@ -104,8 +110,11 @@ export class ShapeController {
         const id = new Types.ObjectId(
             req.params.id
         );
+        const userId = new Types.ObjectId(
+            req.user!.userId
+        );
 
-        await shapeService.deleteShape(id);
+        await shapeService.deleteShape(id, undefined, undefined, userId);
 
         res.status(HttpStatus.OK).json({
             success: true,

@@ -11,11 +11,13 @@ import type { RectangleShape } from "../types";
 type RectangleNodeProps = {
   shape: RectangleShape;
   boardId?: string;
+  canEditCanvas?: boolean;
 };
 
 export default function RectangleNode({
   shape,
   boardId,
+  canEditCanvas = true,
 }: RectangleNodeProps): React.JSX.Element {
   const rectRef = useRef<Konva.Rect | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
@@ -45,7 +47,7 @@ export default function RectangleNode({
       return;
     }
 
-    if (!isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
+    if (!canEditCanvas || !isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
       return;
@@ -53,7 +55,7 @@ export default function RectangleNode({
 
     transformer.nodes([rect]);
     transformer.getLayer()?.batchDraw();
-  }, [activeTool, isSelected, isLockedByOther]);
+  }, [activeTool, isSelected, isLockedByOther, canEditCanvas]);
 
   return (
     <>
@@ -68,7 +70,7 @@ export default function RectangleNode({
         fill={shape.fill}
         stroke={shape.stroke}
         strokeWidth={shape.strokeWidth}
-        draggable={activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
+        draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;
 
@@ -95,7 +97,8 @@ export default function RectangleNode({
         onDragStart={async (event) => {
           event.cancelBubble = true;
 
-          if (activeTool !== CANVAS_TOOLS.SELECT) {
+          if (!canEditCanvas || activeTool !== CANVAS_TOOLS.SELECT) {
+            event.target.stopDrag();
             return;
           }
 

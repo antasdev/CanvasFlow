@@ -7,23 +7,32 @@ import StickyNoteNode from "./StickyNoteNode";
 type ShapeRendererProps = {
   shape: Shape;
   boardId?: string;
+  canEditCanvas?: boolean;
   onStartEditing?: (shape: TextShape | StickyNoteShape) => void;
 };
 
 export default function ShapeRenderer({
   shape,
   boardId,
+  canEditCanvas = true,
   onStartEditing,
 }: ShapeRendererProps): React.JSX.Element | null {
   switch (shape.type) {
     case "rectangle":
-      return <RectangleNode shape={shape} boardId={boardId} />;
+      return (
+        <RectangleNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
 
     case "text":
       return (
         <TextNode
           shape={shape}
           boardId={boardId}
+          canEditCanvas={canEditCanvas}
           onStartEditing={onStartEditing ?? (() => {})}
         />
       );
@@ -33,6 +42,7 @@ export default function ShapeRenderer({
         <StickyNoteNode
           shape={shape}
           boardId={boardId}
+          canEditCanvas={canEditCanvas}
           onStartEditing={onStartEditing ?? (() => {})}
         />
       );

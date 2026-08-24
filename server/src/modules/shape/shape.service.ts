@@ -3,6 +3,7 @@ import { ClientSession, Types } from "mongoose";
 import { shapeRepository } from "./shape.repository";
 import { canvasRepository } from "@/modules/canvas";
 import { commentRepository } from "@/modules/comment/comment.repository";
+import { boardService } from "@/modules/board/board.service";
 import {
   CreateShapeDto,
   UpdateShapeDto,
@@ -30,6 +31,9 @@ export class ShapeService {
         Messages.CANVAS_NOT_FOUND
       );
     }
+
+    // Authorize canvas mutation for user
+    await boardService.authorizeCanvasMutation(canvas.boardId, createdBy);
 
     const highestShape =
       await shapeRepository.findHighestZIndex(
@@ -81,8 +85,32 @@ export class ShapeService {
     id: Types.ObjectId,
     dto: UpdateShapeDto,
     session?: ClientSession,
-    expectedVersion?: number
+    expectedVersion?: number,
+    userId?: Types.ObjectId
   ) {
+    const existing = await shapeRepository.findById(id, session);
+    if (!existing) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.SHAPE_NOT_FOUND
+      );
+    }
+
+    const canvas = await canvasRepository.findById(
+      existing.canvasId
+    );
+
+    if (!canvas) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.CANVAS_NOT_FOUND
+      );
+    }
+
+    if (userId) {
+      await boardService.authorizeCanvasMutation(canvas.boardId, userId);
+    }
+
     const effectiveExpectedVersion = expectedVersion ?? dto.expectedVersion;
 
     let updatedShape = null;
@@ -96,8 +124,8 @@ export class ShapeService {
       );
 
       if (!updatedShape) {
-        const existing = await shapeRepository.findById(id, session);
-        if (!existing) {
+        const fresh = await shapeRepository.findById(id, session);
+        if (!fresh) {
           throw new ApiError(
             HttpStatus.NOT_FOUND,
             Messages.SHAPE_NOT_FOUND
@@ -106,20 +134,11 @@ export class ShapeService {
         throw new ConflictError(
           "shape",
           id.toString(),
-          existing.version,
+          fresh.version,
           "Shape has been modified by another collaborator."
         );
       }
     } else {
-      const shape = await shapeRepository.findById(id, session);
-
-      if (!shape) {
-        throw new ApiError(
-          HttpStatus.NOT_FOUND,
-          Messages.SHAPE_NOT_FOUND
-        );
-      }
-
       updatedShape = await shapeRepository.updateById(
         id,
         dto,
@@ -134,17 +153,6 @@ export class ShapeService {
       }
     }
 
-    const canvas = await canvasRepository.findById(
-      updatedShape.canvasId
-    );
-
-    if (!canvas) {
-      throw new ApiError(
-        HttpStatus.NOT_FOUND,
-        Messages.CANVAS_NOT_FOUND
-      );
-    }
-
     return {
       shape: updatedShape,
       boardId: canvas.boardId,
@@ -154,9 +162,30 @@ export class ShapeService {
   async deleteShape(
     id: Types.ObjectId,
     session?: ClientSession,
-    expectedVersion?: number
+    expectedVersion?: number,
+    userId?: Types.ObjectId
   ) {
-    let canvasId: Types.ObjectId | null = null;
+    const existing = await shapeRepository.findById(id, session);
+
+    if (!existing) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.SHAPE_NOT_FOUND
+      );
+    }
+
+    const canvas = await canvasRepository.findById(existing.canvasId);
+
+    if (!canvas) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.CANVAS_NOT_FOUND
+      );
+    }
+
+    if (userId) {
+      await boardService.authorizeCanvasMutation(canvas.boardId, userId);
+    }
 
     if (expectedVersion !== undefined) {
       const deleted = await shapeRepository.deleteWithExpectedVersion(
@@ -166,8 +195,8 @@ export class ShapeService {
       );
 
       if (!deleted) {
-        const existing = await shapeRepository.findById(id, session);
-        if (!existing) {
+        const fresh = await shapeRepository.findById(id, session);
+        if (!fresh) {
           throw new ApiError(
             HttpStatus.NOT_FOUND,
             Messages.SHAPE_NOT_FOUND
@@ -176,33 +205,12 @@ export class ShapeService {
         throw new ConflictError(
           "shape",
           id.toString(),
-          existing.version,
+          fresh.version,
           "Shape has been modified by another collaborator."
         );
       }
-
-      canvasId = deleted.canvasId;
     } else {
-      const shape = await shapeRepository.findById(id, session);
-
-      if (!shape) {
-        throw new ApiError(
-          HttpStatus.NOT_FOUND,
-          Messages.SHAPE_NOT_FOUND
-        );
-      }
-
-      canvasId = shape.canvasId;
       await shapeRepository.deleteById(id, session);
-    }
-
-    const canvas = await canvasRepository.findById(canvasId);
-
-    if (!canvas) {
-      throw new ApiError(
-        HttpStatus.NOT_FOUND,
-        Messages.CANVAS_NOT_FOUND
-      );
     }
 
     await commentRepository.nullifyShapeId(id, session);

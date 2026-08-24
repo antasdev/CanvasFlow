@@ -129,8 +129,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
 
         const boardId = canvas.boardId;
 
-        // 2. Authorize board access
-        await boardService.authorizeBoardAccess(boardId, userId);
+        // 2. Authorize canvas mutation
+        await boardService.authorizeCanvasMutation(boardId, userId);
 
         // 3. Verify socket is joined to the board room
         const room = getBoardRoom(boardId.toString());
@@ -331,8 +331,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
 
         const boardId = canvas.boardId;
 
-        // 2. Authorize board access
-        await boardService.authorizeBoardAccess(boardId, userId);
+        // 2. Authorize canvas mutation
+        await boardService.authorizeCanvasMutation(boardId, userId);
 
         // 3. Verify socket is joined to the board room
         const room = getBoardRoom(boardId.toString());
@@ -527,8 +527,8 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
 
         const boardId = canvas.boardId;
 
-        // 2. Authorize board access
-        await boardService.authorizeBoardAccess(boardId, userId);
+        // 2. Authorize canvas mutation
+        await boardService.authorizeCanvasMutation(boardId, userId);
 
         // 3. Verify socket is joined to the board room
         const room = getBoardRoom(boardId.toString());

@@ -67,7 +67,7 @@ async function runAuthTests(): Promise<void> {
 
     // 2. Register sets refreshToken cookie
     console.log("Test 2: Verifying refreshToken cookie is set on registration...");
-    const rawSetCookie = regRes.headers.get("set-cookie");
+    const rawSetCookie = regRes.headers.get("set-cookie") || "";
     assert(!!rawSetCookie, "Set-Cookie header must be present on register");
     assert(rawSetCookie.includes("refreshToken="), "Cookie must contain refreshToken");
     assert(rawSetCookie.toLowerCase().includes("httponly"), "Cookie must be HttpOnly");
@@ -136,7 +136,7 @@ async function runAuthTests(): Promise<void> {
     assert(!!loginBody.data?.accessToken, "Login must return accessToken");
     assert(loginBody.data?.user?.email === testEmail.toLowerCase(), "Login email must match");
 
-    const loginSetCookie = loginRes.headers.get("set-cookie");
+    const loginSetCookie = loginRes.headers.get("set-cookie") || "";
     assert(!!loginSetCookie && loginSetCookie.includes("refreshToken="), "Login must set refreshToken cookie");
     const newCookieMatch = loginSetCookie.match(/refreshToken=([^;]+)/);
     refreshCookie = `refreshToken=${newCookieMatch![1]}`;
@@ -169,7 +169,7 @@ async function runAuthTests(): Promise<void> {
     assert(!!refreshBody.data?.accessToken, "Refresh must return new accessToken");
     assert(refreshBody.data?.user?.email === testEmail.toLowerCase(), "Refresh user must match");
 
-    const rotatedSetCookie = refreshRes.headers.get("set-cookie");
+    const rotatedSetCookie = refreshRes.headers.get("set-cookie") || "";
     assert(!!rotatedSetCookie, "Token rotation should set new cookie");
     const rotatedCookieMatch = rotatedSetCookie.match(/refreshToken=([^;]+)/);
     refreshCookie = `refreshToken=${rotatedCookieMatch![1]}`;
@@ -203,7 +203,7 @@ async function runAuthTests(): Promise<void> {
       },
     });
     assert(logoutRes.status === 200, `Expected 200 OK, got ${logoutRes.status}`);
-    const logoutSetCookie = logoutRes.headers.get("set-cookie");
+    const logoutSetCookie = logoutRes.headers.get("set-cookie") || "";
     assert(!!logoutSetCookie, "Logout must issue Set-Cookie to clear refreshToken");
     assert(
       logoutSetCookie.includes("refreshToken=;") ||

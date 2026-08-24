@@ -11,12 +11,14 @@ import type { StickyNoteShape } from "../types";
 type StickyNoteNodeProps = {
   shape: StickyNoteShape;
   boardId?: string;
+  canEditCanvas?: boolean;
   onStartEditing: (shape: StickyNoteShape) => void;
 };
 
 export default function StickyNoteNode({
   shape,
   boardId,
+  canEditCanvas = true,
   onStartEditing,
 }: StickyNoteNodeProps): React.JSX.Element {
   const groupRef = useRef<Konva.Group | null>(null);
@@ -47,7 +49,7 @@ export default function StickyNoteNode({
       return;
     }
 
-    if (!isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
+    if (!canEditCanvas || !isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
       return;
@@ -55,12 +57,16 @@ export default function StickyNoteNode({
 
     transformer.nodes([node]);
     transformer.getLayer()?.batchDraw();
-  }, [activeTool, isSelected, isLockedByOther]);
+  }, [activeTool, isSelected, isLockedByOther, canEditCanvas]);
 
   const handleDoubleClick = async (
     event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
   ): Promise<void> => {
     event.cancelBubble = true;
+
+    if (!canEditCanvas) {
+      return;
+    }
 
     if (isLockedByOther) {
       toast.info(
@@ -87,7 +93,7 @@ export default function StickyNoteNode({
         height={displayTransform.height}
         rotation={displayTransform.rotation}
         opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
-        draggable={activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
+        draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onDblClick={handleDoubleClick}
         onDblTap={handleDoubleClick}
         onMouseDown={(event) => {
@@ -116,7 +122,8 @@ export default function StickyNoteNode({
         onDragStart={async (event) => {
           event.cancelBubble = true;
 
-          if (activeTool !== CANVAS_TOOLS.SELECT) {
+          if (!canEditCanvas || activeTool !== CANVAS_TOOLS.SELECT) {
+            event.target.stopDrag();
             return;
           }
 

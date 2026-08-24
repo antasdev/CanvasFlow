@@ -56,6 +56,10 @@ export const protectedRoutes: RouteObject[] = [
         ],
       },
       {
+        path: ROUTES.BOARDS,
+        element: <Navigate to={ROUTES.WORKSPACES} replace />,
+      },
+      {
         path: ROUTES.BOARD_DETAILS,
         element: <BoardCanvasPage />,
       },

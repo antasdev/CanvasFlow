@@ -1,11 +1,17 @@
 import React, { useMemo } from "react";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Eye } from "lucide-react";
 
 import { CANVAS_TOOLS } from "../constants";
 import { useCanvasStore } from "../store";
 import { useCommentStore } from "@/features/comments";
 
-export default function CanvasToolbar(): React.JSX.Element {
+type CanvasToolbarProps = {
+  canEditCanvas?: boolean;
+};
+
+export default function CanvasToolbar({
+  canEditCanvas = true,
+}: CanvasToolbarProps): React.JSX.Element {
   const activeTool = useCanvasStore((state) => state.activeTool);
   const setActiveTool = useCanvasStore((state) => state.setActiveTool);
 
@@ -20,7 +26,14 @@ export default function CanvasToolbar(): React.JSX.Element {
   }, [comments]);
 
   return (
-    <div className="absolute left-4 top-4 z-10 flex gap-2 rounded-lg bg-white p-2 shadow-md border border-gray-200">
+    <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-lg bg-white p-2 shadow-md border border-gray-200">
+      {!canEditCanvas && (
+        <div className="flex items-center gap-1.5 rounded bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 border border-amber-200 mr-1">
+          <Eye className="h-3.5 w-3.5" />
+          <span>View Only</span>
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => setActiveTool(CANVAS_TOOLS.SELECT)}
@@ -33,41 +46,45 @@ export default function CanvasToolbar(): React.JSX.Element {
         Select
       </button>
 
-      <button
-        type="button"
-        onClick={() => setActiveTool(CANVAS_TOOLS.RECTANGLE)}
-        className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-          activeTool === CANVAS_TOOLS.RECTANGLE
-            ? "bg-gray-900 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        Rectangle
-      </button>
+      {canEditCanvas && (
+        <>
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.RECTANGLE)}
+            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.RECTANGLE
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Rectangle
+          </button>
 
-      <button
-        type="button"
-        onClick={() => setActiveTool(CANVAS_TOOLS.TEXT)}
-        className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-          activeTool === CANVAS_TOOLS.TEXT
-            ? "bg-gray-900 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        Text
-      </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.TEXT)}
+            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.TEXT
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Text
+          </button>
 
-      <button
-        type="button"
-        onClick={() => setActiveTool(CANVAS_TOOLS.STICKY_NOTE)}
-        className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-          activeTool === CANVAS_TOOLS.STICKY_NOTE
-            ? "bg-gray-900 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        Sticky Note
-      </button>
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.STICKY_NOTE)}
+            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.STICKY_NOTE
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Sticky Note
+          </button>
+        </>
+      )}
 
       <div className="h-6 w-px bg-gray-200 self-center mx-1" />
 

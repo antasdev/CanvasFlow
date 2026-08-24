@@ -19,3 +19,25 @@ export const getBoardRoom = (boardId: string): string => {
 export const getCanvasRoom = (canvasId: string): string => {
   return `canvas:${canvasId}`;
 };
+
+/**
+ * Constructs a deterministic user room identifier.
+ * Format: user:<userId>
+ *
+ * @param userId - The unique user identifier string
+ * @returns Deterministic user room string for Socket.IO
+ */
+export const getUserRoom = (userId: string): string => {
+  return `user:${userId}`;
+};
+
+/**
+ * Constructs a deterministic workspace room identifier.
+ * Format: workspace:<workspaceId>
+ *
+ * @param workspaceId - The unique workspace identifier string
+ * @returns Deterministic workspace room string for Socket.IO
+ */
+export const getWorkspaceRoom = (workspaceId: string): string => {
+  return `workspace:${workspaceId}`;
+};

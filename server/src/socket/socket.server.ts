@@ -17,7 +17,7 @@ import { registerInteractionHandlers } from "./handlers/interaction.handler";
 import { presenceManager } from "./presence/presence.manager";
 import { interactionManager } from "./presence/interaction.manager";
 import { shapeLockManager } from "./locks/shape-lock.manager";
-import { getBoardRoom } from "./socket.rooms";
+import { getBoardRoom, getUserRoom } from "./socket.rooms";
 import {
   AuthSocket,
   ClientToServerEvents,
@@ -103,6 +103,9 @@ export class SocketServer {
       console.log(
         `[Socket] Authenticated connection established: ${socket.id} (User: ${socket.data.user.userId})`
       );
+
+      // Join user room for direct user-scoped notifications and role updates
+      socket.join(getUserRoom(socket.data.user.userId.toString()));
 
       // Register Slice 2 Board Room Handlers
       registerBoardHandlers(socket);

@@ -1,14 +1,22 @@
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 
 import CanvasEditor from "../components/CanvasEditor";
 import CanvasToolbar from "../components/CanvasToolbar";
 import PresenceAvatars from "../components/PresenceAvatars";
 import { useBoardCanvases } from "../hooks";
+import { useBoard } from "@/features/board/hooks";
+import { useWorkspace, useWorkspacePermissions } from "@/features/workspace";
+import { workspaceQueryKeys } from "@/features/workspace/constants";
+import { socketClientService } from "@/services/socket";
 
 export default function BoardCanvasPage(): React.JSX.Element {
   const { boardId } = useParams<{
     boardId: string;
   }>();
+
+  const queryClient = useQueryClient();
 
   const {
     data: canvases,
@@ -16,6 +24,27 @@ export default function BoardCanvasPage(): React.JSX.Element {
     isError,
     error,
   } = useBoardCanvases(boardId);
+
+  const { data: board } = useBoard(boardId ?? "");
+  const { data: workspace } = useWorkspace(board?.workspaceId ?? "");
+  const { canEditCanvas } = useWorkspacePermissions(workspace?.role);
+
+  // Dynamic real-time role change synchronization
+  useEffect(() => {
+    const unsubscribe = socketClientService.onMemberRoleUpdated((payload) => {
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.all });
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.detail(payload.workspaceId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.members(payload.workspaceId),
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [queryClient]);
 
   if (isLoading) {
     return (
@@ -58,8 +87,12 @@ export default function BoardCanvasPage(): React.JSX.Element {
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-700 relative">
-      <CanvasEditor boardId={boardId} canvasId={activeCanvas.id} />
-      <CanvasToolbar />
+      <CanvasEditor
+        boardId={boardId}
+        canvasId={activeCanvas.id}
+        canEditCanvas={canEditCanvas}
+      />
+      <CanvasToolbar canEditCanvas={canEditCanvas} />
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
         <PresenceAvatars />
       </div>
