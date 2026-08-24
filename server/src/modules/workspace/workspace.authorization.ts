@@ -11,6 +11,8 @@ export enum WorkspacePermission {
   CREATE_BOARD = "CREATE_BOARD",
   EDIT_BOARD = "EDIT_BOARD",
   DELETE_BOARD = "DELETE_BOARD",
+  EDIT_CANVAS = "EDIT_CANVAS",
+  ADD_COMMENT = "ADD_COMMENT",
 }
 
 const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> = {
@@ -23,6 +25,8 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     WorkspacePermission.CREATE_BOARD,
     WorkspacePermission.EDIT_BOARD,
     WorkspacePermission.DELETE_BOARD,
+    WorkspacePermission.EDIT_CANVAS,
+    WorkspacePermission.ADD_COMMENT,
   ]),
   [WorkspaceRole.ADMIN]: new Set([
     WorkspacePermission.VIEW_WORKSPACE,
@@ -32,6 +36,8 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     WorkspacePermission.CREATE_BOARD,
     WorkspacePermission.EDIT_BOARD,
     WorkspacePermission.DELETE_BOARD,
+    WorkspacePermission.EDIT_CANVAS,
+    WorkspacePermission.ADD_COMMENT,
   ]),
   [WorkspaceRole.EDITOR]: new Set([
     WorkspacePermission.VIEW_WORKSPACE,
@@ -39,10 +45,13 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     WorkspacePermission.CREATE_BOARD,
     WorkspacePermission.EDIT_BOARD,
     WorkspacePermission.DELETE_BOARD,
+    WorkspacePermission.EDIT_CANVAS,
+    WorkspacePermission.ADD_COMMENT,
   ]),
   [WorkspaceRole.VIEWER]: new Set([
     WorkspacePermission.VIEW_WORKSPACE,
     WorkspacePermission.VIEW_MEMBERS,
+    WorkspacePermission.ADD_COMMENT,
   ]),
 };
 

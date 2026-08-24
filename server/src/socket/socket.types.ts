@@ -533,8 +533,17 @@ export interface ServerToClientEvents {
   "interaction:end": (payload: InteractionEndBroadcastPayload) => void;
   "interaction:snapshot": (payload: { boardId: string; interactions: CollaborativeInteraction[] }) => void;
 
+  "workspace:member-role-updated": (payload: WorkspaceMemberRoleUpdatedPayload) => void;
+
   error: (message: string) => void;
 }
+
+export type WorkspaceMemberRoleUpdatedPayload = {
+  workspaceId: string;
+  userId: string;
+  previousRole?: string;
+  newRole: string;
+};
 
 /**
  * Inter-server event contracts for multi-instance communication.

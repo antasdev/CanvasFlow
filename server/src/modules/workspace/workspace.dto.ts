@@ -45,6 +45,7 @@ export type WorkspaceMemberResponseDto = {
   workspaceId: string;
   userId: string;
   role: WorkspaceRole;
+  previousRole?: WorkspaceRole;
   joinedAt: Date;
   user?: WorkspaceMemberUserDto;
 };

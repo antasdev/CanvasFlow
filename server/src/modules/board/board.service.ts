@@ -8,6 +8,10 @@ import { boardRepository } from "./board.repository";
 
 import { workspaceRepository } from "../workspace/workspace.repository";
 import { workspaceMemberRepository } from "../workspace/workspaceMember.repository";
+import {
+  WorkspacePermission,
+  assertWorkspacePermission,
+} from "../workspace/workspace.authorization";
 import { canvasService } from "../canvas/canvas.service";
 
 import {
@@ -15,7 +19,11 @@ import {
   BoardDocument,
   BoardVisibility,
 } from "./board.types";
-import { WorkspaceRole, WorkspaceVisibility } from "../workspace/workspace.types";
+import {
+  WorkspaceDocument,
+  WorkspaceRole,
+  WorkspaceVisibility,
+} from "../workspace/workspace.types";
 
 import {
   ApiError,
@@ -27,6 +35,48 @@ import {
 } from "@/shared/constants";
 
 export class BoardService {
+  async resolveUserWorkspaceRole(
+    boardId: Types.ObjectId,
+    userId: Types.ObjectId
+  ): Promise<{
+    board: BoardDocument;
+    workspace: WorkspaceDocument;
+    role: WorkspaceRole | null;
+  }> {
+    const board = await boardRepository.findById(boardId);
+
+    if (!board || board.isArchived) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.BOARD_NOT_FOUND
+      );
+    }
+
+    const workspace = await workspaceRepository.findById(board.workspaceId);
+
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND
+      );
+    }
+
+    if (workspace.ownerId.equals(userId)) {
+      return { board, workspace, role: WorkspaceRole.OWNER };
+    }
+
+    const member = await workspaceMemberRepository.findByWorkspaceAndUser(
+      board.workspaceId,
+      userId
+    );
+
+    return {
+      board,
+      workspace,
+      role: member ? member.role : null,
+    };
+  }
+
   async authorizeBoardAccess(
     boardId: Types.ObjectId,
     userId: Types.ObjectId
@@ -84,6 +134,35 @@ export class BoardService {
       HttpStatus.FORBIDDEN,
       "You do not have permission to access this board."
     );
+  }
+
+  async authorizeCanvasMutation(
+    boardId: Types.ObjectId,
+    userId: Types.ObjectId
+  ): Promise<{
+    board: BoardDocument;
+    workspace: WorkspaceDocument;
+    role: WorkspaceRole;
+  }> {
+    const { board, workspace, role } = await this.resolveUserWorkspaceRole(
+      boardId,
+      userId
+    );
+
+    if (!role) {
+      throw new ApiError(
+        HttpStatus.FORBIDDEN,
+        "You do not have permission to modify this board."
+      );
+    }
+
+    assertWorkspacePermission(
+      role,
+      WorkspacePermission.EDIT_CANVAS,
+      "You do not have permission to modify this board."
+    );
+
+    return { board, workspace, role };
   }
 
   async createBoard(

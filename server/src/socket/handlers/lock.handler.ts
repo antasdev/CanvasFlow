@@ -1,6 +1,9 @@
 import { Types } from "mongoose";
 import { UserModel } from "@/modules/user/user.model";
+import { boardService } from "@/modules/board/board.service";
 import { shapeService } from "@/modules/shape/shape.service";
+import { ApiError } from "@/shared/utils";
+import { HttpStatus } from "@/shared/constants";
 import { shapeLockManager } from "../locks/shape-lock.manager";
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
@@ -61,10 +64,16 @@ export const registerLockHandlers = (socket: AuthSocket): void => {
           return;
         }
 
-        // 2. Verify shape belongs to this board
+        // 2. Authorize canvas mutation (ensure user has EDIT_CANVAS permission)
         const boardObjectId = new Types.ObjectId(boardId);
         const shapeObjectId = new Types.ObjectId(shapeId);
 
+        await boardService.authorizeCanvasMutation(
+          boardObjectId,
+          new Types.ObjectId(socket.data.user.userId)
+        );
+
+        // 3. Verify shape belongs to this board
         const shapeBelongs = await shapeService.verifyShapesBelongToBoard(
           boardObjectId,
           [shapeObjectId]
@@ -83,7 +92,7 @@ export const registerLockHandlers = (socket: AuthSocket): void => {
 
         const userId = socket.data.user.userId.toString();
 
-        // 3. Resolve display name
+        // 4. Resolve display name
         let fullName = `User ${userId.slice(-4)}`;
         try {
           const userDoc = await UserModel.findById(socket.data.user.userId).select(
@@ -96,7 +105,7 @@ export const registerLockHandlers = (socket: AuthSocket): void => {
           // Fallback to short identifier
         }
 
-        // 4. Attempt atomic lock acquisition
+        // 5. Attempt atomic lock acquisition
         const result = shapeLockManager.acquireLock(
           boardId,
           shapeId,
@@ -133,6 +142,23 @@ export const registerLockHandlers = (socket: AuthSocket): void => {
           data: lockPayload,
         });
       } catch (error) {
+        if (error instanceof ApiError) {
+          const code =
+            error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : "BAD_REQUEST";
+          callback?.({
+            success: false,
+            error: {
+              code,
+              message: error.message,
+            },
+          });
+          return;
+        }
+
         callback?.({
           success: false,
           error: {

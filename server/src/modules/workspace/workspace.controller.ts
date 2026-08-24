@@ -11,6 +11,7 @@ import {
 
 import { HttpStatus } from "@/shared/constants/http-status";
 import { IdParams } from "@/shared/types/route-params.types";
+import { getIO, getUserRoom, SocketEvents } from "@/socket";
 
 export class WorkspaceController {
   async createWorkspace(
@@ -129,6 +130,20 @@ export class WorkspaceController {
       new Types.ObjectId(req.params.memberUserId),
       req.body as UpdateWorkspaceMemberRoleDto
     );
+
+    // Notify connected sockets in real-time
+    try {
+      const io = getIO();
+      const userRoom = getUserRoom(req.params.memberUserId);
+      io.to(userRoom).emit(SocketEvents.WORKSPACE_MEMBER_ROLE_UPDATED, {
+        workspaceId: req.params.id,
+        userId: req.params.memberUserId,
+        previousRole: result.previousRole,
+        newRole: result.role,
+      });
+    } catch {
+      // Socket server may not be initialized in isolated REST tests
+    }
 
     res.status(HttpStatus.OK).json({
       success: true,

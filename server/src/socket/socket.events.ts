@@ -64,6 +64,8 @@ export const SocketEvents = {
   INTERACTION_END: "interaction:end",
   INTERACTION_SNAPSHOT: "interaction:snapshot",
 
+  WORKSPACE_MEMBER_ROLE_UPDATED: "workspace:member-role-updated",
+
   ERROR: "error",
 } as const;
 

@@ -8,8 +8,6 @@ import { UserRole } from "@/modules/user/user.types";
 import { UserModel } from "@/modules/user/user.model";
 import { WorkspaceModel } from "@/modules/workspace/workspace.model";
 import { WorkspaceMemberModel } from "@/modules/workspace/workspaceMember.model";
-import { BoardModel } from "@/modules/board/board.model";
-import { CanvasModel } from "@/modules/canvas/canvas.model";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
@@ -132,22 +130,26 @@ async function runRbacTests(): Promise<void> {
     const getAsOwner = await fetch(`${baseUrl}/workspaces/${workspaceId}`, {
       headers: { Authorization: `Bearer ${owner.token}` },
     });
-    assert((await getAsOwner.json()).data.role === "OWNER", "Owner role must be OWNER");
+    const ownerWsData = (await getAsOwner.json()) as any;
+    assert(ownerWsData.data.role === "OWNER", "Owner role must be OWNER");
 
     const getAsAdmin = await fetch(`${baseUrl}/workspaces/${workspaceId}`, {
       headers: { Authorization: `Bearer ${admin.token}` },
     });
-    assert((await getAsAdmin.json()).data.role === "ADMIN", "Admin role must be ADMIN");
+    const adminWsData = (await getAsAdmin.json()) as any;
+    assert(adminWsData.data.role === "ADMIN", "Admin role must be ADMIN");
 
     const getAsEditor = await fetch(`${baseUrl}/workspaces/${workspaceId}`, {
       headers: { Authorization: `Bearer ${editor.token}` },
     });
-    assert((await getAsEditor.json()).data.role === "EDITOR", "Editor role must be EDITOR");
+    const editorWsData = (await getAsEditor.json()) as any;
+    assert(editorWsData.data.role === "EDITOR", "Editor role must be EDITOR");
 
     const getAsViewer = await fetch(`${baseUrl}/workspaces/${workspaceId}`, {
       headers: { Authorization: `Bearer ${viewer.token}` },
     });
-    assert((await getAsViewer.json()).data.role === "VIEWER", "Viewer role must be VIEWER");
+    const viewerWsData = (await getAsViewer.json()) as any;
+    assert(viewerWsData.data.role === "VIEWER", "Viewer role must be VIEWER");
 
     const getAsOutsider = await fetch(`${baseUrl}/workspaces/${workspaceId}`, {
       headers: { Authorization: `Bearer ${outsider.token}` },

@@ -442,6 +442,7 @@ export class WorkspaceService {
       workspaceId: updatedMember.workspaceId.toString(),
       userId: updatedMember.userId.toString(),
       role: updatedMember.role,
+      previousRole: targetMember.role,
       joinedAt: updatedMember.joinedAt,
     };
   }

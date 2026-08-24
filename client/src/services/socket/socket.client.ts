@@ -40,6 +40,7 @@ import type {
   TypedSocket,
   UpdateCommentPayload,
   UpdateShapePayload,
+  WorkspaceMemberRoleUpdatedPayload,
 } from "./socket.types";
 
 import { useCollaborationStore } from "@/features/canvas/store";
@@ -1099,6 +1100,23 @@ export class SocketClientService {
 
     return () => {
       socket.off(SocketEvents.INTERACTION_SNAPSHOT, handler);
+    };
+  }
+
+  /**
+   * Subscribes to workspace member role updates.
+   *
+   * @param handler - Callback receiving WorkspaceMemberRoleUpdatedPayload
+   * @returns Cleanup unsubscribe function
+   */
+  public onMemberRoleUpdated(
+    handler: (payload: WorkspaceMemberRoleUpdatedPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.WORKSPACE_MEMBER_ROLE_UPDATED, handler);
+
+    return () => {
+      socket.off(SocketEvents.WORKSPACE_MEMBER_ROLE_UPDATED, handler);
     };
   }
 

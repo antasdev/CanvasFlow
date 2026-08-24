@@ -11,12 +11,14 @@ import type { TextShape } from "../types";
 type TextNodeProps = {
   shape: TextShape;
   boardId?: string;
+  canEditCanvas?: boolean;
   onStartEditing: (shape: TextShape) => void;
 };
 
 export default function TextNode({
   shape,
   boardId,
+  canEditCanvas = true,
   onStartEditing,
 }: TextNodeProps): React.JSX.Element {
   const textRef = useRef<Konva.Text | null>(null);
@@ -47,7 +49,7 @@ export default function TextNode({
       return;
     }
 
-    if (!isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
+    if (!canEditCanvas || !isSelected || activeTool !== CANVAS_TOOLS.SELECT || isLockedByOther) {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
       return;
@@ -55,12 +57,16 @@ export default function TextNode({
 
     transformer.nodes([node]);
     transformer.getLayer()?.batchDraw();
-  }, [activeTool, isSelected, isLockedByOther]);
+  }, [activeTool, isSelected, isLockedByOther, canEditCanvas]);
 
   const handleDoubleClick = async (
     event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
   ): Promise<void> => {
     event.cancelBubble = true;
+
+    if (!canEditCanvas) {
+      return;
+    }
 
     if (isLockedByOther) {
       toast.info(
@@ -93,7 +99,7 @@ export default function TextNode({
         align={shape.textAlign || "left"}
         fill={shape.text ? shape.fill : "#9ca3af"}
         opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
-        draggable={activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
+        draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onDblClick={handleDoubleClick}
         onDblTap={handleDoubleClick}
         onMouseDown={(event) => {
@@ -122,7 +128,8 @@ export default function TextNode({
         onDragStart={async (event) => {
           event.cancelBubble = true;
 
-          if (activeTool !== CANVAS_TOOLS.SELECT) {
+          if (!canEditCanvas || activeTool !== CANVAS_TOOLS.SELECT) {
+            event.target.stopDrag();
             return;
           }
 

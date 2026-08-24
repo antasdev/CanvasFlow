@@ -38,6 +38,7 @@ type CanvasEditorProps = {
     canvasId?: string;
     boardId?: string;
     className?: string;
+    canEditCanvas?: boolean;
 };
 
 type CanvasSize = {
@@ -67,6 +68,7 @@ export default function CanvasEditor({
     canvasId,
     boardId,
     className,
+    canEditCanvas = true,
 }: CanvasEditorProps): React.JSX.Element {
     const stageRef = useRef<Konva.Stage | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -235,6 +237,13 @@ export default function CanvasEditor({
         (state) => state.clearSelection,
     );
 
+    // Automatically enforce SELECT tool when user lacks edit permissions
+    useEffect(() => {
+        if (!canEditCanvas && activeTool !== CANVAS_TOOLS.SELECT) {
+            setActiveTool(CANVAS_TOOLS.SELECT);
+        }
+    }, [canEditCanvas, activeTool, setActiveTool]);
+
     /*
      * Hydrate server shapes into Zustand store on initial canvas load or canvas switch.
      */
@@ -305,7 +314,7 @@ export default function CanvasEditor({
                 event.key === "Delete" ||
                 event.key === "Backspace"
             ) {
-                if (selectedShapeIds.length === 0) {
+                if (!canEditCanvas || selectedShapeIds.length === 0) {
                     return;
                 }
 
@@ -478,6 +487,10 @@ export default function CanvasEditor({
 
         if (isEmptyCanvas) {
             clearSelection();
+        }
+
+        if (!canEditCanvas && activeTool !== CANVAS_TOOLS.SELECT) {
+            return;
         }
 
         if (activeTool === CANVAS_TOOLS.TEXT && isEmptyCanvas) {
@@ -858,7 +871,11 @@ export default function CanvasEditor({
                                 key={shape.id}
                                 shape={shape}
                                 boardId={boardId}
+                                canEditCanvas={canEditCanvas}
                                 onStartEditing={(targetShape) => {
+                                    if (!canEditCanvas) {
+                                        return;
+                                    }
                                     if (isTargetLockedByPeer("shape", targetShape.id)) {
                                         const ownerId = getTargetOwner("shape", targetShape.id);
                                         const ownerName = ownerId
