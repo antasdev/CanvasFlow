@@ -12,6 +12,9 @@ import {
   createWorkspaceSchema,
   updateWorkspaceSchema,
   workspaceParamsSchema,
+  addWorkspaceMemberSchema,
+  updateWorkspaceMemberRoleSchema,
+  workspaceMemberParamsSchema,
 } from "./workspace.validation";
 
 const workspaceRouter = Router();
@@ -81,6 +84,53 @@ workspaceRouter.delete(
   validate(workspaceParamsSchema),
   asyncHandler(
     workspaceController.deleteWorkspace.bind(
+      workspaceController
+    )
+  )
+);
+
+/**
+ * Workspace Member Management Routes
+ */
+workspaceRouter.get(
+  "/:id/members",
+  authenticate,
+  validate(workspaceParamsSchema),
+  asyncHandler(
+    workspaceController.getMembers.bind(
+      workspaceController
+    )
+  )
+);
+
+workspaceRouter.post(
+  "/:id/members",
+  authenticate,
+  validate(addWorkspaceMemberSchema),
+  asyncHandler(
+    workspaceController.addMember.bind(
+      workspaceController
+    )
+  )
+);
+
+workspaceRouter.patch(
+  "/:id/members/:memberUserId",
+  authenticate,
+  validate(updateWorkspaceMemberRoleSchema),
+  asyncHandler(
+    workspaceController.updateMemberRole.bind(
+      workspaceController
+    )
+  )
+);
+
+workspaceRouter.delete(
+  "/:id/members/:memberUserId",
+  authenticate,
+  validate(workspaceMemberParamsSchema),
+  asyncHandler(
+    workspaceController.removeMember.bind(
       workspaceController
     )
   )

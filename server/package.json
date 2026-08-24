@@ -6,7 +6,11 @@
   "scripts": {
     "dev": "tsx -r tsconfig-paths/register src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts",
+    "test:auth": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts",
+    "test:rbac": "tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts",
+    "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],
   "author": "",

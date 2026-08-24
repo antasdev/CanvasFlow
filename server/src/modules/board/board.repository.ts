@@ -50,7 +50,7 @@ export class BoardRepository {
       id,
       data,
       {
-        new: true,
+        returnDocument: "after",
         runValidators: true,
         session,
       }

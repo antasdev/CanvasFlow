@@ -24,6 +24,31 @@ export type CreateWorkspaceMemberDto = {
   joinedAt?: Date;
 };
 
+export type AddWorkspaceMemberDto = {
+  email: string;
+  role: WorkspaceRole;
+};
+
+export type UpdateWorkspaceMemberRoleDto = {
+  role: WorkspaceRole;
+};
+
+export type WorkspaceMemberUserDto = {
+  id: string;
+  fullName: string;
+  email: string;
+  avatar?: string;
+};
+
+export type WorkspaceMemberResponseDto = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  role: WorkspaceRole;
+  joinedAt: Date;
+  user?: WorkspaceMemberUserDto;
+};
+
 export type WorkspaceResponseDto = {
   id: string;
   name: string;

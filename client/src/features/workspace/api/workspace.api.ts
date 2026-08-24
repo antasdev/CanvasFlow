@@ -79,4 +79,48 @@ export const workspaceApi = {
     );
   },
 
+  async getMembers(
+    workspaceId: string
+  ): Promise<import("../types").WorkspaceMember[]> {
+    const response = await api.get<{
+      success: boolean;
+      data: import("../types").WorkspaceMember[];
+    }>(`${WORKSPACE_ENDPOINT}/${workspaceId}/members`);
+
+    return response.data.data;
+  },
+
+  async addMember(
+    workspaceId: string,
+    payload: import("../types").AddWorkspaceMemberRequest
+  ): Promise<import("../types").WorkspaceMember> {
+    const response = await api.post<{
+      success: boolean;
+      data: import("../types").WorkspaceMember;
+    }>(`${WORKSPACE_ENDPOINT}/${workspaceId}/members`, payload);
+
+    return response.data.data;
+  },
+
+  async updateMemberRole(
+    workspaceId: string,
+    memberUserId: string,
+    payload: import("../types").UpdateWorkspaceMemberRoleRequest
+  ): Promise<import("../types").WorkspaceMember> {
+    const response = await api.patch<{
+      success: boolean;
+      data: import("../types").WorkspaceMember;
+    }>(`${WORKSPACE_ENDPOINT}/${workspaceId}/members/${memberUserId}`, payload);
+
+    return response.data.data;
+  },
+
+  async removeMember(
+    workspaceId: string,
+    memberUserId: string
+  ): Promise<void> {
+    await api.delete(
+      `${WORKSPACE_ENDPOINT}/${workspaceId}/members/${memberUserId}`
+    );
+  },
 };

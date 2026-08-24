@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 
 import { useAuthStore } from "@/store";
-
 import { authApi } from "../api";
 
 export const useAuthSession = (): void => {
@@ -13,22 +12,13 @@ export const useAuthSession = (): void => {
   useEffect(() => {
     const initializeSession = async (): Promise<void> => {
       try {
-        const refreshResponse =
-          await authApi.refreshSession();
+        const refreshResponse = await authApi.refreshSession();
 
-        setAccessToken(
-          refreshResponse.data.accessToken
-        );
+        setAccessToken(refreshResponse.data.accessToken);
 
-        const currentUserResponse =
-          await authApi.getCurrentUser();
+        const currentUserResponse = await authApi.getCurrentUser();
 
-        setUser(
-          currentUserResponse.data.user
-        );
         setUser(currentUserResponse.data.user);
-
-console.log(useAuthStore.getState());
       } catch {
         clearUser();
       } finally {
@@ -37,5 +27,5 @@ console.log(useAuthStore.getState());
     };
 
     void initializeSession();
- }, [setAccessToken, setUser, clearUser, setLoading]);
+  }, [setAccessToken, setUser, clearUser, setLoading]);
 };

@@ -15,7 +15,7 @@ import {
   BoardDocument,
   BoardVisibility,
 } from "./board.types";
-import { WorkspaceVisibility } from "../workspace/workspace.types";
+import { WorkspaceRole, WorkspaceVisibility } from "../workspace/workspace.types";
 
 import {
   ApiError,
@@ -85,10 +85,11 @@ export class BoardService {
       "You do not have permission to access this board."
     );
   }
+
   async createBoard(
     createdBy: Types.ObjectId,
     dto: CreateBoardDto
-  ) {
+  ): Promise<BoardDocument> {
     // Verify workspace exists
     const workspace =
       await workspaceRepository.findById(
@@ -100,6 +101,29 @@ export class BoardService {
         HttpStatus.NOT_FOUND,
         Messages.WORKSPACE_NOT_FOUND
       );
+    }
+
+    // Verify creator has board creation rights (OWNER, ADMIN, or EDITOR; VIEWER is forbidden)
+    if (!workspace.ownerId.equals(createdBy)) {
+      const member =
+        await workspaceMemberRepository.findByWorkspaceAndUser(
+          dto.workspaceId,
+          createdBy
+        );
+
+      if (!member) {
+        if (workspace.visibility !== WorkspaceVisibility.PUBLIC) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You do not have permission to create boards in this workspace."
+          );
+        }
+      } else if (member.role === WorkspaceRole.VIEWER) {
+        throw new ApiError(
+          HttpStatus.FORBIDDEN,
+          "Viewers cannot create boards in this workspace."
+        );
+      }
     }
 
     const session = await mongoose.startSession();
@@ -137,10 +161,14 @@ export class BoardService {
   }
 
   async getBoardById(
-    id: Types.ObjectId
-  ) {
-    const board =
-      await boardRepository.findById(id);
+    id: Types.ObjectId,
+    userId?: Types.ObjectId
+  ): Promise<BoardDocument> {
+    if (userId) {
+      return this.authorizeBoardAccess(id, userId);
+    }
+
+    const board = await boardRepository.findById(id);
 
     if (!board) {
       throw new ApiError(
@@ -153,43 +181,126 @@ export class BoardService {
   }
 
   async getBoardsByWorkspace(
-    workspaceId: Types.ObjectId
-  ) {
-    return boardRepository.findByWorkspaceId(
-      workspaceId
-    );
+    workspaceId: Types.ObjectId,
+    userId?: Types.ObjectId
+  ): Promise<BoardDocument[]> {
+    const workspace = await workspaceRepository.findById(workspaceId);
+
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        Messages.WORKSPACE_NOT_FOUND
+      );
+    }
+
+    if (userId && !workspace.ownerId.equals(userId)) {
+      if (workspace.visibility !== WorkspaceVisibility.PUBLIC) {
+        const member =
+          await workspaceMemberRepository.findByWorkspaceAndUser(
+            workspaceId,
+            userId
+          );
+
+        if (!member) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You do not have permission to access boards in this workspace."
+          );
+        }
+      }
+    }
+
+    return boardRepository.findByWorkspaceId(workspaceId);
   }
 
   async updateBoard(
     id: Types.ObjectId,
+    userId: Types.ObjectId,
     dto: UpdateBoardDto
-  ) {
-    const board =
-      await boardRepository.findById(id);
+  ): Promise<BoardDocument | null> {
+    const board = await boardRepository.findById(id);
 
-    if (!board) {
+    if (!board || board.isArchived) {
       throw new ApiError(
         HttpStatus.NOT_FOUND,
         Messages.BOARD_NOT_FOUND
       );
     }
 
-    return boardRepository.updateById(
-      id,
-      dto
-    );
+    // Creator can always update
+    let isAllowed = board.createdBy.equals(userId);
+
+    if (!isAllowed) {
+      const workspace = await workspaceRepository.findById(board.workspaceId);
+      if (workspace && workspace.ownerId.equals(userId)) {
+        isAllowed = true;
+      } else {
+        const member =
+          await workspaceMemberRepository.findByWorkspaceAndUser(
+            board.workspaceId,
+            userId
+          );
+        if (
+          member &&
+          (member.role === WorkspaceRole.OWNER ||
+            member.role === WorkspaceRole.ADMIN ||
+            member.role === WorkspaceRole.EDITOR)
+        ) {
+          isAllowed = true;
+        }
+      }
+    }
+
+    if (!isAllowed) {
+      throw new ApiError(
+        HttpStatus.FORBIDDEN,
+        "You do not have permission to update this board."
+      );
+    }
+
+    return boardRepository.updateById(id, dto);
   }
 
   async deleteBoard(
-    id: Types.ObjectId
+    id: Types.ObjectId,
+    userId: Types.ObjectId
   ): Promise<void> {
-    const board =
-      await boardRepository.findById(id);
+    const board = await boardRepository.findById(id);
 
-    if (!board) {
+    if (!board || board.isArchived) {
       throw new ApiError(
         HttpStatus.NOT_FOUND,
         Messages.BOARD_NOT_FOUND
+      );
+    }
+
+    // Board creator can delete
+    let isAllowed = board.createdBy.equals(userId);
+
+    if (!isAllowed) {
+      const workspace = await workspaceRepository.findById(board.workspaceId);
+      if (workspace && workspace.ownerId.equals(userId)) {
+        isAllowed = true;
+      } else {
+        const member =
+          await workspaceMemberRepository.findByWorkspaceAndUser(
+            board.workspaceId,
+            userId
+          );
+        if (
+          member &&
+          (member.role === WorkspaceRole.OWNER ||
+            member.role === WorkspaceRole.ADMIN)
+        ) {
+          isAllowed = true;
+        }
+      }
+    }
+
+    if (!isAllowed) {
+      throw new ApiError(
+        HttpStatus.FORBIDDEN,
+        "You do not have permission to delete this board."
       );
     }
 
@@ -197,5 +308,4 @@ export class BoardService {
   }
 }
 
-export const boardService =
-  new BoardService();
+export const boardService = new BoardService();

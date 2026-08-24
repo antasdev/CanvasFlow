@@ -42,7 +42,8 @@ export class BoardController {
   ): Promise<void> {
     const result =
       await boardService.getBoardById(
-        new Types.ObjectId(req.params.id)
+        new Types.ObjectId(req.params.id),
+        new Types.ObjectId(req.user.userId)
       );
 
     res.status(HttpStatus.OK).json({
@@ -59,7 +60,8 @@ export class BoardController {
       await boardService.getBoardsByWorkspace(
         new Types.ObjectId(
           req.params.workspaceId
-        )
+        ),
+        new Types.ObjectId(req.user.userId)
       );
 
     res.status(HttpStatus.OK).json({
@@ -75,6 +77,7 @@ export class BoardController {
     const result =
       await boardService.updateBoard(
         new Types.ObjectId(req.params.id),
+        new Types.ObjectId(req.user.userId),
         req.body as UpdateBoardDto
       );
 
@@ -89,7 +92,8 @@ export class BoardController {
     res: Response
   ): Promise<void> {
     await boardService.deleteBoard(
-      new Types.ObjectId(req.params.id)
+      new Types.ObjectId(req.params.id),
+      new Types.ObjectId(req.user.userId)
     );
 
     res.status(HttpStatus.OK).json({
