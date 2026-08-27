@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { MessageSquare, Eye } from "lucide-react";
+import { MessageSquare, Eye, Minus, ArrowRight, GitCommit } from "lucide-react";
 
 import { CANVAS_TOOLS } from "../constants";
 import { useCanvasStore } from "../store";
@@ -58,6 +58,45 @@ export default function CanvasToolbar({
             }`}
           >
             Rectangle
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.LINE)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.LINE
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Minus className="h-3.5 w-3.5" />
+            <span>Line</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.ARROW)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.ARROW
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            <span>Arrow</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.CONNECTOR)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.CONNECTOR
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <GitCommit className="h-3.5 w-3.5" />
+            <span>Connector</span>
           </button>
 
           <button

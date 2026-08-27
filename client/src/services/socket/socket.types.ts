@@ -153,6 +153,11 @@ export type ShapeStylePayload = {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
+  strokeStyle?: "solid" | "dashed";
+  arrowHeadEnd?: boolean;
+  arrowHeadStart?: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
   text?: string;
   fontSize?: number;
   fontFamily?: string;
@@ -164,16 +169,25 @@ export type ShapeStylePayload = {
   points?: number[];
 };
 
+export type ShapeConnectorPayload = {
+  sourceShapeId?: string | null;
+  sourceAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  targetShapeId?: string | null;
+  targetAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  routing?: "straight" | "orthogonal" | "curved";
+};
+
 export type CreateShapePayload = {
   canvasId: string;
   mutationId?: string;
-  type: "rectangle" | "text" | "sticky_note" | "freehand";
+  type: "rectangle" | "text" | "sticky_note" | "freehand" | "line" | "arrow" | "connector";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
   points?: number[];
+  connector?: ShapeConnectorPayload;
   style?: ShapeStylePayload;
 };
 
@@ -188,6 +202,7 @@ export type UpdateShapePayload = {
     height?: number;
     rotation?: number;
     points?: number[];
+    connector?: ShapeConnectorPayload;
     style?: ShapeStylePayload;
   };
 };

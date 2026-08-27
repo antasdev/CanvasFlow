@@ -4,9 +4,11 @@ import { shapeRepository } from "./shape.repository";
 import { canvasRepository } from "@/modules/canvas";
 import { commentRepository } from "@/modules/comment/comment.repository";
 import { boardService } from "@/modules/board/board.service";
+import { ShapeType } from "./shape.types";
 import {
   CreateShapeDto,
   UpdateShapeDto,
+  ShapeConnectorDto,
 } from "./shape.dto";
 
 import { ApiError, ConflictError } from "@/shared/utils";
@@ -16,6 +18,73 @@ import {
 } from "@/shared/constants";
 
 export class ShapeService {
+  private async validateConnectorRelations(
+    canvasId: Types.ObjectId,
+    connector?: ShapeConnectorDto,
+    session?: ClientSession
+  ): Promise<void> {
+    if (!connector) return;
+
+    if (connector.sourceShapeId && connector.targetShapeId) {
+      if (connector.sourceShapeId === connector.targetShapeId) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connector cannot attach source and target to the same shape."
+        );
+      }
+    }
+
+    if (connector.sourceShapeId) {
+      const sourceShape = await shapeRepository.findById(
+        new Types.ObjectId(connector.sourceShapeId),
+        session
+      );
+      if (!sourceShape) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connector source shape does not exist."
+        );
+      }
+      if (sourceShape.canvasId.toString() !== canvasId.toString()) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connector source shape belongs to a different canvas."
+        );
+      }
+      if (sourceShape.type === ShapeType.CONNECTOR) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connectors cannot attach to other connectors."
+        );
+      }
+    }
+
+    if (connector.targetShapeId) {
+      const targetShape = await shapeRepository.findById(
+        new Types.ObjectId(connector.targetShapeId),
+        session
+      );
+      if (!targetShape) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connector target shape does not exist."
+        );
+      }
+      if (targetShape.canvasId.toString() !== canvasId.toString()) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connector target shape belongs to a different canvas."
+        );
+      }
+      if (targetShape.type === ShapeType.CONNECTOR) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "Connectors cannot attach to other connectors."
+        );
+      }
+    }
+  }
+
   async createShape(
     createdBy: Types.ObjectId,
     dto: CreateShapeDto,
@@ -34,6 +103,10 @@ export class ShapeService {
 
     // Authorize canvas mutation for user
     await boardService.authorizeCanvasMutation(canvas.boardId, createdBy);
+
+    if (dto.type === ShapeType.CONNECTOR && dto.connector) {
+      await this.validateConnectorRelations(dto.canvasId, dto.connector, session);
+    }
 
     const highestShape =
       await shapeRepository.findHighestZIndex(
@@ -109,6 +182,10 @@ export class ShapeService {
 
     if (userId) {
       await boardService.authorizeCanvasMutation(canvas.boardId, userId);
+    }
+
+    if (dto.connector) {
+      await this.validateConnectorRelations(existing.canvasId, dto.connector, session);
     }
 
     const effectiveExpectedVersion = expectedVersion ?? dto.expectedVersion;

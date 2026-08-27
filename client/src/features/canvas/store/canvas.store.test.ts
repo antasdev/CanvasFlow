@@ -713,4 +713,158 @@ describe("canvas store history & remote synchronization", () => {
         expect(transformedShape.rotation).toBe(45);
         expect(transformedShape.points).toEqual(rescaledPoints);
     });
+
+    it("undoes and redoes line creation", () => {
+        const line = {
+            id: "line-1",
+            type: "line" as const,
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            points: [0, 0, 100, 100],
+            stroke: "#1f2937",
+            strokeWidth: 2,
+            strokeStyle: "solid" as const,
+        };
+
+        useCanvasStore.getState().addShape(line);
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+
+        useCanvasStore.getState().redo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("line-1");
+    });
+
+    it("undoes and redoes arrow creation", () => {
+        const arrow = {
+            id: "arrow-1",
+            type: "arrow" as const,
+            x: 100,
+            y: 100,
+            width: 150,
+            height: 50,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2,
+            points: [0, 0, 150, 50],
+            stroke: "#2563eb",
+            strokeWidth: 2,
+            arrowHeadEnd: true,
+        };
+
+        useCanvasStore.getState().addShape(arrow);
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+
+        useCanvasStore.getState().redo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("arrow-1");
+    });
+
+    it("undoes and redoes connector creation", () => {
+        const connector = {
+            id: "conn-1",
+            type: "connector" as const,
+            x: 200,
+            y: 100,
+            width: 80,
+            height: 60,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 3,
+            points: [0, 0, 80, 60],
+            stroke: "#059669",
+            strokeWidth: 2,
+            connector: {
+                sourceShapeId: "shape-a",
+                sourceAnchor: "top" as const,
+                targetShapeId: "shape-b",
+                targetAnchor: "bottom" as const,
+                routing: "straight" as const,
+            },
+        };
+
+        useCanvasStore.getState().addShape(connector);
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+
+        useCanvasStore.getState().redo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("conn-1");
+    });
+
+    it("does not mutate vector points during moveSelectedShapes", () => {
+        const initialPoints = [0, 0, 100, 100];
+        const line = {
+            id: "line-move-test",
+            type: "line" as const,
+            x: 50,
+            y: 50,
+            width: 100,
+            height: 100,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            points: [...initialPoints],
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().addShape(line);
+        useCanvasStore.getState().setSelectedShapeIds(["line-move-test"]);
+        useCanvasStore.getState().moveSelectedShapes(30, 40);
+
+        const moved = useCanvasStore.getState().shapes[0] as typeof line;
+        expect(moved.x).toBe(80);
+        expect(moved.y).toBe(90);
+        expect(moved.points).toEqual(initialPoints);
+    });
+
+    it("updates line transform with rescaled points on transform normalization", () => {
+        const line = {
+            id: "line-transform-test",
+            type: "line" as const,
+            x: 0,
+            y: 0,
+            width: 50,
+            height: 50,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            points: [0, 0, 50, 50],
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().addShape(line);
+
+        const rescaledPoints = [0, 0, 100, 100];
+        useCanvasStore.getState().updateShapeTransform("line-transform-test", {
+            x: 10,
+            y: 10,
+            width: 100,
+            height: 100,
+            rotation: 15,
+            points: rescaledPoints,
+        });
+
+        const transformed = useCanvasStore.getState().shapes[0] as typeof line;
+        expect(transformed.x).toBe(10);
+        expect(transformed.y).toBe(10);
+        expect(transformed.width).toBe(100);
+        expect(transformed.height).toBe(100);
+        expect(transformed.rotation).toBe(15);
+        expect(transformed.points).toEqual(rescaledPoints);
+    });
 });

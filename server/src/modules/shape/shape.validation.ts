@@ -23,12 +23,43 @@ export const shapePointsSchema = z
     message: "Points array must contain an even number of coordinate values [x, y, ...].",
   });
 
+export const anchorPositionSchema = z.enum(["top", "right", "bottom", "left", "center"]);
+export const connectorRoutingSchema = z.enum(["straight", "orthogonal", "curved"]);
+
+export const shapeConnectorSchema = z
+  .object({
+    sourceShapeId: objectIdSchema.nullable().optional(),
+    sourceAnchor: anchorPositionSchema.nullable().optional(),
+    targetShapeId: objectIdSchema.nullable().optional(),
+    targetAnchor: anchorPositionSchema.nullable().optional(),
+    routing: connectorRoutingSchema.optional().default("straight"),
+  })
+  .refine(
+    (data) => {
+      if (data.sourceShapeId && data.targetShapeId) {
+        return data.sourceShapeId !== data.targetShapeId;
+      }
+      return true;
+    },
+    {
+      message: "Connector cannot attach source and target to the same shape.",
+      path: ["targetShapeId"],
+    }
+  );
+
 export const shapeStyleValidationSchema = z.object({
   // Rectangle / Shared styles
   fill: z.string().trim().optional(),
   stroke: z.string().trim().optional(),
   strokeWidth: z.number().min(0, "Stroke width cannot be negative.").max(50).optional(),
   opacity: z.number().min(0, "Opacity must be at least 0.").max(1, "Opacity cannot exceed 1.").optional(),
+
+  // Vector stroke styles
+  strokeStyle: z.enum(["solid", "dashed"]).optional(),
+  arrowHeadEnd: z.boolean().optional(),
+  arrowHeadStart: z.boolean().optional(),
+  pointerLength: z.number().min(2).max(50).optional(),
+  pointerWidth: z.number().min(2).max(50).optional(),
 
   // Text / Sticky Note styles
   text: z.string().max(5000, "Text cannot exceed 5000 characters.").optional(),
@@ -59,12 +90,21 @@ export const createShapeSchema = z
           "STICKY_NOTE",
           "freehand",
           "FREEHAND",
+          "line",
+          "LINE",
+          "arrow",
+          "ARROW",
+          "connector",
+          "CONNECTOR",
         ])
         .transform((val) => {
           const upper = val.toUpperCase();
           if (upper === "TEXT") return "TEXT" as const;
           if (upper === "STICKY_NOTE") return "STICKY_NOTE" as const;
           if (upper === "FREEHAND") return "FREEHAND" as const;
+          if (upper === "LINE") return "LINE" as const;
+          if (upper === "ARROW") return "ARROW" as const;
+          if (upper === "CONNECTOR") return "CONNECTOR" as const;
           return "RECTANGLE" as const;
         }),
 
@@ -87,19 +127,26 @@ export const createShapeSchema = z
 
       points: shapePointsSchema.optional(),
 
+      connector: shapeConnectorSchema.optional(),
+
       style: shapeStyleValidationSchema.optional(),
     }),
   })
   .refine(
     (data) => {
-      if (data.body.type === "FREEHAND") {
+      const t = data.body.type;
+      if (t === "FREEHAND") {
         const pts = data.body.points ?? data.body.style?.points;
         return Array.isArray(pts) && pts.length >= 2;
+      }
+      if (t === "LINE" || t === "ARROW" || t === "CONNECTOR") {
+        const pts = data.body.points ?? data.body.style?.points;
+        return Array.isArray(pts) && pts.length >= 4;
       }
       return true;
     },
     {
-      message: "Freehand shape must include a points array with at least 1 point [x, y].",
+      message: "Vector shape must include a points array with at least 2 points [x1, y1, x2, y2].",
       path: ["body", "points"],
     }
   );
@@ -131,6 +178,8 @@ export const updateShapeValidationSchema =
         .optional(),
 
       points: shapePointsSchema.optional(),
+
+      connector: shapeConnectorSchema.optional(),
 
       style: shapeStyleValidationSchema.optional(),
     }),

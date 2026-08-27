@@ -246,4 +246,162 @@ describe("Shape Mapper", () => {
       throw new Error("Expected shape type to be freehand");
     }
   });
+
+  it("maps LineShape correctly with points and style", () => {
+    const dto = {
+      id: "line-1",
+      canvasId: "canvas-1",
+      type: "line" as const,
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      rotation: 0,
+      zIndex: 4,
+      version: 1,
+      points: [0, 0, 200, 150],
+      style: {
+        stroke: "#2563eb",
+        strokeWidth: 3,
+        opacity: 0.9,
+        strokeStyle: "dashed" as const,
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+
+    expect(shape).toEqual({
+      id: "line-1",
+      type: "line",
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 150,
+      rotation: 0,
+      zIndex: 4,
+      version: 1,
+      opacity: 0.9,
+      points: [0, 0, 200, 150],
+      stroke: "#2563eb",
+      strokeWidth: 3,
+      strokeStyle: "dashed",
+    });
+  });
+
+  it("maps ArrowShape correctly with arrow styling", () => {
+    const dto = {
+      id: "arrow-1",
+      canvasId: "canvas-1",
+      type: "arrow" as const,
+      x: 50,
+      y: 50,
+      width: 100,
+      height: 80,
+      rotation: 45,
+      zIndex: 5,
+      version: 2,
+      points: [0, 0, 100, 80],
+      style: {
+        stroke: "#dc2626",
+        strokeWidth: 2,
+        opacity: 1,
+        arrowHeadEnd: true,
+        arrowHeadStart: false,
+        pointerLength: 12,
+        pointerWidth: 12,
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+
+    expect(shape).toEqual({
+      id: "arrow-1",
+      type: "arrow",
+      x: 50,
+      y: 50,
+      width: 100,
+      height: 80,
+      rotation: 45,
+      zIndex: 5,
+      version: 2,
+      opacity: 1,
+      points: [0, 0, 100, 80],
+      stroke: "#dc2626",
+      strokeWidth: 2,
+      arrowHeadEnd: true,
+      arrowHeadStart: false,
+      pointerLength: 12,
+      pointerWidth: 12,
+    });
+  });
+
+  it("maps ConnectorShape correctly with connector relational metadata", () => {
+    const dto = {
+      id: "conn-1",
+      canvasId: "canvas-1",
+      type: "connector" as const,
+      x: 200,
+      y: 150,
+      width: 120,
+      height: 40,
+      rotation: 0,
+      zIndex: 6,
+      version: 1,
+      points: [0, 0, 120, 40],
+      connector: {
+        sourceShapeId: "shape-a",
+        sourceAnchor: "right" as const,
+        targetShapeId: "shape-b",
+        targetAnchor: "left" as const,
+        routing: "straight" as const,
+      },
+      style: {
+        stroke: "#059669",
+        strokeWidth: 2,
+        opacity: 1,
+        arrowHeadEnd: true,
+        arrowHeadStart: false,
+        pointerLength: 10,
+        pointerWidth: 10,
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+
+    expect(shape).toEqual({
+      id: "conn-1",
+      type: "connector",
+      x: 200,
+      y: 150,
+      width: 120,
+      height: 40,
+      rotation: 0,
+      zIndex: 6,
+      version: 1,
+      opacity: 1,
+      points: [0, 0, 120, 40],
+      stroke: "#059669",
+      strokeWidth: 2,
+      connector: {
+        sourceShapeId: "shape-a",
+        sourceAnchor: "right",
+        targetShapeId: "shape-b",
+        targetAnchor: "left",
+        routing: "straight",
+      },
+      arrowHeadEnd: true,
+      arrowHeadStart: false,
+      pointerLength: 10,
+      pointerWidth: 10,
+    });
+  });
 });

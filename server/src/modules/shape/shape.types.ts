@@ -12,7 +12,19 @@ export enum ShapeType {
   IMAGE = "IMAGE",
   STICKY_NOTE = "STICKY_NOTE",
   FREEHAND = "FREEHAND",
+  CONNECTOR = "CONNECTOR",
 }
+
+export type AnchorPosition = "top" | "right" | "bottom" | "left" | "center";
+export type ConnectorRouting = "straight" | "orthogonal" | "curved";
+
+export type ShapeConnectorData = {
+  sourceShapeId?: Types.ObjectId | string | null;
+  sourceAnchor?: AnchorPosition | null;
+  targetShapeId?: Types.ObjectId | string | null;
+  targetAnchor?: AnchorPosition | null;
+  routing?: ConnectorRouting;
+};
 
 /**
  * Shape Entity
@@ -35,6 +47,8 @@ export type Shape = {
   zIndex: number;
 
   points?: number[];
+
+  connector?: ShapeConnectorData;
 
   style: Record<string, unknown>;
 
@@ -65,6 +79,8 @@ export type CreateShapeData = {
   zIndex: number;
 
   points?: number[];
+
+  connector?: ShapeConnectorData;
 
   style?: Record<string, unknown>;
 

@@ -4,6 +4,9 @@ import RectangleNode from "./RectangleNode";
 import TextNode from "./TextNode";
 import StickyNoteNode from "./StickyNoteNode";
 import FreehandNode from "./FreehandNode";
+import LineNode from "./LineNode";
+import ArrowNode from "./ArrowNode";
+import ConnectorNode from "./ConnectorNode";
 
 type ShapeRendererProps = {
   shape: Shape;
@@ -22,6 +25,33 @@ export default function ShapeRenderer({
     case "freehand":
       return (
         <FreehandNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "line":
+      return (
+        <LineNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "arrow":
+      return (
+        <ArrowNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "connector":
+      return (
+        <ConnectorNode
           shape={shape}
           boardId={boardId}
           canEditCanvas={canEditCanvas}

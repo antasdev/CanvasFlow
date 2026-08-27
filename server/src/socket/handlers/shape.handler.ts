@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
-import { shapeService, ShapeMapper, ShapeType, shapePointsSchema } from "@/modules/shape";
+import { shapeService, ShapeMapper, ShapeType, shapePointsSchema, shapeConnectorSchema } from "@/modules/shape";
 import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
@@ -37,6 +37,11 @@ const shapeStyleSocketSchema = z.object({
     .min(0, "Opacity must be at least 0.")
     .max(1, "Opacity cannot exceed 1.")
     .optional(),
+  strokeStyle: z.enum(["solid", "dashed"]).optional(),
+  arrowHeadEnd: z.boolean().optional(),
+  arrowHeadStart: z.boolean().optional(),
+  pointerLength: z.number().min(2).max(50).optional(),
+  pointerWidth: z.number().min(2).max(50).optional(),
   text: z.string().max(5000, "Text cannot exceed 5000 characters.").optional(),
   fontSize: z
     .number()
@@ -66,6 +71,12 @@ const createShapeSocketSchema = z
         "STICKY_NOTE",
         "freehand",
         "FREEHAND",
+        "line",
+        "LINE",
+        "arrow",
+        "ARROW",
+        "connector",
+        "CONNECTOR",
       ])
       .default("rectangle"),
     x: z.number().finite("x must be a finite number."),
@@ -74,6 +85,7 @@ const createShapeSocketSchema = z
     height: z.number().positive("Height must be greater than 0."),
     rotation: z.number().finite("Rotation must be a finite number.").optional(),
     points: shapePointsSchema.optional(),
+    connector: shapeConnectorSchema.optional(),
     style: shapeStyleSocketSchema.optional(),
   })
   .refine(
@@ -83,10 +95,14 @@ const createShapeSocketSchema = z
         const pts = val.points ?? val.style?.points;
         return Array.isArray(pts) && pts.length >= 2;
       }
+      if (upper === "LINE" || upper === "ARROW" || upper === "CONNECTOR") {
+        const pts = val.points ?? val.style?.points;
+        return Array.isArray(pts) && pts.length >= 4;
+      }
       return true;
     },
     {
-      message: "Freehand shape must include points array with at least 1 point [x, y].",
+      message: "Vector shape must include points array with at least 2 points [x1, y1, x2, y2].",
       path: ["points"],
     }
   );
@@ -102,6 +118,7 @@ const updateShapeSocketSchema = z.object({
     height: z.number().positive("Height must be greater than 0.").optional(),
     rotation: z.number().finite("Rotation must be a finite number.").optional(),
     points: shapePointsSchema.optional(),
+    connector: shapeConnectorSchema.optional(),
     style: shapeStyleSocketSchema.optional(),
   }),
 });
@@ -178,6 +195,12 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shapeType = ShapeType.STICKY_NOTE;
         } else if (rawType === "FREEHAND") {
           shapeType = ShapeType.FREEHAND;
+        } else if (rawType === "LINE") {
+          shapeType = ShapeType.LINE;
+        } else if (rawType === "ARROW") {
+          shapeType = ShapeType.ARROW;
+        } else if (rawType === "CONNECTOR") {
+          shapeType = ShapeType.CONNECTOR;
         }
 
         const effectivePoints = parsed.data.points ?? parsed.data.style?.points;
@@ -199,6 +222,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
                 height: parsed.data.height,
                 rotation: parsed.data.rotation ?? 0,
                 points: effectivePoints,
+                connector: parsed.data.connector,
                 style: parsed.data.style,
               },
               session

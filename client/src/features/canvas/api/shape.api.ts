@@ -62,17 +62,73 @@ export type FreehandShapeResponseDto = BaseShapeResponseDto & {
   };
 };
 
+export type ShapeConnectorDto = {
+  sourceShapeId?: string | null;
+  sourceAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  targetShapeId?: string | null;
+  targetAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  routing?: "straight" | "orthogonal" | "curved";
+};
+
+export type LineShapeResponseDto = BaseShapeResponseDto & {
+  type: "line";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    strokeStyle?: "solid" | "dashed";
+  };
+};
+
+export type ArrowShapeResponseDto = BaseShapeResponseDto & {
+  type: "arrow";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    arrowHeadEnd: boolean;
+    arrowHeadStart?: boolean;
+    pointerLength?: number;
+    pointerWidth?: number;
+  };
+};
+
+export type ConnectorShapeResponseDto = BaseShapeResponseDto & {
+  type: "connector";
+  points: number[];
+  connector?: ShapeConnectorDto;
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    arrowHeadEnd?: boolean;
+    arrowHeadStart?: boolean;
+    pointerLength?: number;
+    pointerWidth?: number;
+  };
+};
+
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
   | TextShapeResponseDto
   | StickyNoteShapeResponseDto
-  | FreehandShapeResponseDto;
+  | FreehandShapeResponseDto
+  | LineShapeResponseDto
+  | ArrowShapeResponseDto
+  | ConnectorShapeResponseDto;
 
 export type ShapeStyleRequest = {
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
+  strokeStyle?: "solid" | "dashed";
+  arrowHeadEnd?: boolean;
+  arrowHeadStart?: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
   text?: string;
   fontSize?: number;
   fontFamily?: string;
@@ -86,13 +142,14 @@ export type ShapeStyleRequest = {
 
 export type CreateShapeRequest = {
   canvasId: string;
-  type: "rectangle" | "text" | "sticky_note" | "freehand";
+  type: "rectangle" | "text" | "sticky_note" | "freehand" | "line" | "arrow" | "connector";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
   points?: number[];
+  connector?: ShapeConnectorDto;
   style?: ShapeStyleRequest;
 };
 
@@ -103,6 +160,7 @@ export type UpdateShapeRequest = {
   height?: number;
   rotation?: number;
   points?: number[];
+  connector?: ShapeConnectorDto;
   style?: ShapeStyleRequest;
 };
 

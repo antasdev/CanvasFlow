@@ -101,6 +101,63 @@ export type FreehandShapeResponseDto = BaseShapeResponseDto & {
   };
 };
 
+export type ShapeConnectorDto = {
+  sourceShapeId?: string | null;
+  sourceAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  targetShapeId?: string | null;
+  targetAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  routing?: "straight" | "orthogonal" | "curved";
+};
+
+/**
+ * Line Shape Response DTO
+ */
+export type LineShapeResponseDto = BaseShapeResponseDto & {
+  type: "line";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    strokeStyle?: "solid" | "dashed";
+  };
+};
+
+/**
+ * Arrow Shape Response DTO
+ */
+export type ArrowShapeResponseDto = BaseShapeResponseDto & {
+  type: "arrow";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    arrowHeadEnd: boolean;
+    arrowHeadStart?: boolean;
+    pointerLength?: number;
+    pointerWidth?: number;
+  };
+};
+
+/**
+ * Connector Shape Response DTO
+ */
+export type ConnectorShapeResponseDto = BaseShapeResponseDto & {
+  type: "connector";
+  points: number[];
+  connector?: ShapeConnectorDto;
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    arrowHeadEnd?: boolean;
+    arrowHeadStart?: boolean;
+    pointerLength?: number;
+    pointerWidth?: number;
+  };
+};
+
 /**
  * Discriminated Union of Shape API Response DTOs
  */
@@ -108,7 +165,10 @@ export type ShapeResponseDto =
   | RectangleShapeResponseDto
   | TextShapeResponseDto
   | StickyNoteShapeResponseDto
-  | FreehandShapeResponseDto;
+  | FreehandShapeResponseDto
+  | LineShapeResponseDto
+  | ArrowShapeResponseDto
+  | ConnectorShapeResponseDto;
 
 /**
  * Shape Creation DTO (Service/Internal)
@@ -122,6 +182,7 @@ export type CreateShapeDto = {
   height: number;
   rotation?: number;
   points?: number[];
+  connector?: ShapeConnectorDto;
   style?: ShapeStyleDto;
 };
 
@@ -136,5 +197,6 @@ export type UpdateShapeDto = {
   height?: number;
   rotation?: number;
   points?: number[];
+  connector?: ShapeConnectorDto;
   style?: ShapeStyleDto;
 };

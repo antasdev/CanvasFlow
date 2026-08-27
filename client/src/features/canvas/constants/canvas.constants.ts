@@ -7,6 +7,7 @@ export const CANVAS_TOOLS = {
   TEXT: "text",
   STICKY_NOTE: "sticky_note",
   FREEHAND: "freehand",
+  CONNECTOR: "connector",
 } as const;
 
 export type CanvasTool =

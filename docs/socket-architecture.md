@@ -1768,3 +1768,229 @@ Event replay architectures require maintaining an append-only event log (event s
 2. **Point Data Structure**: Extend the coordinate streaming tuple from 2D `[x, y]` to 3D `[x, y, pressure]` or normalize pressure into a parallel byte array `Uint8Array`.
 3. **Variable Width Polygonal Meshing**: Use an algorithm such as Chaikin's smoothing or a polygon extrusion library (e.g. `perfect-freehand`) to convert pressure-stamped points into a closed outline path.
 4. **SVG Path Storage**: Persist the resulting outline as an SVG path string (`M ... C ... Z`) in MongoDB, allowing GPU-accelerated path rendering without client-side stroke-width interpolation overhead.
+
+---
+
+## 31. Slice 18 — Advanced Vector Drawing Architecture (Line, Arrow & Connector)
+
+### 31.1 Overview & Architectural Objectives
+Slice 18 elevates CanvasFlow from basic bounding-box geometric primitives and freehand strokes into a structured vector diagramming engine:
+- **Vector Primitives**: `line`, `arrow`, and `connector` implemented as first-class domain shapes.
+- **Strict Separation of Geometry vs. Style**: Root coordinate bounding box $(x, y, w, h)$ and local vertices `points: [lx1, ly1, lx2, ly2]` define geometry; `style` contains purely aesthetic attributes (stroke, dashed style, arrowhead glyphs).
+- **Dynamic Reactive Connector Topology**: Connectors maintain relational links (`sourceShapeId`, `sourceAnchor`, `targetShapeId`, `targetAnchor`) and derive their world-space geometry dynamically at render time.
+- **Zero-Write Shape Translation**: Moving an attached shape updates only that shape's $(x, y)$ in MongoDB. The connector document incurs **zero network emissions and zero database writes** during movement.
+- **Resilient Fallback Geometry**: Connectors retain offline fallback geometry `points`, ensuring graceful visual degradation if an attached shape is deleted or missing during hydration.
+- **Trigonometric Anchor Mathematics**: 5 canonical anchor points (`top`, `right`, `bottom`, `left`, `center`) supporting arbitrary shape rotations around the center $(c_x, c_y)$.
+- **Sub-Threshold Rejection**: Micro-gestures ($< 5\text{px}$) are discarded locally without firing socket events, MongoDB writes, or undo history entries.
+
+---
+
+### 31.2 Coordinate System & Axis-Aligned Bounding Box (AABB) Normalization
+For any vector gesture drawn from $(startX, startY)$ to $(endX, endY)$ in canvas world space:
+1. **Bounding Box Calculation**:
+   $$x = \min(startX, endX), \quad y = \min(startY, endY)$$
+   $$\text{width} = \max(|endX - startX|, 1), \quad \text{height} = \max(|endY - startY|, 1)$$
+2. **Local Coordinate Translation**:
+   $$lx_1 = startX - x, \quad ly_1 = startY - y$$
+   $$lx_2 = endX - x, \quad ly_2 = endY - y$$
+   $$\text{points} = [lx_1, ly_1, lx_2, ly_2]$$
+3. **Translation Invariant**: When moving a vector shape, the client and server mutate only $x$ and $y$. The `points` array remains completely untouched ($O(1)$ move cost).
+
+---
+
+### 31.3 Anchor System & Mathematical Rotation
+Given a bounding box with coordinates $(x, y, w, h)$, the 5 unrotated anchor positions are:
+- **Top**: $(x + w/2, y)$
+- **Right**: $(x + w, y + h/2)$
+- **Bottom**: $(x + w/2, y + h)$
+- **Left**: $(x, y + h/2)$
+- **Center**: $(x + w/2, y + h/2)$
+
+When the shape is rotated by $\theta$ degrees, each anchor is rotated around the shape's center $(c_x, c_y) = (x + w/2, y + h/2)$ using the 2D Cartesian rotation matrix:
+$$x' = \cos(\theta_{\text{rad}}) \cdot (x_{\text{anchor}} - c_x) - \sin(\theta_{\text{rad}}) \cdot (y_{\text{anchor}} - c_y) + c_x$$
+$$y' = \sin(\theta_{\text{rad}}) \cdot (x_{\text{anchor}} - c_x) + \cos(\theta_{\text{rad}}) \cdot (y_{\text{anchor}} - c_y) + c_y$$
+
+This mathematical logic is isolated in `client/src/features/canvas/utils/anchor.utils.ts` and executed purely in memory without DOM or canvas engine reads.
+
+---
+
+### 31.4 Dynamic Connector Rendering & Relational Graph Architecture
+Connectors maintain a relational topology:
+```ts
+export type ShapeConnectorData = {
+  sourceShapeId?: string | null;
+  sourceAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  targetShapeId?: string | null;
+  targetAnchor?: "top" | "right" | "bottom" | "left" | "center" | null;
+  routing?: "straight" | "orthogonal" | "curved";
+};
+```
+At render time, `ConnectorNode`:
+1. Queries the reactive Zustand `shapes` store for `sourceShape` and `targetShape`.
+2. Computes the world-space anchor points:
+   $$\text{startPoint} = \text{sourceShape} ? \text{getShapeAnchorPoint}(\text{sourceShape}, \text{sourceAnchor}) : \text{fallbackStart}$$
+   $$\text{endPoint} = \text{targetShape} ? \text{getShapeAnchorPoint}(\text{targetShape}, \text{targetAnchor}) : \text{fallbackEnd}$$
+3. Renders the Konva `<Arrow>` node at $(0, 0)$ with points `[startPoint.x, startPoint.y, endPoint.x, endPoint.y]`.
+4. When a user drags Shape A, only Shape A's coordinates update in the Zustand store. React efficiently re-renders `ConnectorNode`, updating the line endpoints on the next animation frame with **zero network emissions and zero database writes**.
+
+---
+
+### 31.5 Server-Authoritative Relational Invariants & RBAC
+On durable `shape:create` and `shape:update`, the backend enforces strict validation:
+1. **Authorization**: Validates workspace permission `EDIT_CANVAS`. Connected sockets downgraded to `VIEWER` are rejected with `403 FORBIDDEN`.
+2. **Self-Connection**: Rejects payloads where `sourceShapeId === targetShapeId`.
+3. **Shape Existence**: Verifies that `sourceShapeId` and `targetShapeId` exist in MongoDB within the current transaction session.
+4. **Canvas Boundary**: Enforces `sourceShape.canvasId === canvasId` and `targetShape.canvasId === canvasId` (cross-canvas connections are strictly rejected).
+5. **Connector-to-Connector Rejection**: Connectors can attach only to primitive shapes (`rectangle`, `text`, `sticky_note`). Attaching to another connector is rejected with `400 BAD_REQUEST`.
+
+---
+
+## 32. Senior Engineering Interview Questions & Answers (Slice 18)
+
+### Q1: Why are vector lines and arrows represented with local coordinates relative to a bounding box rather than absolute world coordinates?
+**Answer:**
+1. **$O(1)$ Translation**: When a shape is translated, moving absolute points $[x_1, y_1, x_2, y_2]$ requires rewriting every coordinate pair ($x'_i = x_i + \Delta x$). With bounding box normalization, translation updates only top-level $x$ and $y$. The points array remains immutable.
+2. **Unified Architecture**: All shapes in CanvasFlow (rectangles, circles, sticky notes, text, freehand, lines) share the identical transform interface: $(x, y, \text{width}, \text{height}, \text{rotation})$. Transformer hooks and multi-selection bounding boxes operate identically across all shapes without special-casing vector lines.
+3. **Local Scale & Rotation**: Applying Konva transformations, matrix inversions, or local SVG exports is mathematically trivial when coordinates are normalized around local origin $(0, 0)$.
+
+---
+
+### Q2: Why is arrowhead configuration (`arrowHeadEnd`, `pointerLength`) stored in `style` while endpoints are stored in root `points`?
+**Answer:**
+- **Geometry vs. Style Principle**: Geometry defines the spatial topology and path of an object (its vertices, length, bounds). Style defines purely how that geometry is rasterized (stroke color, opacity, dash patterns, arrowhead decorations).
+- If a user toggles an arrow from single-headed to double-headed or adjusts pointer length, the underlying spatial line segment does not change. Storing arrowheads in `style` preserves clean separation of concerns and prevents geometric desynchronization.
+
+---
+
+### Q3: Why are connector endpoints derived dynamically at render time rather than written to MongoDB whenever an attached shape moves?
+**Answer:**
+1. **Network & DB Thrashing**: Moving a connected node at 60 FPS would require simultaneously dragging the node and updating every attached connector document at 60 FPS over WebSocket and MongoDB. With 10 connected lines, dragging one box would generate 660 database writes per second.
+2. **Dynamic Invariance**: The true durable invariant is the **relationship** (Shape A anchor X is linked to Shape B anchor Y), not the transient world coordinates of the line.
+3. **Derivation Cost**: Computing 5 anchor coordinates via trigonometric rotation takes $< 1\mu\text{s}$ in JavaScript. Deriving endpoints dynamically in `ConnectorNode` leverages React's reactive state graph with zero I/O cost.
+
+---
+
+### Q4: How is anchor point rotation calculated mathematically without relying on DOM or Konva matrix APIs?
+**Answer:**
+We use the 2D Cartesian rotation matrix around the shape's center $(c_x, c_y) = (x + w/2, y + h/2)$:
+1. Translate anchor coordinate to origin: $dx = x - c_x, \quad dy = y - c_y$.
+2. Convert degrees to radians: $\theta = \text{deg} \cdot \pi / 180$.
+3. Apply rotation transformation:
+   $$x' = \cos(\theta) \cdot dx - \sin(\theta) \cdot dy + c_x$$
+   $$y' = \sin(\theta) \cdot dx + \cos(\theta) \cdot dy + c_y$$
+Isolating this pure mathematical function in `anchor.utils.ts` eliminates DOM coupling, enables high-speed unit testing (15 tests in 11ms), and allows snapping evaluation without rendering elements.
+
+---
+
+### Q5: How does `findNearestAnchor` optimize candidate search, and how would it scale to thousands of shapes using an R-tree?
+**Answer:**
+1. **Current Optimization**:
+   - **Type Filter**: Skips unsupported shapes (`line`, `arrow`, `freehand`) in $O(1)$.
+   - **Candidate Bounding-Box Filter**: Calculates distance from pointer to shape center. If $d > \max(w, h)/2 + \text{margin}$, all 5 anchors are rejected immediately without trigonometric calculation.
+   - **Proximity Evaluation**: Calculates Euclidean distance only for qualifying candidate shapes and returns the closest anchor within the 20px threshold.
+2. **R-Tree Spatial Indexing**:
+   - Inboards with $10^4$ shapes, sequential scanning is $O(N)$.
+   - We can insert shape AABBs into an R-tree (such as `rbush`). Querying a $50\times 50\text{px}$ search box around the pointer executes in $O(\log N)$, reducing candidate evaluation to 1–3 shapes regardless of total canvas size.
+
+---
+
+### Q6: Why do vector drafting pointer movements make ZERO database writes and generate ZERO undo history entries?
+**Answer:**
+- **Ephemeral State Purity**: Pointer movements during drafting represent intermediate user intent. If every pointer coordinate wrote to MongoDB, boards would suffer database write saturation and network congestion.
+- **Undo History Atomicity**: Undo history must record completed user intentions. If each drag step created an undo record, pressing `Ctrl+Z` would step through individual pixels of an unfinished line rather than removing the created shape.
+- Transient geometry lives in component state (`useState<VectorDraftState>`). Durable creation occurs strictly on `pointerup` after sub-threshold validation.
+
+---
+
+### Q7: How does CanvasFlow prevent concurrent OCC conflicts when two users update the same connector?
+**Answer:**
+1. Every shape document has a monotonic `version: number`.
+2. When User A updates a connector, the client sends `expectedVersion: currentVersion`.
+3. The server executes an atomic conditional update:
+   ```ts
+   ShapeModel.findOneAndUpdate({ _id: shapeId, version: expectedVersion }, { ...update, $inc: { version: 1 } })
+   ```
+4. If User B commits an update first, User A's conditional update matches 0 documents. The server aborts the transaction and returns `409 CONFLICT`.
+5. The client catches the 409, refreshes the shape version, and prevents lost updates.
+
+---
+
+### Q8: How does the server enforce graph topology constraints for connectors?
+**Answer:**
+In `ShapeService.validateConnectorRelations`:
+1. **Self-Loops**: Rejects `sourceShapeId === targetShapeId`.
+2. **Dangling References**: Queries `shapeRepository.findById` within the active session for source and target shapes. Rejects with `BAD_REQUEST` if either does not exist.
+3. **Cross-Canvas Poisoning**: Asserts `sourceShape.canvasId === canvasId` and `targetShape.canvasId === canvasId`.
+4. **Connector-to-Connector**: Rejects attachment if `targetShape.type === ShapeType.CONNECTOR` to prevent cyclic dependency graphs and infinite rendering recursion.
+
+---
+
+### Q9: How does the Konva Transformer normalize scale for vector shapes on `onTransformEnd`?
+**Answer:**
+Konva `<Transformer>` modifies `scaleX` and `scaleY` on the Konva node instead of mutating points directly.
+On `onTransformEnd`:
+1. The node's scale factors are read: `scaleX = node.scaleX()`, `scaleY = node.scaleY()`.
+2. Node scale is immediately reset: `node.scaleX(1); node.scaleY(1);`.
+3. Point coordinates are rescaled: $lx'_i = lx_i \cdot \text{scaleX}, \quad ly'_i = ly_i \cdot \text{scaleY}$.
+4. A new AABB is computed via `computeBoundingBox(rescaledPoints)`.
+5. Points are normalized to the new origin: $[lx - \text{minX}, ly - \text{minY}]$.
+6. Top-level $(x, y, w, h)$ and normalized `points` are emitted via `shape:update`. Scale values in durable storage remain permanently normalized to 1.0.
+
+---
+
+### Q10: How does CanvasFlow prevent crashes when a shape connected to a connector is deleted?
+**Answer:**
+- **Graceful Fallback Invariant**: When a connector is created or transformed, it always persists world-space fallback geometry in `points: [lx1, ly1, lx2, ly2]`.
+- In `ConnectorNode`:
+  ```ts
+  const sourceShape = shapes.find(s => s.id === connector?.sourceShapeId);
+  const startWorld = sourceShape && connector?.sourceAnchor
+    ? getShapeAnchorPoint(sourceShape, connector.sourceAnchor)
+    : { x: shape.x + shape.points[0], y: shape.y + shape.points[1] };
+  ```
+- If Shape A is deleted or fails to hydrate, `sourceShape` is `undefined`. `ConnectorNode` detects missing metadata and falls back to static coordinates without throwing unhandled exceptions.
+
+---
+
+### Q11: What happens if an `EDITOR` is downgraded to `VIEWER` while drafting a vector shape?
+**Answer:**
+- CanvasFlow enforces **Dual-Layer RBAC**:
+  1. At gesture start, the client tool selection verifies `canEditCanvas === true`.
+  2. While the pointer is held down, the administrator modifies the workspace member role in MongoDB.
+  3. When the user releases the pointer, the client emits `shape:create`.
+  4. The server handler calls `boardService.authorizeCanvasMutation(boardId, userId)` before executing database mutations.
+  5. The server discovers the updated `VIEWER` role and rejects the socket emit with `403 FORBIDDEN`.
+  6. Zero database mutations occur, and the user receives an error notification.
+
+---
+
+### Q12: Why does durable creation increment `collaborationRevision` exactly once, and how does this prevent desynchronization?
+**Answer:**
+- `collaborationRevision` is the monotonic heartbeat of the board.
+- When `shape:create` commits, `collaborationVersionService.executeWithRevision` increments the revision inside an atomic MongoDB transaction and saves a `MutationRecord`.
+- The revision is broadcast to room peers with `shape:created`.
+- If peer C drops packets or loses Wi-Fi, upon receiving revision $R + 2$ when its local revision is $R$, it detects the sequence gap and triggers `useBoardRecovery` to rehydrate state from MongoDB, guaranteeing eventual consistency.
+
+---
+
+### Q13: Why are pointer movements under 5px discarded locally during vector drawing?
+**Answer:**
+1. **Accidental Click Prevention**: When users click to focus the canvas or deselect shapes, natural mouse tremors create 1–3px movements. Without thresholding, accidental clicks would litter the board with invisible, 0-width vector shapes.
+2. **Database & Network Conservation**: Discarding sub-threshold gestures before calling `socketClientService.createShape` prevents pointless socket roundtrips, database insertions, and undo stack pollution.
+
+---
+
+### Q14: How does CanvasFlow avoid canvas-wide re-render bottlenecks when dozens of shapes and connectors exist?
+**Answer:**
+1. **Memoized Nodes**: `LineNode`, `ArrowNode`, and `ConnectorNode` are wrapped in `React.memo` with shallow equality checks.
+2. **Selective State Subscriptions**: Components subscribe only to their own selection status (`useCanvasStore(s => s.selectedShapeIds.includes(shape.id))`) rather than the entire canvas store.
+3. **Transient Previews with `listening={false}`**: Active draft lines and snap indicator rings disable Konva event hit-detection trees (`listening={false}`), eliminating pointer event overhead during 60 FPS drawing.
+
+---
+
+### Q15: How would you extend the connector system to support Orthogonal (Manhattan) routing with obstacle avoidance?
+**Answer:**
+1. **Graph Representation**: Treat the canvas as a 2D routing grid. Inflate each shape's bounding box by a clearance padding (e.g. 20px) to form obstacle polygons.
+2. **Pathfinding Algorithm**: Apply an A* pathfinding algorithm or Lee's algorithm over an orthogonal visibility graph to find the shortest collision-free path with the minimum number of bends between the source anchor and target anchor.
+3. **Waypoint Storage**: Persist the orthogonal waypoints in `points: [x1, y1, x2, y2, x3, y3, ...]`.
+4. **Render Integration**: In `ConnectorNode`, if `routing === "orthogonal"`, pass the calculated waypoint sequence to Konva's `<Line>` or `<Arrow>`, keeping the same durable data structure while upgrading visual path layout.

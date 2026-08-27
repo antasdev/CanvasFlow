@@ -4,10 +4,22 @@ export type ShapeType =
   | "circle"
   | "line"
   | "arrow"
+  | "connector"
   | "text"
   | "sticky_note"
   | "freehand"
   | "eraser";
+
+export type AnchorPosition = "top" | "right" | "bottom" | "left" | "center";
+export type ConnectorRouting = "straight" | "orthogonal" | "curved";
+
+export type ShapeConnectorData = {
+  sourceShapeId?: string | null;
+  sourceAnchor?: AnchorPosition | null;
+  targetShapeId?: string | null;
+  targetAnchor?: AnchorPosition | null;
+  routing?: ConnectorRouting;
+};
 
 export type BaseShape = {
   id: string;
@@ -57,15 +69,34 @@ export type CircleShape = BaseShape & {
 };
 
 export type LineShape = BaseShape & {
-  type: "line" | "arrow";
+  type: "line";
   points: number[];
   stroke: string;
   strokeWidth: number;
+  strokeStyle?: "solid" | "dashed";
 };
 
 export type ArrowShape = BaseShape & {
   type: "arrow";
   points: number[];
+  stroke: string;
+  strokeWidth: number;
+  arrowHeadEnd: boolean;
+  arrowHeadStart?: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
+};
+
+export type ConnectorShape = BaseShape & {
+  type: "connector";
+  points: number[];
+  stroke: string;
+  strokeWidth: number;
+  connector?: ShapeConnectorData;
+  arrowHeadEnd?: boolean;
+  arrowHeadStart?: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
 };
 
 export type FreehandShape = BaseShape & {
@@ -82,4 +113,5 @@ export type Shape =
   | CircleShape
   | LineShape
   | ArrowShape
+  | ConnectorShape
   | FreehandShape;

@@ -1,6 +1,6 @@
 import type Konva from "konva";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Layer, Line, Rect, Stage } from "react-konva";
+import { Arrow, Circle, Layer, Line, Rect, Stage } from "react-konva";
 import { toast } from "sonner";
 
 import { mapShapeResponseToShape, shapeApi } from "../api";
@@ -22,6 +22,7 @@ import {
     computeBoundingBox,
     normalizePointsToLocal,
 } from "../utils/stroke-simplification";
+import { findNearestAnchor, type AnchorPosition } from "../utils/anchor.utils";
 
 import CanvasGrid from "./CanvasGrid";
 import CollaboratorCursor from "./CollaboratorCursor";
@@ -62,6 +63,16 @@ type FreehandDrawingState = {
     points: number[];
     stroke: string;
     strokeWidth: number;
+};
+
+type VectorDraftState = {
+    tool: "line" | "arrow" | "connector";
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+    sourceAnchor?: { shapeId: string; anchor: AnchorPosition; point: { x: number; y: number } } | null;
+    targetAnchor?: { shapeId: string; anchor: AnchorPosition; point: { x: number; y: number } } | null;
 };
 
 type SelectionBox = {
@@ -205,6 +216,14 @@ export default function CanvasEditor({
     // Transient local freehand drawing stroke state (ephemeral, not in Zustand shapes)
     const [freehandDrawing, setFreehandDrawing] =
         useState<FreehandDrawingState | null>(null);
+
+    // Transient local vector drafting state (line, arrow, connector)
+    const [vectorDraft, setVectorDraft] =
+        useState<VectorDraftState | null>(null);
+
+    // Transient anchor snap indicator position
+    const [snapIndicator, setSnapIndicator] =
+        useState<{ x: number; y: number } | null>(null);
 
     const activeDrawingInteractionIdRef =
         useRef<string | null>(null);
@@ -660,6 +679,48 @@ export default function CanvasEditor({
             return;
         }
 
+        if (
+            (activeTool === CANVAS_TOOLS.LINE ||
+                activeTool === CANVAS_TOOLS.ARROW ||
+                activeTool === CANVAS_TOOLS.CONNECTOR) &&
+            canEditCanvas
+        ) {
+            const pointer = stage.getPointerPosition();
+            if (!pointer) return;
+
+            const worldPoint = screenToWorld(pointer, { pan, zoom });
+
+            if (activeTool === CANVAS_TOOLS.CONNECTOR) {
+                const nearest = findNearestAnchor(worldPoint, shapes, 20);
+                const startX = nearest ? nearest.point.x : worldPoint.x;
+                const startY = nearest ? nearest.point.y : worldPoint.y;
+
+                setVectorDraft({
+                    tool: "connector",
+                    startX,
+                    startY,
+                    currentX: startX,
+                    currentY: startY,
+                    sourceAnchor: nearest
+                        ? { shapeId: nearest.shapeId, anchor: nearest.anchor, point: nearest.point }
+                        : null,
+                    targetAnchor: null,
+                });
+                if (nearest) {
+                    setSnapIndicator(nearest.point);
+                }
+            } else {
+                setVectorDraft({
+                    tool: activeTool === CANVAS_TOOLS.LINE ? "line" : "arrow",
+                    startX: worldPoint.x,
+                    startY: worldPoint.y,
+                    currentX: worldPoint.x,
+                    currentY: worldPoint.y,
+                });
+            }
+            return;
+        }
+
         if (activeTool !== CANVAS_TOOLS.RECTANGLE) {
             return;
         }
@@ -776,6 +837,53 @@ export default function CanvasEditor({
                 }).catch(() => {});
             }
 
+            return;
+        }
+
+        if (vectorDraft) {
+            emitActivity("drawing");
+            if (vectorDraft.tool === "connector") {
+                const nearest = findNearestAnchor(worldPoint, shapes, 20);
+                if (nearest) {
+                    setSnapIndicator(nearest.point);
+                    setVectorDraft((curr) =>
+                        curr
+                            ? {
+                                  ...curr,
+                                  currentX: nearest.point.x,
+                                  currentY: nearest.point.y,
+                                  targetAnchor: {
+                                      shapeId: nearest.shapeId,
+                                      anchor: nearest.anchor,
+                                      point: nearest.point,
+                                  },
+                              }
+                            : null
+                    );
+                } else {
+                    setSnapIndicator(null);
+                    setVectorDraft((curr) =>
+                        curr
+                            ? {
+                                  ...curr,
+                                  currentX: worldPoint.x,
+                                  currentY: worldPoint.y,
+                                  targetAnchor: null,
+                              }
+                            : null
+                    );
+                }
+            } else {
+                setVectorDraft((curr) =>
+                    curr
+                        ? {
+                              ...curr,
+                              currentX: worldPoint.x,
+                              currentY: worldPoint.y,
+                          }
+                        : null
+                );
+            }
             return;
         }
 
@@ -915,6 +1023,150 @@ export default function CanvasEditor({
                             : "Failed to create freehand stroke."
                     );
                 });
+
+            return;
+        }
+
+        if (vectorDraft) {
+            const draft = vectorDraft;
+            setVectorDraft(null);
+            setSnapIndicator(null);
+
+            const dx = draft.currentX - draft.startX;
+            const dy = draft.currentY - draft.startY;
+            const distance = Math.hypot(dx, dy);
+
+            // Sub-threshold gesture: discard without creating shape or undo history
+            if (distance < 5) {
+                return;
+            }
+
+            if (!canvasId) {
+                toast.error("No active canvas available.");
+                return;
+            }
+
+            const startX = draft.startX;
+            const startY = draft.startY;
+            const endX = draft.currentX;
+            const endY = draft.currentY;
+
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const width = Math.max(Math.abs(endX - startX), 1);
+            const height = Math.max(Math.abs(endY - startY), 1);
+            const localPoints = [startX - x, startY - y, endX - x, endY - y];
+
+            if (draft.tool === "line") {
+                socketClientService
+                    .createShape({
+                        canvasId,
+                        type: "line",
+                        x,
+                        y,
+                        width,
+                        height,
+                        rotation: 0,
+                        points: localPoints,
+                        style: {
+                            stroke: "#1f2937",
+                            strokeWidth: 2,
+                            strokeStyle: "solid",
+                            opacity: 1,
+                        },
+                    })
+                    .then((savedShape) => {
+                        const shape = mapShapeResponseToShape(savedShape);
+                        addShape(shape);
+                        setSelectedShapeIds([shape.id]);
+                        setActiveTool(CANVAS_TOOLS.SELECT);
+                    })
+                    .catch((err) => {
+                        toast.error(
+                            err instanceof Error
+                                ? err.message
+                                : "Failed to create line."
+                        );
+                    });
+            } else if (draft.tool === "arrow") {
+                socketClientService
+                    .createShape({
+                        canvasId,
+                        type: "arrow",
+                        x,
+                        y,
+                        width,
+                        height,
+                        rotation: 0,
+                        points: localPoints,
+                        style: {
+                            stroke: "#1f2937",
+                            strokeWidth: 2,
+                            arrowHeadEnd: true,
+                            pointerLength: 10,
+                            pointerWidth: 10,
+                            opacity: 1,
+                        },
+                    })
+                    .then((savedShape) => {
+                        const shape = mapShapeResponseToShape(savedShape);
+                        addShape(shape);
+                        setSelectedShapeIds([shape.id]);
+                        setActiveTool(CANVAS_TOOLS.SELECT);
+                    })
+                    .catch((err) => {
+                        toast.error(
+                            err instanceof Error
+                                ? err.message
+                                : "Failed to create arrow."
+                        );
+                    });
+            } else if (draft.tool === "connector") {
+                const sourceId = draft.sourceAnchor?.shapeId ?? null;
+                const targetId = draft.targetAnchor?.shapeId ?? null;
+                const validTargetId = sourceId && targetId && sourceId === targetId ? null : targetId;
+                const validTargetAnchor = sourceId && targetId && sourceId === targetId ? null : (draft.targetAnchor?.anchor ?? null);
+
+                socketClientService
+                    .createShape({
+                        canvasId,
+                        type: "connector",
+                        x,
+                        y,
+                        width,
+                        height,
+                        rotation: 0,
+                        points: localPoints,
+                        connector: {
+                            sourceShapeId: sourceId,
+                            sourceAnchor: draft.sourceAnchor?.anchor ?? null,
+                            targetShapeId: validTargetId,
+                            targetAnchor: validTargetAnchor,
+                            routing: "straight",
+                        },
+                        style: {
+                            stroke: "#1f2937",
+                            strokeWidth: 2,
+                            arrowHeadEnd: true,
+                            pointerLength: 10,
+                            pointerWidth: 10,
+                            opacity: 1,
+                        },
+                    })
+                    .then((savedShape) => {
+                        const shape = mapShapeResponseToShape(savedShape);
+                        addShape(shape);
+                        setSelectedShapeIds([shape.id]);
+                        setActiveTool(CANVAS_TOOLS.SELECT);
+                    })
+                    .catch((err) => {
+                        toast.error(
+                            err instanceof Error
+                                ? err.message
+                                : "Failed to create connector."
+                        );
+                    });
+            }
 
             return;
         }
@@ -1147,6 +1399,55 @@ export default function CanvasEditor({
                                 lineCap="round"
                                 lineJoin="round"
                                 tension={0.2}
+                                listening={false}
+                            />
+                        ) : null}
+
+                        {/* Transient local vector draft preview (line, arrow, connector) */}
+                        {vectorDraft ? (
+                            vectorDraft.tool === "line" ? (
+                                <Line
+                                    points={[
+                                        vectorDraft.startX,
+                                        vectorDraft.startY,
+                                        vectorDraft.currentX,
+                                        vectorDraft.currentY,
+                                    ]}
+                                    stroke="#1f2937"
+                                    strokeWidth={2}
+                                    lineCap="round"
+                                    lineJoin="round"
+                                    listening={false}
+                                />
+                            ) : (
+                                <Arrow
+                                    points={[
+                                        vectorDraft.startX,
+                                        vectorDraft.startY,
+                                        vectorDraft.currentX,
+                                        vectorDraft.currentY,
+                                    ]}
+                                    stroke="#1f2937"
+                                    fill="#1f2937"
+                                    strokeWidth={2}
+                                    pointerLength={10}
+                                    pointerWidth={10}
+                                    lineCap="round"
+                                    lineJoin="round"
+                                    listening={false}
+                                />
+                            )
+                        ) : null}
+
+                        {/* Transient anchor snap indicator */}
+                        {snapIndicator ? (
+                            <Circle
+                                x={snapIndicator.x}
+                                y={snapIndicator.y}
+                                radius={6}
+                                stroke="#3b82f6"
+                                strokeWidth={2}
+                                fill="rgba(59, 130, 246, 0.3)"
                                 listening={false}
                             />
                         ) : null}

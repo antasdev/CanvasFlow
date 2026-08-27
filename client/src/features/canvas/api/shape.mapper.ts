@@ -4,6 +4,9 @@ import type {
   TextShape,
   StickyNoteShape,
   FreehandShape,
+  LineShape,
+  ArrowShape,
+  ConnectorShape,
 } from "../types";
 import type { ShapeResponseDto } from "./shape.api";
 
@@ -35,6 +38,81 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       strokeWidth: dto.style?.strokeWidth ?? 2,
     };
     return freehandShape;
+  }
+
+  if (dto.type === "line") {
+    const lineShape: LineShape = {
+      id: dto.id,
+      type: "line",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle: dto.style?.strokeStyle === "dashed" ? "dashed" : "solid",
+    };
+    return lineShape;
+  }
+
+  if (dto.type === "arrow") {
+    const arrowShape: ArrowShape = {
+      id: dto.id,
+      type: "arrow",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+      arrowHeadEnd: typeof dto.style?.arrowHeadEnd === "boolean" ? dto.style.arrowHeadEnd : true,
+      arrowHeadStart: typeof dto.style?.arrowHeadStart === "boolean" ? dto.style.arrowHeadStart : false,
+      pointerLength: typeof dto.style?.pointerLength === "number" ? dto.style.pointerLength : 10,
+      pointerWidth: typeof dto.style?.pointerWidth === "number" ? dto.style.pointerWidth : 10,
+    };
+    return arrowShape;
+  }
+
+  if (dto.type === "connector") {
+    const connShape: ConnectorShape = {
+      id: dto.id,
+      type: "connector",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+      connector: dto.connector
+        ? {
+            sourceShapeId: dto.connector.sourceShapeId ?? null,
+            sourceAnchor: dto.connector.sourceAnchor ?? null,
+            targetShapeId: dto.connector.targetShapeId ?? null,
+            targetAnchor: dto.connector.targetAnchor ?? null,
+            routing: dto.connector.routing ?? "straight",
+          }
+        : undefined,
+      arrowHeadEnd: typeof dto.style?.arrowHeadEnd === "boolean" ? dto.style.arrowHeadEnd : true,
+      arrowHeadStart: typeof dto.style?.arrowHeadStart === "boolean" ? dto.style.arrowHeadStart : false,
+      pointerLength: typeof dto.style?.pointerLength === "number" ? dto.style.pointerLength : 10,
+      pointerWidth: typeof dto.style?.pointerWidth === "number" ? dto.style.pointerWidth : 10,
+    };
+    return connShape;
   }
 
   if (dto.type === "text") {
