@@ -135,8 +135,12 @@ export type ShapeStylePayload = {
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: string | number;
-  fontStyle?: string;
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline";
   textAlign?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  padding?: number;
+  lineHeight?: number;
   backgroundColor?: string;
   textColor?: string;
   points?: number[];
@@ -164,6 +168,7 @@ export type CreateShapePayload = {
   width: number;
   height: number;
   rotation?: number;
+  text?: string;
   points?: number[];
   connector?: ShapeConnectorPayload;
   style?: ShapeStylePayload;
@@ -179,6 +184,7 @@ export type UpdateShapePayload = {
     width?: number;
     height?: number;
     rotation?: number;
+    text?: string;
     points?: number[];
     connector?: ShapeConnectorPayload;
     style?: ShapeStylePayload;

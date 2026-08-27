@@ -29,9 +29,11 @@ import CollaboratorCursor from "./CollaboratorCursor";
 import CollaboratorSelection from "./CollaboratorSelection";
 import CollaboratorShapeLock from "./CollaboratorShapeLock";
 import RemoteCursorLayer from "./RemoteCursorLayer";
-import InlineTextEditor from "./InlineTextEditor";
+import TextEditorOverlay from "./TextEditorOverlay";
+import TextFormattingToolbar from "./TextFormattingToolbar";
 import ShapeRenderer from "./ShapeRenderer";
 import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
+import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
 import {
     useComments,
     useCommentSocket,
@@ -192,6 +194,10 @@ export default function CanvasEditor({
         (state) => state.updateShapeText,
     );
 
+    const updateShapeFormatting = useCanvasStore(
+        (state) => state.updateShapeFormatting,
+    );
+
     // Broadcast selection changes to other collaborators over Socket.IO
     useEffect(() => {
         if (!boardId) {
@@ -280,6 +286,16 @@ export default function CanvasEditor({
     const clearSelection = useCanvasStore(
         (state) => state.clearSelection,
     );
+
+    const [textCreationContext, setTextCreationContext] =
+        useState<{ x: number; y: number } | null>(null);
+
+    const selectedTextShape = useMemo(() => {
+        if (selectedShapeIds.length !== 1) return null;
+        const found = shapes.find((s) => s.id === selectedShapeIds[0]);
+        if (found && found.type === "text") return found as TextShape;
+        return null;
+    }, [selectedShapeIds, shapes]);
 
     // Automatically enforce SELECT tool and clear transient drawing when user lacks edit permissions
     useEffect(() => {
@@ -566,37 +582,8 @@ export default function CanvasEditor({
             if (!pointer) return;
 
             const worldPoint = screenToWorld(pointer, { pan, zoom });
-
-            socketClientService
-                .createShape({
-                    canvasId,
-                    type: "text",
-                    x: worldPoint.x,
-                    y: worldPoint.y,
-                    width: 160,
-                    height: 36,
-                    rotation: 0,
-                    style: {
-                        text: "Type something...",
-                        fontSize: 24,
-                        fontFamily: "Inter",
-                        fill: "#1f2937",
-                        opacity: 1,
-                    },
-                })
-                .then((savedShape) => {
-                    const shape = mapShapeResponseToShape(savedShape);
-                    addShape(shape);
-                    setSelectedShapeIds([shape.id]);
-                    setActiveTool(CANVAS_TOOLS.SELECT);
-                })
-                .catch((err) => {
-                    toast.error(
-                        err instanceof Error
-                            ? err.message
-                            : "Failed to create text shape."
-                    );
-                });
+            setTextCreationContext({ x: worldPoint.x, y: worldPoint.y });
+            setActiveTool(CANVAS_TOOLS.SELECT);
             return;
         }
 
@@ -1251,25 +1238,142 @@ export default function CanvasEditor({
                 }`}
         >
             {editingShape && (
-                <InlineTextEditor
+                <TextEditorOverlay
                     shape={editingShape}
                     pan={pan}
                     zoom={zoom}
                     boardId={boardId}
-                    onCommit={(shapeId, text) => {
-                        updateShapeText(shapeId, text);
+                    onCommit={(newText) => {
+                        const trimmedText = newText;
+                        if (editingShape.text !== trimmedText) {
+                            updateShapeText(editingShape.id, trimmedText);
+                            if (boardId) {
+                                if (editingShape.type === "sticky_note") {
+                                    socketClientService
+                                        .updateShape(
+                                            editingShape.id,
+                                            {
+                                                style: {
+                                                    text: trimmedText,
+                                                },
+                                            },
+                                            editingShape.version,
+                                        )
+                                        .catch((err) => {
+                                            toast.error(
+                                                err instanceof Error
+                                                    ? err.message
+                                                    : "Failed to persist sticky note update."
+                                            );
+                                        });
+                                } else {
+                                    socketClientService
+                                        .updateShape(
+                                            editingShape.id,
+                                            {
+                                                text: trimmedText,
+                                            },
+                                            editingShape.version,
+                                        )
+                                        .catch((err) => {
+                                            toast.error(
+                                                err instanceof Error
+                                                    ? err.message
+                                                    : "Failed to persist text update."
+                                            );
+                                        });
+                                }
+                            }
+                        }
                         if (activeTextInteractionIdRef.current) {
                             endInteraction(activeTextInteractionIdRef.current);
                             activeTextInteractionIdRef.current = null;
                         }
                         setEditingShape(null);
                     }}
-                    onClose={() => {
+                    onDiscard={() => {
                         if (activeTextInteractionIdRef.current) {
                             endInteraction(activeTextInteractionIdRef.current);
                             activeTextInteractionIdRef.current = null;
                         }
                         setEditingShape(null);
+                    }}
+                />
+            )}
+
+            {textCreationContext && (
+                <TextEditorOverlay
+                    worldPosition={textCreationContext}
+                    pan={pan}
+                    zoom={zoom}
+                    boardId={boardId}
+                    onCommit={(enteredText) => {
+                        const trimmed = enteredText.trim();
+                        if (!trimmed || !canvasId) {
+                            setTextCreationContext(null);
+                            return;
+                        }
+
+                        const dims = estimateTextDimensions(trimmed, {
+                            fontSize: DEFAULT_TEXT_STYLE.fontSize,
+                            lineHeight: DEFAULT_TEXT_STYLE.lineHeight,
+                            padding: DEFAULT_TEXT_STYLE.padding,
+                        });
+
+                        socketClientService
+                            .createShape({
+                                canvasId,
+                                type: "text",
+                                x: textCreationContext.x,
+                                y: textCreationContext.y,
+                                width: dims.width,
+                                height: dims.height,
+                                rotation: 0,
+                                text: trimmed,
+                                style: {
+                                    fontSize: DEFAULT_TEXT_STYLE.fontSize,
+                                    fontFamily: DEFAULT_TEXT_STYLE.fontFamily,
+                                    fontWeight: DEFAULT_TEXT_STYLE.fontWeight,
+                                    fontStyle: DEFAULT_TEXT_STYLE.fontStyle,
+                                    textDecoration: DEFAULT_TEXT_STYLE.textDecoration,
+                                    textAlign: DEFAULT_TEXT_STYLE.textAlign,
+                                    verticalAlign: DEFAULT_TEXT_STYLE.verticalAlign,
+                                    fill: DEFAULT_TEXT_STYLE.fill,
+                                    opacity: DEFAULT_TEXT_STYLE.opacity,
+                                    padding: DEFAULT_TEXT_STYLE.padding,
+                                    lineHeight: DEFAULT_TEXT_STYLE.lineHeight,
+                                },
+                            })
+                            .then((savedShape) => {
+                                const shape = mapShapeResponseToShape(savedShape);
+                                addShape(shape);
+                                setSelectedShapeIds([shape.id]);
+                            })
+                            .catch((err) => {
+                                toast.error(
+                                    err instanceof Error
+                                        ? err.message
+                                        : "Failed to create text shape."
+                                );
+                            })
+                            .finally(() => {
+                                setTextCreationContext(null);
+                            });
+                    }}
+                    onDiscard={() => {
+                        setTextCreationContext(null);
+                    }}
+                />
+            )}
+
+            {selectedTextShape && activeTool === CANVAS_TOOLS.SELECT && !editingShape && !textCreationContext && (
+                <TextFormattingToolbar
+                    shape={selectedTextShape}
+                    pan={pan}
+                    zoom={zoom}
+                    canEditCanvas={canEditCanvas}
+                    onUpdateFormatting={(shapeId, formatting) => {
+                        updateShapeFormatting(shapeId, formatting);
                     }}
                 />
             )}

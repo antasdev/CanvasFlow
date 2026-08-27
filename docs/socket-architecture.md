@@ -1994,3 +1994,286 @@ On `onTransformEnd`:
 2. **Pathfinding Algorithm**: Apply an A* pathfinding algorithm or Lee's algorithm over an orthogonal visibility graph to find the shortest collision-free path with the minimum number of bends between the source anchor and target anchor.
 3. **Waypoint Storage**: Persist the orthogonal waypoints in `points: [x1, y1, x2, y2, x3, y3, ...]`.
 4. **Render Integration**: In `ConnectorNode`, if `routing === "orthogonal"`, pass the calculated waypoint sequence to Konva's `<Line>` or `<Arrow>`, keeping the same durable data structure while upgrading visual path layout.
+
+---
+
+# 33. SLICE 19 ARCHITECTURE SPECIFICATION: ADVANCED TEXT EDITING & RICH TEXT SHAPES
+
+Slice 19 establishes production-grade collaborative text editing and rich text formatting across CanvasFlow. It maintains strict architectural separation between ephemeral local typing drafts and authoritative, OCC-guarded durable commits.
+
+### 33.1 Core Architecture Invariants
+
+1. **Root-Level Text Storage (`INVARIANT 1`)**:
+   Text content is canonically stored at `Shape.text: string`. The style property holds only visual attributes (`fontSize`, `fontFamily`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`, `fill`, `opacity`, `padding`, `lineHeight`).
+2. **Backward-Compatible Migration Mapping (`INVARIANT 2`)**:
+   Legacy shapes stored with `{ style: { text: "..." } }` continue to hydrate smoothly. Both server and client mappers apply `doc.text ?? doc.style?.text ?? ""` with default rich typography fallbacks.
+3. **Typing Purity & Zero Per-Keystroke Persistence (`INVARIANT 3`)**:
+   During active typing or editing sessions, keystrokes are retained purely in local component state. Active typing emits zero socket persistence events, writes 0 bytes to MongoDB, creates 0 MutationRecords, and advances 0 collaboration revisions.
+4. **Single Atomic Commit (`INVARIANT 4`)**:
+   One completed text editing session produces exactly 1 durable `shape:update` socket emission, 1 collaborationRevision increment, 1 MutationRecord, and 1 local undo entry.
+5. **Remote Purity (`INVARIANT 5`)**:
+   Inbound socket updates from remote collaborators update the canvas presentation layer without polluting the local user's undo/redo history.
+6. **Server-Authoritative RBAC (`INVARIANT 6 & 7`)**:
+   `VIEWER` roles cannot initiate text creation, update text content, or apply formatting. Runtime role downgrades from `EDITOR` to `VIEWER` while a draft is open result in immediate `403 FORBIDDEN` rejection upon commit.
+7. **OCC Conflict Integrity (`INVARIANT 8`)**:
+   Concurrent text mutations evaluate `expectedVersion`. If another client has updated the shape in the interim, the server aborts the transaction with `code: "CONFLICT"` and HTTP 409 status without data corruption.
+
+---
+
+### 33.2 Sequence Diagrams
+
+#### A. Ephemeral Text Creation Flow
+```
+User                Client (TextEditorOverlay)       Server (ShapeHandler)          MongoDB
+ │                               │                            │                        │
+ ├── Click (TEXT tool) ─────────►│                            │                        │
+ │                               │ (Opens ephemeral overlay)  │                        │
+ ├── Keystrokes/IME Input ──────►│ (Draft in React state)     │                        │
+ │   [0 network emits, 0 DB]     │                            │                        │
+ ├── Commit (Ctrl+Enter / Blur) ─┼───────────────────────────►│                        │
+ │                               │   emit("shape:create",     │                        │
+ │                               │     { text, type: "text",  │                        │
+ │                               │       style: { ... } })    │                        │
+ │                               │                            ├── Authorize RBAC ─────►│
+ │                               │                            ├── Execute Transaction ─► (Save Shape,
+ │                               │                            │   collaborationRevision+1,
+ │                               │                            │   save MutationRecord) │
+ │                               │◄───────────────────────────┤                        │
+ │                               │   ack({ success: true,     │                        │
+ │                               │         data: TextShape }) │                        │
+ │   (Shape rendered on Konva)  │                            ├── Broadcast ──────────► (Room Peers)
+ └── Atomic Undo Entry added ───►│                            │   "shape:created"      │
+```
+
+#### B. Ephemeral Text Editing with Soft-Lock Heartbeat
+```
+Collaborator A                   Server                    Collaborator B
+      │                             │                            │
+      ├── dblclick(TextNode) ───────┼───────────────────────────►│
+      ├── emit("interaction:start", │                            │
+      │     { type: "editing-text", │                            │
+      │       target: shapeId }) ──►│ (Sets soft-lock)           │
+      │                             ├─ emit("interaction:started")
+      │                             │  { userId, shapeId } ─────►│ (Shows lock banner &
+      │                             │                            │  disables edit)
+      ├── Heartbeat every 1.5s ────►│ (Refreshes lock TTL)       │
+      │                             │                            │
+      ├── Keystroke typing ─────────┼───────────────────────────►│ [0 DB writes]
+      │                             │                            │
+      ├── Commit (Blur / Escape) ──►│                            │
+      │   emit("shape:update",      │                            │
+      │     { shapeId, text, OCC })─┼─► [Persist to MongoDB]     │
+      │                             │                            │
+      │   emit("interaction:end") ──┼─► [Clear soft-lock]        │
+      │                             ├─ emit("shape:updated") ───►│ (Hydrates new text)
+      │                             ├─ emit("interaction:ended")►│ (Removes lock banner)
+```
+
+---
+
+### 33.3 Ephemeral vs. Durable State Comparison
+
+| Feature Dimension | Ephemeral State (Active Typing) | Durable State (Committed Text Shape) |
+| :--- | :--- | :--- |
+| **Storage Medium** | React local state (`useTextEditing` / `TextEditorOverlay`) | MongoDB `shapes` collection |
+| **Persistence Event** | None | `shape:create` / `shape:update` |
+| **collaborationRevision** | No change | Incremented by 1 atomically |
+| **MutationRecord** | 0 records created | 1 idempotency record created |
+| **Zustand Store** | Bypasses `canvas.store` | Updates `shapes` array |
+| **Undo/Redo History** | 0 undo entries | Exactly 1 atomic undo snapshot |
+| **Peer Visibility** | Soft-lock indicator (`editing-text`) | Full visual text re-render (`shape:created`/`shape:updated`) |
+| **Empty Input Discard** | Clean discard on blur (0 side effects) | Disallowed (must contain valid geometry and text) |
+
+---
+
+# 34. 15 SENIOR FULL-STACK INTERVIEW Q&AS: ADVANCED COLLABORATIVE TEXT & CANVAS ARCHITECTURE
+
+### Q1: Why should collaborative canvas text editing use an HTML `<textarea>` overlay instead of rendering text directly to an HTML5 Canvas on every keystroke?
+**Answer:**
+1. **Internationalization & IME (Input Method Editor)**: Native browser `<textarea>` supports complex text input for Japanese, Chinese, Korean, and accented languages where multi-keystroke composition is required before committing glyphs. Canvas-rendered text lacks native IME candidate windows.
+2. **Accessibility & Native Platform Features**: Features like spelling auto-correct, bi-directional text (RTL), native text selection, drag-to-highlight, and screen reader announcements come for free with native DOM elements.
+3. **Rendering Performance**: Updating Konva canvas text nodes at 60 FPS while managing cursor blink rates and ligature shaping introduces continuous canvas redraw overhead. By overlaying an absolutely positioned `<textarea>` in screen coordinates, the canvas remains static during typing and only re-renders once on commit.
+
+---
+
+### Q2: How does CanvasFlow guarantee that the `<textarea>` overlay precisely tracks the canvas shape across zoom, pan, and rotation?
+**Answer:**
+CanvasFlow performs continuous coordinate space projection from **World Space** to **Screen Space**:
+$$\text{Screen}_X = \text{World}_X \times \text{Zoom} + \text{Pan}_X$$
+$$\text{Screen}_Y = \text{World}_Y \times \text{Zoom} + \text{Pan}_Y$$
+$$\text{ScreenFontSize} = \max(12, \text{FontSize} \times \text{Zoom})$$
+The textarea wrapper is styled with:
+```css
+position: absolute;
+left: ${screenX}px;
+top: ${screenY}px;
+transform: rotate(${rotation}deg);
+transform-origin: top left;
+font-size: ${screenFontSize}px;
+```
+When users zoom or pan, the stage transform triggers recalculation of `ScreenX`, `ScreenY`, and `ScreenFontSize`, keeping the DOM overlay locked to the underlying Konva node.
+
+---
+
+### Q3: What is "Keyboard Event Isolation" in collaborative canvas editors, and why is it critical?
+**Answer:**
+Canvas applications attach global `keydown` listeners to `window` or the stage container to handle shortcuts (e.g. `Delete`/`Backspace` to remove shapes, `Ctrl+A` to select all shapes, `Ctrl+Z` to undo canvas actions).
+If a user is typing "Hello Backspace World" inside a text node without event isolation, the `Backspace` keystroke would bubble to `window` and inadvertently delete all selected shapes on the board!
+CanvasFlow implements Keyboard Isolation by calling `event.stopPropagation()` on all keydown events originated within the `TextEditorOverlay`, preserving browser-native text manipulation while shielding canvas state managers.
+
+---
+
+### Q4: How does CanvasFlow handle IME (Input Method Editor) composition during text commit?
+**Answer:**
+When typing in languages such as Japanese or Chinese, users press `Enter` to confirm phonetic candidate characters (composition) rather than submitting the text.
+CanvasFlow tracks composition state using the `compositionstart` and `compositionend` DOM events:
+```ts
+const isComposingRef = useRef(false);
+
+<textarea
+  onCompositionStart={() => { isComposingRef.current = true; }}
+  onCompositionEnd={() => { isComposingRef.current = false; }}
+  onKeyDown={(e) => {
+    if (isComposingRef.current) return;
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) commit();
+  }}
+/>
+```
+If a commit trigger (e.g., blur or keypress) fires while `isComposingRef.current === true`, the commit is suppressed, avoiding half-composed phonemes from being prematurely saved to the database.
+
+---
+
+### Q5: Why did CanvasFlow migrate `text` from `Shape.style.text` to `Shape.text`, and how was backward compatibility preserved?
+**Answer:**
+1. **Architectural Purity**: Text is primary domain content, not a decorative visual style like `fill`, `strokeWidth`, or `opacity`. Grouping content inside `style` conflated layout geometry, presentation, and data.
+2. **Querying & Indexing**: Storing `text` at root allows full-text indexing, regex searching, and character count validation directly in MongoDB without nested document path traversals.
+3. **Backward Compatibility**: To prevent breaking existing boards created prior to Slice 19, both server and client mappers implement fallback resolution:
+```ts
+const textContent = doc.text ?? doc.style?.text ?? "";
+```
+Existing database records remain readable, while all new writes write strictly to root `text`.
+
+---
+
+### Q6: How does CanvasFlow prevent database exhaustion during collaborative typing?
+**Answer:**
+CanvasFlow adheres to **Typing Purity**:
+- Typing is completely local to the client's React component state (`draftText`).
+- Keystrokes generate 0 HTTP requests, 0 Socket.IO persistence emissions, and 0 MongoDB writes.
+- Only when editing concludes (via `blur`, `Ctrl+Enter`, or clicking outside) is a single `shape:update` socket message dispatched.
+- A 5-minute continuous typing session generates exactly 1 database write and 1 collaborationRevision increment instead of thousands of per-keystroke mutations.
+
+---
+
+### Q7: What is the purpose of Soft-Locking (`editing-text` interaction), and how does the heartbeat mechanism work?
+**Answer:**
+To prevent concurrent editing collisions where two users overwrite each other's text in real-time, CanvasFlow implements an ephemeral soft-lock:
+1. When User A double-clicks a text shape, client emits `interaction:start` with `type: "editing-text"`.
+2. The server stores an in-memory lock on `shapeId` with a TTL (Time-To-Live) of 3 seconds.
+3. The client runs a background heartbeat interval every 1.5 seconds, refreshing the lock via `refreshShapeLock`.
+4. Peer clients display a collaborator lock badge and disable double-click editing.
+5. If User A crashes or loses connectivity, the heartbeat stops and the server automatically frees the soft-lock upon TTL expiration, preventing deadlock.
+
+---
+
+### Q8: How does Optimistic Concurrency Control (OCC) resolve conflicting text updates?
+**Answer:**
+Each shape maintains an integer `version` field. When User A begins editing Shape 1 at `version: 5`:
+1. User A sends `shape:update` with `{ shapeId: "1", expectedVersion: 5, data: { text: "New Content" } }`.
+2. The server executes an atomic find-and-update query:
+   `ShapeModel.findOneAndUpdate({ _id: "1", version: 5 }, { $set: { text: "New Content" }, $inc: { version: 1 } })`
+3. If User B already committed an update first (incrementing the version to 6), the query matches 0 documents.
+4. The server throws a `ConflictException` (`code: "CONFLICT"`, HTTP 409).
+5. User A's client receives the conflict error, aborts local overwrite, and rehydrates the current server text from MongoDB.
+
+---
+
+### Q9: Why does empty text creation get discarded on the client rather than persisting an empty shape?
+**Answer:**
+1. **Canvas Clutter**: If a user selects the TEXT tool and clicks the canvas but clicks away without typing, persisting a shape creates an invisible, unselectable 0-width object that clutters the board.
+2. **Network & DB Conservation**: Client-side discard eliminates an unnecessary socket roundtrip, saves a MongoDB document insertion, and avoids incrementing `collaborationRevision`.
+3. **Undo Stack Integrity**: If an empty shape were created, pressing `Ctrl+Z` would undo an invisible ghost shape, confusing the end user.
+
+---
+
+### Q10: How does CanvasFlow prevent remote socket updates from corrupting the local user's undo/redo history?
+**Answer:**
+CanvasFlow distinguishes between **local intent** and **remote synchronization**:
+- Local actions (`updateShapeText`, `updateShapeFormatting`, `addShape`) push the current canvas snapshot onto the `past` stack in Zustand.
+- Remote events (`applyRemoteShapeUpdated`, `applyRemoteShapeCreated`, `applyRemoteShapeDeleted`) mutate the `shapes` array directly:
+```ts
+applyRemoteShapeUpdated: (shape: Shape): void => {
+  set((state) => ({
+    shapes: state.shapes.map((s) => (s.id === shape.id ? shape : s)),
+  }));
+}
+```
+Because `past` is not modified during remote reconciliation, pressing `Ctrl+Z` undoes only the local user's previous action, maintaining INVARIANT 5.
+
+---
+
+### Q11: How is text formatting (bold, italic, alignment, font size) normalized without Konva glyph distortion?
+**Answer:**
+Konva `<Text>` nodes allow bounding box scaling via `Transformer`. However, scaling a `<Text>` node directly applies `scaleX` and `scaleY` to the node transformation matrix, which stretches and distorts character glyphs rather than reflowing text.
+CanvasFlow enforces **Scale Normalization**:
+```ts
+onTransformEnd: () => {
+  const scaleX = node.scaleX();
+  const scaleY = node.scaleY();
+  node.scaleX(1); // Reset matrix scale
+  node.scaleY(1);
+  const nextWidth = Math.max(20, node.width() * scaleX);
+  const nextHeight = Math.max(20, node.height() * scaleY);
+  endTransform({ width: nextWidth, height: nextHeight });
+}
+```
+Resetting scale factors to 1 and updating width/height forces Konva to reflow text with pristine typographic vectors.
+
+---
+
+### Q12: How are connectors dynamically routed when connected to a text shape that changes size?
+**Answer:**
+Text shapes serve as valid connector anchors. Every text shape calculates 5 canonical anchor points based on its bounding box $(x, y, w, h)$:
+- `top`: $(x + w/2, y)$
+- `bottom`: $(x + w/2, y + h)$
+- `left`: $(x, y + h/2)$
+- `right`: $(x + w, y + h/2)$
+- `center`: $(x + w/2, y + h/2)$
+
+When text content expands or font size increases, the shape's width and height update. Inbound and outbound connectors attached to that shape automatically recalculate their endpoint coordinates in real-time without writing to MongoDB (`INVARIANT 10`).
+
+---
+
+### Q13: What happens if an `EDITOR`'s permissions are revoked to `VIEWER` while typing inside a text shape?
+**Answer:**
+1. While the user is typing, their role is downgraded in MongoDB by an administrator.
+2. When the user finishes typing and blur triggers `shape:update`, the request arrives at the server.
+3. `shape.handler.ts` executes `boardService.authorizeCanvasMutation(boardId, userId)`.
+4. The server queries the current workspace membership, identifies the user as `VIEWER`, and rejects the commit with `403 FORBIDDEN`.
+5. Zero database updates take place, zero collaborationRevisions are incremented, and the client displays an error toast.
+
+---
+
+### Q14: How does CanvasFlow combine `fontWeight` and `fontStyle` for Konva `<Text>`?
+**Answer:**
+Konva's `<Text>` component does not have separate `fontWeight` and `fontStyle` properties; it expects a single composite `fontStyle` string (e.g. `"bold"`, `"italic"`, `"italic bold"`, or `"normal"`).
+CanvasFlow provides a pure utility `getKonvaFontStyle`:
+```ts
+export function getKonvaFontStyle(fontWeight?: string | number, fontStyle?: TextFontStyle): string {
+  const isBold = fontWeight === "bold" || fontWeight === 700 || fontWeight === "700";
+  const isItalic = fontStyle === "italic";
+  if (isBold && isItalic) return "italic bold";
+  if (isBold) return "bold";
+  if (isItalic) return "italic";
+  return "normal";
+}
+```
+This guarantees seamless visual rendering while maintaining standard CSS property separation in DTOs and database records.
+
+---
+
+### Q15: Why does CanvasFlow use pure mathematical text dimension estimation on the client instead of relying strictly on DOM `measureText`?
+**Answer:**
+1. **Test Environment Compatibility**: In Vitest / Node.js CI environments, `document.createElement("canvas")` or `window.getComputedStyle` may not exist without heavy polyfills like `jsdom` or `canvas`.
+2. **Speed & Efficiency**: Pure mathematical bounding box estimation (`estimateTextDimensions`) calculates line breaks, padding, and font-scale ratios synchronously in sub-microsecond time.
+3. **Headless Execution**: Mathematical estimation allows server-side validation and headless worker pipelines to calculate bounding boxes identically to frontend clients without initializing a browser instance.

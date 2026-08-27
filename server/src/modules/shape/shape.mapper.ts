@@ -36,24 +36,39 @@ export class ShapeMapper {
     const shapeType = String(doc.type).toUpperCase();
 
     if (shapeType === "TEXT") {
+      const docWithText = doc as (ShapeDocument | Shape) & { text?: string };
+      const textContent =
+        typeof docWithText.text === "string"
+          ? docWithText.text
+          : typeof style.text === "string"
+          ? style.text
+          : "";
+
       const textDto: TextShapeResponseDto = {
         ...base,
         type: "text",
+        text: textContent,
         style: {
-          text: typeof style.text === "string" ? style.text : "Text",
           fontSize: typeof style.fontSize === "number" ? style.fontSize : 24,
           fontFamily: typeof style.fontFamily === "string" ? style.fontFamily : "Inter",
           fontWeight:
             typeof style.fontWeight === "string" || typeof style.fontWeight === "number"
               ? style.fontWeight
               : "normal",
-          fontStyle: typeof style.fontStyle === "string" ? style.fontStyle : "normal",
+          fontStyle: style.fontStyle === "italic" ? "italic" : "normal",
+          textDecoration: style.textDecoration === "underline" ? "underline" : "none",
           textAlign:
             style.textAlign === "center" || style.textAlign === "right"
               ? style.textAlign
               : "left",
+          verticalAlign:
+            style.verticalAlign === "middle" || style.verticalAlign === "bottom"
+              ? style.verticalAlign
+              : "top",
           fill: typeof style.fill === "string" ? style.fill : "#1f2937",
           opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          padding: typeof style.padding === "number" ? style.padding : 4,
+          lineHeight: typeof style.lineHeight === "number" ? style.lineHeight : 1.2,
         },
       };
       return textDto;

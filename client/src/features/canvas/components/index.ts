@@ -12,3 +12,5 @@ export { default as CollaboratorSelection } from "./CollaboratorSelection";
 export { default as CollaboratorShapeLock } from "./CollaboratorShapeLock";
 export { default as PresenceAvatars } from "./PresenceAvatars";
 export { default as RemoteCursorLayer } from "./RemoteCursorLayer";
+export { default as TextEditorOverlay } from "./TextEditorOverlay";
+export { default as TextFormattingToolbar } from "./TextFormattingToolbar";

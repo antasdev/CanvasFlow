@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useCanvasStore } from "./canvas.store";
+import type { TextShape } from "../types";
 
 describe("canvas store history & remote synchronization", () => {
     beforeEach(() => {
@@ -367,9 +368,13 @@ describe("canvas store history & remote synchronization", () => {
             fontSize: 24,
             fontFamily: "Inter",
             fontWeight: "normal",
-            fontStyle: "normal",
+            fontStyle: "normal" as const,
+            textDecoration: "none" as const,
             textAlign: "left" as const,
+            verticalAlign: "top" as const,
             fill: "#1f2937",
+            padding: 4,
+            lineHeight: 1.2,
         };
 
         useCanvasStore.getState().addShape(textShape);
@@ -377,18 +382,18 @@ describe("canvas store history & remote synchronization", () => {
 
         // Update text
         useCanvasStore.getState().updateShapeText("text-1", "Updated Text Content");
-        const currentShape = useCanvasStore.getState().shapes[0];
-        expect((currentShape as any).text).toBe("Updated Text Content");
+        const currentShape = useCanvasStore.getState().shapes[0] as TextShape;
+        expect(currentShape.text).toBe("Updated Text Content");
 
         // Undo
         useCanvasStore.getState().undo();
-        const undoneShape = useCanvasStore.getState().shapes[0];
-        expect((undoneShape as any).text).toBe("Initial Text");
+        const undoneShape = useCanvasStore.getState().shapes[0] as TextShape;
+        expect(undoneShape.text).toBe("Initial Text");
 
         // Redo
         useCanvasStore.getState().redo();
-        const redoneShape = useCanvasStore.getState().shapes[0];
-        expect((redoneShape as any).text).toBe("Updated Text Content");
+        const redoneShape = useCanvasStore.getState().shapes[0] as TextShape;
+        expect(redoneShape.text).toBe("Updated Text Content");
     });
 
     it("handles applyRemoteShapeUpdated for text shapes without modifying undo/redo history", () => {
@@ -591,9 +596,13 @@ describe("canvas store history & remote synchronization", () => {
                 fontSize: 20,
                 fontFamily: "Inter",
                 fontWeight: "normal",
-                fontStyle: "normal",
+                fontStyle: "normal" as const,
+                textDecoration: "none" as const,
                 textAlign: "left" as const,
+                verticalAlign: "top" as const,
                 fill: "#1f2937",
+                padding: 4,
+                lineHeight: 1.2,
             },
         ];
 
@@ -866,5 +875,151 @@ describe("canvas store history & remote synchronization", () => {
         expect(transformed.height).toBe(100);
         expect(transformed.rotation).toBe(15);
         expect(transformed.points).toEqual(rescaledPoints);
+    });
+
+    it("undoes and redoes text creation and content edits atomically", () => {
+        const textShape = {
+            id: "text-session-1",
+            type: "text" as const,
+            x: 50,
+            y: 50,
+            width: 120,
+            height: 36,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            text: "Initial text",
+            fontSize: 24,
+            fontFamily: "Inter",
+            fontWeight: "normal" as const,
+            fontStyle: "normal" as const,
+            textDecoration: "none" as const,
+            textAlign: "left" as const,
+            verticalAlign: "top" as const,
+            fill: "#1f2937",
+            padding: 4,
+            lineHeight: 1.2,
+        };
+
+        useCanvasStore.getState().addShape(textShape);
+        expect((useCanvasStore.getState().shapes[0] as TextShape).text).toBe("Initial text");
+
+        // Edit text content
+        useCanvasStore.getState().updateShapeText("text-session-1", "Updated after session");
+        expect((useCanvasStore.getState().shapes[0] as TextShape).text).toBe("Updated after session");
+
+        // Undo content edit
+        useCanvasStore.getState().undo();
+        expect((useCanvasStore.getState().shapes[0] as TextShape).text).toBe("Initial text");
+
+        // Undo creation
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+
+        // Redo creation
+        useCanvasStore.getState().redo();
+        expect((useCanvasStore.getState().shapes[0] as TextShape).text).toBe("Initial text");
+
+        // Redo content edit
+        useCanvasStore.getState().redo();
+        expect((useCanvasStore.getState().shapes[0] as TextShape).text).toBe("Updated after session");
+    });
+
+    it("undoes and redoes text formatting atomically", () => {
+        const textShape = {
+            id: "text-format-1",
+            type: "text" as const,
+            x: 100,
+            y: 100,
+            width: 150,
+            height: 40,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            text: "Formatting test",
+            fontSize: 24,
+            fontFamily: "Inter",
+            fontWeight: "normal" as const,
+            fontStyle: "normal" as const,
+            textDecoration: "none" as const,
+            textAlign: "left" as const,
+            verticalAlign: "top" as const,
+            fill: "#1f2937",
+            padding: 4,
+            lineHeight: 1.2,
+        };
+
+        useCanvasStore.getState().addShape(textShape);
+
+        // Apply formatting (bold + italic + align center)
+        useCanvasStore.getState().updateShapeFormatting("text-format-1", {
+            fontWeight: "bold",
+            fontStyle: "italic",
+            textAlign: "center",
+            fontSize: 32,
+        });
+
+        const formatted = useCanvasStore.getState().shapes[0] as typeof textShape;
+        expect(formatted.fontWeight).toBe("bold");
+        expect(formatted.fontStyle).toBe("italic");
+        expect(formatted.textAlign).toBe("center");
+        expect(formatted.fontSize).toBe(32);
+
+        // Undo formatting
+        useCanvasStore.getState().undo();
+        const unformatted = useCanvasStore.getState().shapes[0] as typeof textShape;
+        expect(unformatted.fontWeight).toBe("normal");
+        expect(unformatted.fontStyle).toBe("normal");
+        expect(unformatted.textAlign).toBe("left");
+        expect(unformatted.fontSize).toBe(24);
+
+        // Redo formatting
+        useCanvasStore.getState().redo();
+        const reformatted = useCanvasStore.getState().shapes[0] as typeof textShape;
+        expect(reformatted.fontWeight).toBe("bold");
+        expect(reformatted.fontStyle).toBe("italic");
+    });
+
+    it("does not pollute local undo history on remote shape updates", () => {
+        const textShape = {
+            id: "text-remote-1",
+            type: "text" as const,
+            x: 100,
+            y: 100,
+            width: 150,
+            height: 40,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            text: "Original Local",
+            fontSize: 24,
+            fontFamily: "Inter",
+            fontWeight: "normal" as const,
+            fontStyle: "normal" as const,
+            textDecoration: "none" as const,
+            textAlign: "left" as const,
+            verticalAlign: "top" as const,
+            fill: "#1f2937",
+            padding: 4,
+            lineHeight: 1.2,
+        };
+
+        useCanvasStore.getState().addShape(textShape);
+        const pastLengthBefore = useCanvasStore.getState().past.length;
+
+        // Apply remote update from another collaborator
+        useCanvasStore.getState().applyRemoteShapeUpdated({
+            ...textShape,
+            text: "Mutated By Remote Peer",
+            version: 2,
+        });
+
+        expect((useCanvasStore.getState().shapes[0] as TextShape).text).toBe("Mutated By Remote Peer");
+        expect(useCanvasStore.getState().past.length).toBe(pastLengthBefore);
+        expect(useCanvasStore.getState().canUndo()).toBe(true);
+
+        // Undo should undo our original creation, not the remote update
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
     });
 });

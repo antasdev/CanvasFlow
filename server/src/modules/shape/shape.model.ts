@@ -50,6 +50,11 @@ const shapeSchema = new Schema<Shape>(
       required: true,
     },
 
+    text: {
+      type: String,
+      required: false,
+    },
+
     points: {
       type: [Number],
       required: false,

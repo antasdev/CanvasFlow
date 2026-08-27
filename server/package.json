@@ -12,6 +12,7 @@
     "test:rbac": "tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts",
     "test:freehand": "tsx -r tsconfig-paths/register src/socket/tests/socket-freehand-drawing.test.ts",
     "test:vector-tools": "tsx -r tsconfig-paths/register src/socket/tests/socket-vector-tools.test.ts",
+    "test:text-editing": "tsx -r tsconfig-paths/register src/socket/tests/socket-text-editing.test.ts",
     "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],

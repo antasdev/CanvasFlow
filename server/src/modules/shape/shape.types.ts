@@ -26,6 +26,25 @@ export type ShapeConnectorData = {
   routing?: ConnectorRouting;
 };
 
+export type TextFontStyle = "normal" | "italic";
+export type TextDecoration = "none" | "underline";
+export type TextAlign = "left" | "center" | "right";
+export type TextVerticalAlign = "top" | "middle" | "bottom";
+
+export type TextStyleData = {
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: TextFontStyle;
+  textDecoration?: TextDecoration;
+  textAlign?: TextAlign;
+  verticalAlign?: TextVerticalAlign;
+  fill?: string;
+  opacity?: number;
+  padding?: number;
+  lineHeight?: number;
+};
+
 /**
  * Shape Entity
  */
@@ -45,6 +64,8 @@ export type Shape = {
   rotation: number;
 
   zIndex: number;
+
+  text?: string;
 
   points?: number[];
 
@@ -77,6 +98,8 @@ export type CreateShapeData = {
   rotation?: number;
 
   zIndex: number;
+
+  text?: string;
 
   points?: number[];
 

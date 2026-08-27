@@ -116,6 +116,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
   }
 
   if (dto.type === "text") {
+    const textContent =
+      typeof dto.text === "string"
+        ? dto.text
+        : typeof dto.style?.text === "string"
+        ? dto.style.text
+        : "";
+
     const textShape: TextShape = {
       id: dto.id,
       type: "text",
@@ -126,14 +133,24 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
-      opacity: dto.style.opacity ?? 1,
-      text: dto.style.text ?? "Text",
-      fontSize: dto.style.fontSize ?? 24,
-      fontFamily: dto.style.fontFamily ?? "Inter",
-      fontWeight: dto.style.fontWeight ?? "normal",
-      fontStyle: dto.style.fontStyle ?? "normal",
-      textAlign: dto.style.textAlign ?? "left",
-      fill: dto.style.fill ?? "#1f2937",
+      opacity: dto.style?.opacity ?? 1,
+      text: textContent,
+      fontSize: dto.style?.fontSize ?? 24,
+      fontFamily: dto.style?.fontFamily ?? "Inter",
+      fontWeight: dto.style?.fontWeight ?? "normal",
+      fontStyle: dto.style?.fontStyle === "italic" ? "italic" : "normal",
+      textDecoration: dto.style?.textDecoration === "underline" ? "underline" : "none",
+      textAlign:
+        dto.style?.textAlign === "center" || dto.style?.textAlign === "right"
+          ? dto.style.textAlign
+          : "left",
+      verticalAlign:
+        dto.style?.verticalAlign === "middle" || dto.style?.verticalAlign === "bottom"
+          ? dto.style.verticalAlign
+          : "top",
+      fill: dto.style?.fill ?? "#1f2937",
+      padding: typeof dto.style?.padding === "number" ? dto.style.padding : 4,
+      lineHeight: typeof dto.style?.lineHeight === "number" ? dto.style.lineHeight : 1.2,
     };
     return textShape;
   }

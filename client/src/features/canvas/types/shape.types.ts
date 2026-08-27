@@ -41,15 +41,25 @@ export type RectangleShape = BaseShape & {
   strokeWidth: number;
 };
 
+export type TextFontStyle = "normal" | "italic";
+export type TextDecoration = "none" | "underline";
+export type TextAlign = "left" | "center" | "right";
+export type TextVerticalAlign = "top" | "middle" | "bottom";
+
 export type TextShape = BaseShape & {
   type: "text";
   text: string;
   fontSize: number;
   fontFamily: string;
   fontWeight: string | number;
-  fontStyle: string;
-  textAlign: "left" | "center" | "right";
+  fontStyle: TextFontStyle;
+  textDecoration: TextDecoration;
+  textAlign: TextAlign;
+  verticalAlign: TextVerticalAlign;
   fill: string;
+  opacity: number;
+  padding: number;
+  lineHeight: number;
 };
 
 export type StickyNoteShape = BaseShape & {

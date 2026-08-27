@@ -62,12 +62,16 @@ export const shapeStyleValidationSchema = z.object({
   pointerWidth: z.number().min(2).max(50).optional(),
 
   // Text / Sticky Note styles
-  text: z.string().max(5000, "Text cannot exceed 5000 characters.").optional(),
+  text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
   fontSize: z.number().min(8, "Font size must be at least 8.").max(200, "Font size cannot exceed 200.").optional(),
   fontFamily: z.string().trim().max(100).optional(),
   fontWeight: z.union([z.string().trim().max(20), z.number()]).optional(),
-  fontStyle: z.string().trim().max(20).optional(),
+  fontStyle: z.enum(["normal", "italic"]).optional(),
+  textDecoration: z.enum(["none", "underline"]).optional(),
   textAlign: z.enum(["left", "center", "right"]).optional(),
+  verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
+  padding: z.number().min(0).max(100).optional(),
+  lineHeight: z.number().min(0.5).max(5).optional(),
   backgroundColor: z.string().trim().optional(),
   textColor: z.string().trim().optional(),
 
@@ -125,6 +129,8 @@ export const createShapeSchema = z
         .finite("Rotation must be a finite number.")
         .optional(),
 
+      text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
+
       points: shapePointsSchema.optional(),
 
       connector: shapeConnectorSchema.optional(),
@@ -176,6 +182,8 @@ export const updateShapeValidationSchema =
         .number()
         .finite("Rotation must be a finite number.")
         .optional(),
+
+      text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
 
       points: shapePointsSchema.optional(),
 

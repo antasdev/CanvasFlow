@@ -29,15 +29,20 @@ export type RectangleShapeResponseDto = BaseShapeResponseDto & {
 
 export type TextShapeResponseDto = BaseShapeResponseDto & {
   type: "text";
+  text?: string;
   style: {
-    text: string;
-    fontSize: number;
-    fontFamily: string;
-    fontWeight: string | number;
-    fontStyle: string;
-    textAlign: "left" | "center" | "right";
-    fill: string;
-    opacity: number;
+    text?: string;
+    fontSize?: number;
+    fontFamily?: string;
+    fontWeight?: string | number;
+    fontStyle?: "normal" | "italic";
+    textDecoration?: "none" | "underline";
+    textAlign?: "left" | "center" | "right";
+    verticalAlign?: "top" | "middle" | "bottom";
+    fill?: string;
+    opacity?: number;
+    padding?: number;
+    lineHeight?: number;
   };
 };
 
@@ -133,8 +138,12 @@ export type ShapeStyleRequest = {
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: string | number;
-  fontStyle?: string;
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline";
   textAlign?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  padding?: number;
+  lineHeight?: number;
   backgroundColor?: string;
   textColor?: string;
   points?: number[];
@@ -148,6 +157,7 @@ export type CreateShapeRequest = {
   width: number;
   height: number;
   rotation?: number;
+  text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
   style?: ShapeStyleRequest;
@@ -159,6 +169,7 @@ export type UpdateShapeRequest = {
   width?: number;
   height?: number;
   rotation?: number;
+  text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
   style?: ShapeStyleRequest;

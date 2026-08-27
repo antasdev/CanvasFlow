@@ -96,9 +96,104 @@ describe("Shape Mapper", () => {
       fontFamily: "Inter",
       fontWeight: "bold",
       fontStyle: "normal",
+      textDecoration: "none",
       textAlign: "left",
+      verticalAlign: "top",
       fill: "#1f2937",
+      padding: 4,
+      lineHeight: 1.2,
     });
+  });
+
+  it("maps ShapeResponseDto to TextShape with root text and rich styles", () => {
+    const dto: TextShapeResponseDto = {
+      id: "text-2",
+      canvasId: "canvas-1",
+      type: "text",
+      x: 50,
+      y: 80,
+      width: 220,
+      height: 60,
+      rotation: 15,
+      zIndex: 5,
+      version: 2,
+      text: "Root Text Content",
+      style: {
+        fontSize: 32,
+        fontFamily: "Georgia",
+        fontWeight: "bold",
+        fontStyle: "italic",
+        textDecoration: "underline",
+        textAlign: "center",
+        verticalAlign: "middle",
+        fill: "#dc2626",
+        opacity: 0.8,
+        padding: 12,
+        lineHeight: 1.5,
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+
+    expect(shape).toEqual({
+      id: "text-2",
+      type: "text",
+      x: 50,
+      y: 80,
+      width: 220,
+      height: 60,
+      rotation: 15,
+      zIndex: 5,
+      version: 2,
+      opacity: 0.8,
+      text: "Root Text Content",
+      fontSize: 32,
+      fontFamily: "Georgia",
+      fontWeight: "bold",
+      fontStyle: "italic",
+      textDecoration: "underline",
+      textAlign: "center",
+      verticalAlign: "middle",
+      fill: "#dc2626",
+      padding: 12,
+      lineHeight: 1.5,
+    });
+  });
+
+  it("falls back to legacy style.text when root text is absent", () => {
+    const dto: TextShapeResponseDto = {
+      id: "text-legacy",
+      canvasId: "canvas-1",
+      type: "text",
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 30,
+      rotation: 0,
+      zIndex: 1,
+      version: 1,
+      style: {
+        text: "Legacy Style Text",
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape.type).toBe("text");
+    if (shape.type === "text") {
+      expect(shape.text).toBe("Legacy Style Text");
+      expect(shape.fontSize).toBe(24);
+      expect(shape.fontFamily).toBe("Inter");
+      expect(shape.fontStyle).toBe("normal");
+      expect(shape.textDecoration).toBe("none");
+      expect(shape.textAlign).toBe("left");
+      expect(shape.verticalAlign).toBe("top");
+    }
   });
 
   it("maps ShapeResponseDto to StickyNoteShape correctly", () => {

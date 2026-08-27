@@ -4,7 +4,7 @@ import {
   CANVAS_TOOLS,
   type CanvasTool,
 } from "../constants";
-import type { Shape } from "../types";
+import type { Shape, TextShape } from "../types";
 import type {
   RemoteCursor,
   RemoteSelection,
@@ -84,6 +84,11 @@ type CanvasStore = {
   updateShapeText: (
     shapeId: string,
     text: string,
+  ) => void;
+
+  updateShapeFormatting: (
+    shapeId: string,
+    formatting: Partial<Omit<TextShape, "id" | "type" | "x" | "y" | "width" | "height" | "rotation" | "zIndex" | "version">>
   ) => void;
 
   resetCanvas: () => void;
@@ -321,6 +326,38 @@ export const useCanvasStore = create<CanvasStore>(
             return shape;
           },
         );
+
+        return {
+          past: [
+            ...state.past,
+            state.shapes,
+          ],
+          future: [],
+          shapes: nextShapes,
+        };
+      });
+    },
+
+    updateShapeFormatting: (
+      shapeId: string,
+      formatting: Partial<Omit<TextShape, "id" | "type" | "x" | "y" | "width" | "height" | "rotation" | "zIndex" | "version">>
+    ): void => {
+      set((state) => {
+        const target = state.shapes.find((s) => s.id === shapeId);
+        if (!target || target.type !== "text") {
+          return state;
+        }
+
+        const nextShapes = state.shapes.map((shape) => {
+          if (shape.id !== shapeId || shape.type !== "text") {
+            return shape;
+          }
+
+          return {
+            ...shape,
+            ...formatting,
+          };
+        });
 
         return {
           past: [

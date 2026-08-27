@@ -9,3 +9,4 @@ export * from "./useShapeTransform";
 export * from "./useBoardRecovery";
 export * from "./usePresenceSocket";
 export * from "./useInteractionSocket";
+export * from "./useTextEditing";

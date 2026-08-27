@@ -7,6 +7,7 @@ import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { TextShape } from "../types";
+import { getKonvaFontStyle } from "../utils/text.utils";
 
 type TextNodeProps = {
   shape: TextShape;
@@ -95,10 +96,15 @@ export default function TextNode({
         text={shape.text || "Type something..."}
         fontSize={shape.fontSize}
         fontFamily={shape.fontFamily || "Inter, sans-serif"}
-        fontStyle={shape.fontStyle || "normal"}
+        fontStyle={getKonvaFontStyle(shape.fontWeight, shape.fontStyle)}
+        textDecoration={shape.textDecoration || "none"}
         align={shape.textAlign || "left"}
+        verticalAlign={shape.verticalAlign || "top"}
+        padding={typeof shape.padding === "number" ? shape.padding : 4}
+        lineHeight={typeof shape.lineHeight === "number" ? shape.lineHeight : 1.2}
+        wrap="word"
         fill={shape.text ? shape.fill : "#9ca3af"}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
+        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : (shape.opacity ?? 1)}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onDblClick={handleDoubleClick}
         onDblTap={handleDoubleClick}

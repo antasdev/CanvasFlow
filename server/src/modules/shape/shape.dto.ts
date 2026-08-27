@@ -12,18 +12,27 @@ export type ShapeStyleDto = {
   strokeWidth?: number;
   opacity?: number;
 
-  // Text / Sticky Note styles
+  // Text / Rich Text / Sticky Note styles
   text?: string;
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: string | number;
-  fontStyle?: string;
+  fontStyle?: "normal" | "italic";
+  textDecoration?: "none" | "underline";
   textAlign?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  padding?: number;
+  lineHeight?: number;
   backgroundColor?: string;
   textColor?: string;
 
   // Freehand styles / points fallback
   points?: number[];
+  strokeStyle?: "solid" | "dashed";
+  arrowHeadEnd?: boolean;
+  arrowHeadStart?: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
 };
 
 /**
@@ -62,15 +71,19 @@ export type RectangleShapeResponseDto = BaseShapeResponseDto & {
  */
 export type TextShapeResponseDto = BaseShapeResponseDto & {
   type: "text";
+  text: string;
   style: {
-    text: string;
     fontSize: number;
     fontFamily: string;
     fontWeight: string | number;
-    fontStyle: string;
+    fontStyle: "normal" | "italic";
+    textDecoration: "none" | "underline";
     textAlign: "left" | "center" | "right";
+    verticalAlign: "top" | "middle" | "bottom";
     fill: string;
     opacity: number;
+    padding: number;
+    lineHeight: number;
   };
 };
 
@@ -181,6 +194,7 @@ export type CreateShapeDto = {
   width: number;
   height: number;
   rotation?: number;
+  text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
   style?: ShapeStyleDto;
@@ -196,6 +210,7 @@ export type UpdateShapeDto = {
   width?: number;
   height?: number;
   rotation?: number;
+  text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
   style?: ShapeStyleDto;

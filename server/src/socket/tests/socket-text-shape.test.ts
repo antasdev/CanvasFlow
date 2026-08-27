@@ -202,7 +202,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   assert(createTextAck.data !== undefined, "Text create ack must contain data");
   assert(createTextAck.data!.type === "text", "Ack DTO type must be 'text'");
   if (createTextAck.data!.type === "text") {
-    assert(createTextAck.data!.style.text === "Hello World Text", "Text content must match");
+    assert(createTextAck.data!.text === "Hello World Text", "Text content must match");
     assert(createTextAck.data!.style.fontSize === 24, "Font size must match");
     assert(createTextAck.data!.style.fontWeight === "bold", "Font weight must match");
   }
@@ -213,7 +213,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   const textDb = await ShapeModel.findById(new Types.ObjectId(textShapeId));
   assert(textDb !== null, "Text shape must exist in MongoDB");
   assert(textDb!.type === ShapeType.TEXT, "Persisted type must be TEXT");
-  assert((textDb!.style as any).text === "Hello World Text", "Persisted text style must match");
+  assert((textDb!.text ?? (textDb!.style as any)?.text) === "Hello World Text", "Persisted text must match");
 
   await new Promise((r) => setTimeout(r, 100));
 
@@ -414,7 +414,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   assert(updateTextAck.data!.type === "text", "Updated type must be text");
   if (updateTextAck.data!.type === "text") {
     assert(
-      updateTextAck.data!.style.text === "Updated Canonical Content",
+      updateTextAck.data!.text === "Updated Canonical Content",
       "Updated text must match"
     );
     assert(updateTextAck.data!.style.fontSize === 28, "Updated fontSize must match");
@@ -422,7 +422,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
 
   // Verify MongoDB
   const textUpdatedDb = await ShapeModel.findById(new Types.ObjectId(textShapeId));
-  assert((textUpdatedDb!.style as any).text === "Updated Canonical Content", "DB text must be updated");
+  assert((textUpdatedDb!.text ?? (textUpdatedDb!.style as any)?.text) === "Updated Canonical Content", "DB text must be updated");
 
   await new Promise((r) => setTimeout(r, 100));
 

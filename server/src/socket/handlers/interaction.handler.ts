@@ -60,8 +60,8 @@ export function registerInteractionHandlers(
         return;
       }
 
-      // Drawing interaction authorization guard: Viewers cannot initiate drawing
-      if (parsed.data.type === "drawing") {
+      // Mutation interaction authorization guard: Viewers cannot initiate drawing or text editing
+      if (parsed.data.type === "drawing" || parsed.data.type === "editing-text") {
         try {
           await boardService.authorizeCanvasMutation(
             new Types.ObjectId(parsed.data.boardId),
@@ -72,7 +72,7 @@ export function registerInteractionHandlers(
             success: false,
             error: {
               code: "FORBIDDEN",
-              message: "Viewers are not permitted to draw on this canvas.",
+              message: "Viewers are not permitted to edit text or draw on this canvas.",
             },
           });
           return;
