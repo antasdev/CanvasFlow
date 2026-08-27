@@ -2,6 +2,10 @@ export type ShapeType =
   | "select"
   | "rectangle"
   | "circle"
+  | "ellipse"
+  | "triangle"
+  | "polygon"
+  | "star"
   | "line"
   | "arrow"
   | "connector"
@@ -72,7 +76,42 @@ export type StickyNoteShape = BaseShape & {
 
 export type CircleShape = BaseShape & {
   type: "circle";
-  radius: number;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+};
+
+export type EllipseShape = BaseShape & {
+  type: "ellipse";
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+};
+
+export type TriangleShape = BaseShape & {
+  type: "triangle";
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+};
+
+export type PolygonShape = BaseShape & {
+  type: "polygon";
+  sides?: number;
+  shapeConfig?: {
+    sides: number;
+  };
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+};
+
+export type StarShape = BaseShape & {
+  type: "star";
+  shapeConfig?: {
+    points: number;
+    innerRadiusRatio: number;
+  };
   fill: string;
   stroke: string;
   strokeWidth: number;
@@ -121,6 +160,10 @@ export type Shape =
   | TextShape
   | StickyNoteShape
   | CircleShape
+  | EllipseShape
+  | TriangleShape
+  | PolygonShape
+  | StarShape
   | LineShape
   | ArrowShape
   | ConnectorShape

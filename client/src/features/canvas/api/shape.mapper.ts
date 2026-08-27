@@ -1,6 +1,11 @@
 import type {
   Shape,
   RectangleShape,
+  CircleShape,
+  EllipseShape,
+  TriangleShape,
+  PolygonShape,
+  StarShape,
   TextShape,
   StickyNoteShape,
   FreehandShape,
@@ -173,6 +178,116 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       textColor: dto.style.textColor ?? "#1f2937",
     };
     return stickyShape;
+  }
+
+  if (dto.type === "circle") {
+    const circleShape: CircleShape = {
+      id: dto.id,
+      type: "circle",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      fill: dto.style?.fill ?? "#ffffff",
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+    };
+    return circleShape;
+  }
+
+  if (dto.type === "ellipse") {
+    const ellipseShape: EllipseShape = {
+      id: dto.id,
+      type: "ellipse",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      fill: dto.style?.fill ?? "#ffffff",
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+    };
+    return ellipseShape;
+  }
+
+  if (dto.type === "triangle") {
+    const triangleShape: TriangleShape = {
+      id: dto.id,
+      type: "triangle",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      fill: dto.style?.fill ?? "#ffffff",
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+    };
+    return triangleShape;
+  }
+
+  if (dto.type === "polygon") {
+    const sides = typeof dto.shapeConfig?.sides === "number" ? dto.shapeConfig.sides : 5;
+    const polygonShape: PolygonShape = {
+      id: dto.id,
+      type: "polygon",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      sides,
+      shapeConfig: {
+        sides,
+      },
+      fill: dto.style?.fill ?? "#ffffff",
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+    };
+    return polygonShape;
+  }
+
+  if (dto.type === "star") {
+    const points = typeof dto.shapeConfig?.points === "number" ? dto.shapeConfig.points : 5;
+    const innerRadiusRatio =
+      typeof dto.shapeConfig?.innerRadiusRatio === "number"
+        ? dto.shapeConfig.innerRadiusRatio
+        : 0.5;
+
+    const starShape: StarShape = {
+      id: dto.id,
+      type: "star",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      shapeConfig: {
+        points,
+        innerRadiusRatio,
+      },
+      fill: dto.style?.fill ?? "#ffffff",
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+    };
+    return starShape;
   }
 
   const rectShape: RectangleShape = {

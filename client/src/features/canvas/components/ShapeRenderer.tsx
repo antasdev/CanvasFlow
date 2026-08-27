@@ -1,6 +1,11 @@
 import type { Shape, TextShape, StickyNoteShape } from "../types";
 
 import RectangleNode from "./RectangleNode";
+import CircleNode from "./CircleNode";
+import EllipseNode from "./EllipseNode";
+import TriangleNode from "./TriangleNode";
+import PolygonNode from "./PolygonNode";
+import StarNode from "./StarNode";
 import TextNode from "./TextNode";
 import StickyNoteNode from "./StickyNoteNode";
 import FreehandNode from "./FreehandNode";
@@ -61,6 +66,51 @@ export default function ShapeRenderer({
     case "rectangle":
       return (
         <RectangleNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "circle":
+      return (
+        <CircleNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "ellipse":
+      return (
+        <EllipseNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "triangle":
+      return (
+        <TriangleNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "polygon":
+      return (
+        <PolygonNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
+    case "star":
+      return (
+        <StarNode
           shape={shape}
           boardId={boardId}
           canEditCanvas={canEditCanvas}

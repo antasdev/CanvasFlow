@@ -499,4 +499,221 @@ describe("Shape Mapper", () => {
       pointerWidth: 10,
     });
   });
+
+  it("maps ShapeResponseDto to CircleShape correctly", () => {
+    const dto = {
+      id: "circle-1",
+      canvasId: "canvas-1",
+      type: "circle" as const,
+      x: 100,
+      y: 100,
+      width: 120,
+      height: 120,
+      rotation: 0,
+      zIndex: 1,
+      version: 1,
+      style: {
+        fill: "#3b82f6",
+        stroke: "#1d4ed8",
+        strokeWidth: 2,
+        opacity: 1,
+      },
+      createdBy: "user-1",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape).toEqual({
+      id: "circle-1",
+      type: "circle",
+      x: 100,
+      y: 100,
+      width: 120,
+      height: 120,
+      rotation: 0,
+      zIndex: 1,
+      version: 1,
+      opacity: 1,
+      fill: "#3b82f6",
+      stroke: "#1d4ed8",
+      strokeWidth: 2,
+    });
+  });
+
+  it("maps ShapeResponseDto to EllipseShape correctly", () => {
+    const dto = {
+      id: "ellipse-1",
+      canvasId: "canvas-1",
+      type: "ellipse" as const,
+      x: 200,
+      y: 150,
+      width: 160,
+      height: 100,
+      rotation: 45,
+      zIndex: 2,
+      version: 1,
+      style: {
+        fill: "#10b981",
+        stroke: "#047857",
+        strokeWidth: 3,
+        opacity: 0.8,
+      },
+      createdBy: "user-1",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape).toEqual({
+      id: "ellipse-1",
+      type: "ellipse",
+      x: 200,
+      y: 150,
+      width: 160,
+      height: 100,
+      rotation: 45,
+      zIndex: 2,
+      version: 1,
+      opacity: 0.8,
+      fill: "#10b981",
+      stroke: "#047857",
+      strokeWidth: 3,
+    });
+  });
+
+  it("maps ShapeResponseDto to TriangleShape correctly", () => {
+    const dto = {
+      id: "triangle-1",
+      canvasId: "canvas-1",
+      type: "triangle" as const,
+      x: 300,
+      y: 200,
+      width: 140,
+      height: 120,
+      rotation: 0,
+      zIndex: 3,
+      version: 1,
+      style: {
+        fill: "#ec4899",
+        stroke: "#be185d",
+        strokeWidth: 2,
+        opacity: 1,
+      },
+      createdBy: "user-1",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape).toEqual({
+      id: "triangle-1",
+      type: "triangle",
+      x: 300,
+      y: 200,
+      width: 140,
+      height: 120,
+      rotation: 0,
+      zIndex: 3,
+      version: 1,
+      opacity: 1,
+      fill: "#ec4899",
+      stroke: "#be185d",
+      strokeWidth: 2,
+    });
+  });
+
+  it("maps ShapeResponseDto to PolygonShape with shapeConfig correctly", () => {
+    const dto = {
+      id: "poly-1",
+      canvasId: "canvas-1",
+      type: "polygon" as const,
+      x: 400,
+      y: 250,
+      width: 180,
+      height: 180,
+      rotation: 15,
+      zIndex: 4,
+      version: 1,
+      shapeConfig: {
+        sides: 6,
+      },
+      style: {
+        fill: "#f59e0b",
+        stroke: "#b45309",
+        strokeWidth: 2,
+        opacity: 1,
+      },
+      createdBy: "user-1",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape).toEqual({
+      id: "poly-1",
+      type: "polygon",
+      x: 400,
+      y: 250,
+      width: 180,
+      height: 180,
+      rotation: 15,
+      zIndex: 4,
+      version: 1,
+      opacity: 1,
+      sides: 6,
+      fill: "#f59e0b",
+      stroke: "#b45309",
+      strokeWidth: 2,
+    });
+  });
+
+  it("maps ShapeResponseDto to StarShape with shapeConfig correctly", () => {
+    const dto = {
+      id: "star-1",
+      canvasId: "canvas-1",
+      type: "star" as const,
+      x: 500,
+      y: 300,
+      width: 200,
+      height: 200,
+      rotation: 0,
+      zIndex: 5,
+      version: 1,
+      shapeConfig: {
+        points: 8,
+        innerRadiusRatio: 0.35,
+      },
+      style: {
+        fill: "#eab308",
+        stroke: "#ca8a04",
+        strokeWidth: 2,
+        opacity: 1,
+      },
+      createdBy: "user-1",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape).toEqual({
+      id: "star-1",
+      type: "star",
+      x: 500,
+      y: 300,
+      width: 200,
+      height: 200,
+      rotation: 0,
+      zIndex: 5,
+      version: 1,
+      opacity: 1,
+      shapeConfig: {
+        points: 8,
+        innerRadiusRatio: 0.35,
+      },
+      fill: "#eab308",
+      stroke: "#ca8a04",
+      strokeWidth: 2,
+    });
+  });
 });

@@ -115,8 +115,76 @@ export type ConnectorShapeResponseDto = BaseShapeResponseDto & {
   };
 };
 
+export type ShapeConfigDto = {
+  sides?: number;
+  points?: number;
+  innerRadiusRatio?: number;
+};
+
+export type CircleShapeResponseDto = BaseShapeResponseDto & {
+  type: "circle";
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+export type EllipseShapeResponseDto = BaseShapeResponseDto & {
+  type: "ellipse";
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+export type TriangleShapeResponseDto = BaseShapeResponseDto & {
+  type: "triangle";
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+export type PolygonShapeResponseDto = BaseShapeResponseDto & {
+  type: "polygon";
+  shapeConfig?: {
+    sides: number;
+  };
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+export type StarShapeResponseDto = BaseShapeResponseDto & {
+  type: "star";
+  shapeConfig?: {
+    points: number;
+    innerRadiusRatio: number;
+  };
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
+  | CircleShapeResponseDto
+  | EllipseShapeResponseDto
+  | TriangleShapeResponseDto
+  | PolygonShapeResponseDto
+  | StarShapeResponseDto
   | TextShapeResponseDto
   | StickyNoteShapeResponseDto
   | FreehandShapeResponseDto
@@ -151,7 +219,19 @@ export type ShapeStyleRequest = {
 
 export type CreateShapeRequest = {
   canvasId: string;
-  type: "rectangle" | "text" | "sticky_note" | "freehand" | "line" | "arrow" | "connector";
+  type:
+    | "rectangle"
+    | "circle"
+    | "ellipse"
+    | "triangle"
+    | "polygon"
+    | "star"
+    | "text"
+    | "sticky_note"
+    | "freehand"
+    | "line"
+    | "arrow"
+    | "connector";
   x: number;
   y: number;
   width: number;
@@ -160,6 +240,7 @@ export type CreateShapeRequest = {
   text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
+  shapeConfig?: ShapeConfigDto;
   style?: ShapeStyleRequest;
 };
 
@@ -172,6 +253,7 @@ export type UpdateShapeRequest = {
   text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
+  shapeConfig?: ShapeConfigDto;
   style?: ShapeStyleRequest;
 };
 

@@ -1022,4 +1022,64 @@ describe("canvas store history & remote synchronization", () => {
         useCanvasStore.getState().undo();
         expect(useCanvasStore.getState().shapes).toHaveLength(0);
     });
+
+    it("undoes and redoes advanced basic shapes (circle, ellipse, triangle, polygon, star)", () => {
+        const polygon = {
+            id: "poly-1",
+            type: "polygon" as const,
+            x: 200,
+            y: 200,
+            width: 150,
+            height: 150,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            sides: 6,
+            fill: "#3b82f6",
+            stroke: "#1d4ed8",
+            strokeWidth: 2,
+        };
+
+        const star = {
+            id: "star-1",
+            type: "star" as const,
+            x: 400,
+            y: 200,
+            width: 160,
+            height: 160,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 2,
+            shapeConfig: {
+                points: 5,
+                innerRadiusRatio: 0.5,
+            },
+            fill: "#eab308",
+            stroke: "#ca8a04",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().addShape(polygon);
+        useCanvasStore.getState().addShape(star);
+        expect(useCanvasStore.getState().shapes).toHaveLength(2);
+
+        // Undo star
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("poly-1");
+
+        // Undo polygon
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+
+        // Redo polygon
+        useCanvasStore.getState().redo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("poly-1");
+
+        // Redo star
+        useCanvasStore.getState().redo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(2);
+        expect(useCanvasStore.getState().shapes[1].id).toBe("star-1");
+    });
 });

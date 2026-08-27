@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 
-import { ShapeType } from "./shape.types";
+import { ShapeType, ShapeConfigData } from "./shape.types";
 
 /**
  * Shape Visual Style DTO
@@ -172,10 +172,87 @@ export type ConnectorShapeResponseDto = BaseShapeResponseDto & {
 };
 
 /**
+ * Circle Shape Response DTO
+ */
+export type CircleShapeResponseDto = BaseShapeResponseDto & {
+  type: "circle";
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+/**
+ * Ellipse Shape Response DTO
+ */
+export type EllipseShapeResponseDto = BaseShapeResponseDto & {
+  type: "ellipse";
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+/**
+ * Triangle Shape Response DTO
+ */
+export type TriangleShapeResponseDto = BaseShapeResponseDto & {
+  type: "triangle";
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+/**
+ * Polygon Shape Response DTO
+ */
+export type PolygonShapeResponseDto = BaseShapeResponseDto & {
+  type: "polygon";
+  shapeConfig: {
+    sides: number;
+  };
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+/**
+ * Star Shape Response DTO
+ */
+export type StarShapeResponseDto = BaseShapeResponseDto & {
+  type: "star";
+  shapeConfig: {
+    points: number;
+    innerRadiusRatio: number;
+  };
+  style: {
+    fill: string;
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+/**
  * Discriminated Union of Shape API Response DTOs
  */
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
+  | CircleShapeResponseDto
+  | EllipseShapeResponseDto
+  | TriangleShapeResponseDto
+  | PolygonShapeResponseDto
+  | StarShapeResponseDto
   | TextShapeResponseDto
   | StickyNoteShapeResponseDto
   | FreehandShapeResponseDto
@@ -197,6 +274,7 @@ export type CreateShapeDto = {
   text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
+  shapeConfig?: ShapeConfigData;
   style?: ShapeStyleDto;
 };
 
@@ -213,5 +291,6 @@ export type UpdateShapeDto = {
   text?: string;
   points?: number[];
   connector?: ShapeConnectorDto;
+  shapeConfig?: ShapeConfigData;
   style?: ShapeStyleDto;
 };

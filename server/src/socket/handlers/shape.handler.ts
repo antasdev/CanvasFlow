@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
-import { shapeService, ShapeMapper, ShapeType, shapePointsSchema, shapeConnectorSchema } from "@/modules/shape";
+import { shapeService, ShapeMapper, ShapeType, shapePointsSchema, shapeConnectorSchema, shapeConfigSchema } from "@/modules/shape";
 import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
@@ -69,6 +69,16 @@ const createShapeSocketSchema = z
       .enum([
         "rectangle",
         "RECTANGLE",
+        "circle",
+        "CIRCLE",
+        "ellipse",
+        "ELLIPSE",
+        "triangle",
+        "TRIANGLE",
+        "polygon",
+        "POLYGON",
+        "star",
+        "STAR",
         "text",
         "TEXT",
         "sticky_note",
@@ -91,6 +101,7 @@ const createShapeSocketSchema = z
     text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
     points: shapePointsSchema.optional(),
     connector: shapeConnectorSchema.optional(),
+    shapeConfig: shapeConfigSchema.optional(),
     style: shapeStyleSocketSchema.optional(),
   })
   .refine(
@@ -125,6 +136,7 @@ const updateShapeSocketSchema = z.object({
     text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
     points: shapePointsSchema.optional(),
     connector: shapeConnectorSchema.optional(),
+    shapeConfig: shapeConfigSchema.optional(),
     style: shapeStyleSocketSchema.optional(),
   }),
 });
@@ -207,6 +219,16 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shapeType = ShapeType.ARROW;
         } else if (rawType === "CONNECTOR") {
           shapeType = ShapeType.CONNECTOR;
+        } else if (rawType === "CIRCLE") {
+          shapeType = ShapeType.CIRCLE;
+        } else if (rawType === "ELLIPSE") {
+          shapeType = ShapeType.ELLIPSE;
+        } else if (rawType === "TRIANGLE") {
+          shapeType = ShapeType.TRIANGLE;
+        } else if (rawType === "POLYGON") {
+          shapeType = ShapeType.POLYGON;
+        } else if (rawType === "STAR") {
+          shapeType = ShapeType.STAR;
         }
 
         const effectivePoints = parsed.data.points ?? parsed.data.style?.points;
@@ -230,6 +252,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
                 text: parsed.data.text ?? parsed.data.style?.text,
                 points: effectivePoints,
                 connector: parsed.data.connector,
+                shapeConfig: parsed.data.shapeConfig,
                 style: parsed.data.style,
               },
               session

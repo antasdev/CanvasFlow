@@ -275,15 +275,23 @@ export const useCanvasStore = create<CanvasStore>(
     ): void => {
       set((state) => {
         const nextShapes = state.shapes.map(
-          (shape) => {
+          (shape): Shape => {
             if (shape.id !== shapeId) {
               return shape;
             }
 
+            if (transform.points !== undefined && "points" in shape) {
+              return {
+                ...shape,
+                ...transform,
+              } as Shape;
+            }
+
+            const { points: _ignoredPoints, ...geomTransform } = transform;
             return {
               ...shape,
-              ...transform,
-            };
+              ...geomTransform,
+            } as Shape;
           },
         );
 

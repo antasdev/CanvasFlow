@@ -192,11 +192,16 @@ export class ShapeService {
 
     let updatedShape = null;
 
+    const effectiveShapeConfig = dto.shapeConfig
+      ? { ...(existing.shapeConfig ?? {}), ...dto.shapeConfig }
+      : existing.shapeConfig;
+    const updateDto = dto.shapeConfig ? { ...dto, shapeConfig: effectiveShapeConfig } : dto;
+
     if (effectiveExpectedVersion !== undefined) {
       updatedShape = await shapeRepository.updateWithExpectedVersion(
         id,
         effectiveExpectedVersion,
-        dto,
+        updateDto,
         session
       );
 

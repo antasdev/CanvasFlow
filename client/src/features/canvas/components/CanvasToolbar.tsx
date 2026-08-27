@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { MessageSquare, Eye, Minus, ArrowRight, GitCommit } from "lucide-react";
+import { MessageSquare, Eye, Minus, ArrowRight, GitCommit, Circle, Triangle, Hexagon, Star } from "lucide-react";
 
 import { CANVAS_TOOLS } from "../constants";
 import { useCanvasStore } from "../store";
@@ -58,6 +58,73 @@ export default function CanvasToolbar({
             }`}
           >
             Rectangle
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.CIRCLE)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.CIRCLE
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Circle className="h-3.5 w-3.5" />
+            <span>Circle</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.ELLIPSE)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.ELLIPSE
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
+              <ellipse cx="12" cy="12" rx="10" ry="6" />
+            </svg>
+            <span>Ellipse</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.TRIANGLE)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.TRIANGLE
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Triangle className="h-3.5 w-3.5" />
+            <span>Triangle</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.POLYGON)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.POLYGON
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Hexagon className="h-3.5 w-3.5" />
+            <span>Polygon</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTool(CANVAS_TOOLS.STAR)}
+            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+              activeTool === CANVAS_TOOLS.STAR
+                ? "bg-gray-900 text-white shadow-sm"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            <Star className="h-3.5 w-3.5" />
+            <span>Star</span>
           </button>
 
           <button

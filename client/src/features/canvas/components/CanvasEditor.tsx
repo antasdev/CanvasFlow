@@ -1,9 +1,17 @@
 import type Konva from "konva";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Arrow, Circle, Layer, Line, Rect, Stage } from "react-konva";
+import { Arrow, Circle, Ellipse, Group, Layer, Line, Rect, Stage } from "react-konva";
 import { toast } from "sonner";
 
-import { mapShapeResponseToShape, shapeApi } from "../api";
+import { mapShapeResponseToShape, shapeApi, type CreateShapeRequest } from "../api";
+import {
+    normalizeShapeBounds,
+    calculateCircleGeometry,
+    calculateEllipseGeometry,
+    calculateTrianglePoints,
+    calculatePolygonPoints,
+    calculateStarPoints,
+} from "../utils/shape-geometry.utils";
 import { CANVAS_TOOLS } from "../constants";
 import {
     useCanvasHistory,
@@ -55,6 +63,7 @@ type CanvasSize = {
 };
 
 type DrawingState = {
+    tool: "rectangle" | "circle" | "ellipse" | "triangle" | "polygon" | "star";
     startX: number;
     startY: number;
     currentX: number;
@@ -708,7 +717,15 @@ export default function CanvasEditor({
             return;
         }
 
-        if (activeTool !== CANVAS_TOOLS.RECTANGLE) {
+        const isBasicShapeTool =
+            activeTool === CANVAS_TOOLS.RECTANGLE ||
+            activeTool === CANVAS_TOOLS.CIRCLE ||
+            activeTool === CANVAS_TOOLS.ELLIPSE ||
+            activeTool === CANVAS_TOOLS.TRIANGLE ||
+            activeTool === CANVAS_TOOLS.POLYGON ||
+            activeTool === CANVAS_TOOLS.STAR;
+
+        if (!isBasicShapeTool) {
             return;
         }
 
@@ -724,6 +741,7 @@ export default function CanvasEditor({
         });
 
         setDrawing({
+            tool: activeTool as "rectangle" | "circle" | "ellipse" | "triangle" | "polygon" | "star",
             startX: worldPoint.x,
             startY: worldPoint.y,
             currentX: worldPoint.x,
@@ -1159,36 +1177,26 @@ export default function CanvasEditor({
         }
 
         /*
-         * No rectangle is being drawn.
+         * No shape is being drawn.
          */
         if (!drawing) {
             return;
         }
 
-        const x = Math.min(
+        const bounds = normalizeShapeBounds(
             drawing.startX,
-            drawing.currentX,
-        );
-
-        const y = Math.min(
             drawing.startY,
-            drawing.currentY,
+            drawing.currentX,
+            drawing.currentY
         );
 
-        const width = Math.abs(
-            drawing.currentX - drawing.startX,
-        );
-
-        const height = Math.abs(
-            drawing.currentY - drawing.startY,
-        );
-
+        const currentTool = drawing.tool;
         setDrawing(null);
 
         /*
-         * Ignore accidental clicks.
+         * Ignore accidental clicks / sub-threshold drags.
          */
-        if (width < 5 || height < 5) {
+        if (bounds.width < 5 || bounds.height < 5) {
             return;
         }
 
@@ -1197,28 +1205,36 @@ export default function CanvasEditor({
             return;
         }
 
+        const createPayload: CreateShapeRequest = {
+            canvasId,
+            type: currentTool,
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height,
+            rotation: 0,
+            style: {
+                fill: "#ffffff",
+                stroke: "#1f2937",
+                strokeWidth: 2,
+                opacity: 1,
+            },
+        };
+
+        if (currentTool === "polygon") {
+            createPayload.shapeConfig = { sides: 5 };
+        } else if (currentTool === "star") {
+            createPayload.shapeConfig = { points: 5, innerRadiusRatio: 0.5 };
+        }
+
         socketClientService
-            .createShape({
-                canvasId,
-                type: "rectangle",
-                x,
-                y,
-                width,
-                height,
-                rotation: 0,
-                style: {
-                    fill: "#ffffff",
-                    stroke: "#1f2937",
-                    strokeWidth: 2,
-                    opacity: 1,
-                },
-            })
+            .createShape(createPayload)
             .then((savedShape) => {
-                const rectangle =
+                const mappedShape =
                     mapShapeResponseToShape(
                         savedShape,
                     );
-                addShape(rectangle);
+                addShape(mappedShape);
             })
             .catch((err) => {
                 toast.error(
@@ -1469,30 +1485,115 @@ export default function CanvasEditor({
                             />
                         ) : null}
 
-                        {drawing ? (
-                            <Rect
-                                x={Math.min(
-                                    drawing.startX,
-                                    drawing.currentX,
-                                )}
-                                y={Math.min(
-                                    drawing.startY,
-                                    drawing.currentY,
-                                )}
-                                width={Math.abs(
-                                    drawing.currentX -
-                                    drawing.startX,
-                                )}
-                                height={Math.abs(
-                                    drawing.currentY -
-                                    drawing.startY,
-                                )}
-                                fill="#ffffff"
-                                stroke="#1f2937"
-                                strokeWidth={2}
-                                opacity={0.7}
-                            />
-                        ) : null}
+                        {drawing ? (() => {
+                            const bounds = normalizeShapeBounds(
+                                drawing.startX,
+                                drawing.startY,
+                                drawing.currentX,
+                                drawing.currentY
+                            );
+
+                            if (drawing.tool === "circle") {
+                                const geom = calculateCircleGeometry(bounds.width, bounds.height);
+                                return (
+                                    <Circle
+                                        x={bounds.x + geom.centerX}
+                                        y={bounds.y + geom.centerY}
+                                        radius={geom.radius}
+                                        fill="#ffffff"
+                                        stroke="#1f2937"
+                                        strokeWidth={2}
+                                        opacity={0.7}
+                                        listening={false}
+                                    />
+                                );
+                            }
+
+                            if (drawing.tool === "ellipse") {
+                                const geom = calculateEllipseGeometry(bounds.width, bounds.height);
+                                return (
+                                    <Ellipse
+                                        x={bounds.x + geom.centerX}
+                                        y={bounds.y + geom.centerY}
+                                        radiusX={geom.radiusX}
+                                        radiusY={geom.radiusY}
+                                        fill="#ffffff"
+                                        stroke="#1f2937"
+                                        strokeWidth={2}
+                                        opacity={0.7}
+                                        listening={false}
+                                    />
+                                );
+                            }
+
+                            if (drawing.tool === "triangle") {
+                                const points = calculateTrianglePoints(bounds.width, bounds.height);
+                                return (
+                                    <Group x={bounds.x} y={bounds.y} listening={false}>
+                                        <Line
+                                            points={points}
+                                            closed
+                                            fill="#ffffff"
+                                            stroke="#1f2937"
+                                            strokeWidth={2}
+                                            opacity={0.7}
+                                            lineCap="round"
+                                            lineJoin="round"
+                                        />
+                                    </Group>
+                                );
+                            }
+
+                            if (drawing.tool === "polygon") {
+                                const points = calculatePolygonPoints(bounds.width, bounds.height, 5);
+                                return (
+                                    <Group x={bounds.x} y={bounds.y} listening={false}>
+                                        <Line
+                                            points={points}
+                                            closed
+                                            fill="#ffffff"
+                                            stroke="#1f2937"
+                                            strokeWidth={2}
+                                            opacity={0.7}
+                                            lineCap="round"
+                                            lineJoin="round"
+                                        />
+                                    </Group>
+                                );
+                            }
+
+                            if (drawing.tool === "star") {
+                                const points = calculateStarPoints(bounds.width, bounds.height, 5, 0.5);
+                                return (
+                                    <Group x={bounds.x} y={bounds.y} listening={false}>
+                                        <Line
+                                            points={points}
+                                            closed
+                                            fill="#ffffff"
+                                            stroke="#1f2937"
+                                            strokeWidth={2}
+                                            opacity={0.7}
+                                            lineCap="round"
+                                            lineJoin="round"
+                                        />
+                                    </Group>
+                                );
+                            }
+
+                            return (
+                                <Rect
+                                    x={bounds.x}
+                                    y={bounds.y}
+                                    width={bounds.width}
+                                    height={bounds.height}
+                                    fill="#ffffff"
+                                    stroke="#1f2937"
+                                    strokeWidth={2}
+                                    opacity={0.7}
+                                    listening={false}
+                                />
+                            );
+                        })() : null}
 
                         {/* Transient local freehand drawing stroke preview */}
                         {freehandDrawing && freehandDrawing.points.length >= 2 ? (

@@ -6,6 +6,10 @@ import { HydratedDocument, Types } from "mongoose";
 export enum ShapeType {
   RECTANGLE = "RECTANGLE",
   CIRCLE = "CIRCLE",
+  ELLIPSE = "ELLIPSE",
+  TRIANGLE = "TRIANGLE",
+  POLYGON = "POLYGON",
+  STAR = "STAR",
   TEXT = "TEXT",
   LINE = "LINE",
   ARROW = "ARROW",
@@ -45,6 +49,12 @@ export type TextStyleData = {
   lineHeight?: number;
 };
 
+export type ShapeConfigData = {
+  sides?: number;
+  points?: number;
+  innerRadiusRatio?: number;
+};
+
 /**
  * Shape Entity
  */
@@ -70,6 +80,8 @@ export type Shape = {
   points?: number[];
 
   connector?: ShapeConnectorData;
+
+  shapeConfig?: ShapeConfigData;
 
   style: Record<string, unknown>;
 
@@ -104,6 +116,8 @@ export type CreateShapeData = {
   points?: number[];
 
   connector?: ShapeConnectorData;
+
+  shapeConfig?: ShapeConfigData;
 
   style?: Record<string, unknown>;
 

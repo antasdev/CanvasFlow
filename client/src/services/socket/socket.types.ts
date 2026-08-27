@@ -186,10 +186,28 @@ export type ShapeConnectorPayload = {
   routing?: "straight" | "orthogonal" | "curved";
 };
 
+export type ShapeConfigPayload = {
+  sides?: number;
+  points?: number;
+  innerRadiusRatio?: number;
+};
+
 export type CreateShapePayload = {
   canvasId: string;
   mutationId?: string;
-  type: "rectangle" | "text" | "sticky_note" | "freehand" | "line" | "arrow" | "connector";
+  type:
+    | "rectangle"
+    | "circle"
+    | "ellipse"
+    | "triangle"
+    | "polygon"
+    | "star"
+    | "text"
+    | "sticky_note"
+    | "freehand"
+    | "line"
+    | "arrow"
+    | "connector";
   x: number;
   y: number;
   width: number;
@@ -198,6 +216,7 @@ export type CreateShapePayload = {
   text?: string;
   points?: number[];
   connector?: ShapeConnectorPayload;
+  shapeConfig?: ShapeConfigPayload;
   style?: ShapeStylePayload;
 };
 
@@ -214,6 +233,7 @@ export type UpdateShapePayload = {
     text?: string;
     points?: number[];
     connector?: ShapeConnectorPayload;
+    shapeConfig?: ShapeConfigPayload;
     style?: ShapeStylePayload;
   };
 };

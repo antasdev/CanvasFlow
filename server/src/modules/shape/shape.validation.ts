@@ -7,7 +7,38 @@ const objectIdSchema = z
     "Invalid ID format."
   );
 
+export const MIN_FREEHAND_POINTS = 2;
 export const MAX_FREEHAND_POINTS = 2000;
+
+export const MIN_POLYGON_SIDES = 3;
+export const MAX_POLYGON_SIDES = 64;
+
+export const MIN_STAR_POINTS = 3;
+export const MAX_STAR_POINTS = 64;
+
+export const MIN_STAR_INNER_RADIUS_RATIO = 0.05;
+export const MAX_STAR_INNER_RADIUS_RATIO = 0.95;
+
+export const shapeConfigSchema = z.object({
+  sides: z
+    .number()
+    .int("Polygon sides must be an integer.")
+    .min(MIN_POLYGON_SIDES, `Polygon must have at least ${MIN_POLYGON_SIDES} sides.`)
+    .max(MAX_POLYGON_SIDES, `Polygon cannot exceed ${MAX_POLYGON_SIDES} sides.`)
+    .optional(),
+  points: z
+    .number()
+    .int("Star points must be an integer.")
+    .min(MIN_STAR_POINTS, `Star must have at least ${MIN_STAR_POINTS} points.`)
+    .max(MAX_STAR_POINTS, `Star cannot exceed ${MAX_STAR_POINTS} points.`)
+    .optional(),
+  innerRadiusRatio: z
+    .number()
+    .finite("Inner radius ratio must be a finite number.")
+    .min(MIN_STAR_INNER_RADIUS_RATIO, `Inner radius ratio must be at least ${MIN_STAR_INNER_RADIUS_RATIO}.`)
+    .max(MAX_STAR_INNER_RADIUS_RATIO, `Inner radius ratio cannot exceed ${MAX_STAR_INNER_RADIUS_RATIO}.`)
+    .optional(),
+});
 
 export const shapePointsSchema = z
   .array(
@@ -88,6 +119,16 @@ export const createShapeSchema = z
         .enum([
           "rectangle",
           "RECTANGLE",
+          "circle",
+          "CIRCLE",
+          "ellipse",
+          "ELLIPSE",
+          "triangle",
+          "TRIANGLE",
+          "polygon",
+          "POLYGON",
+          "star",
+          "STAR",
           "text",
           "TEXT",
           "sticky_note",
@@ -103,6 +144,11 @@ export const createShapeSchema = z
         ])
         .transform((val) => {
           const upper = val.toUpperCase();
+          if (upper === "CIRCLE") return "CIRCLE" as const;
+          if (upper === "ELLIPSE") return "ELLIPSE" as const;
+          if (upper === "TRIANGLE") return "TRIANGLE" as const;
+          if (upper === "POLYGON") return "POLYGON" as const;
+          if (upper === "STAR") return "STAR" as const;
           if (upper === "TEXT") return "TEXT" as const;
           if (upper === "STICKY_NOTE") return "STICKY_NOTE" as const;
           if (upper === "FREEHAND") return "FREEHAND" as const;
@@ -134,6 +180,8 @@ export const createShapeSchema = z
       points: shapePointsSchema.optional(),
 
       connector: shapeConnectorSchema.optional(),
+
+      shapeConfig: shapeConfigSchema.optional(),
 
       style: shapeStyleValidationSchema.optional(),
     }),
@@ -188,6 +236,8 @@ export const updateShapeValidationSchema =
       points: shapePointsSchema.optional(),
 
       connector: shapeConnectorSchema.optional(),
+
+      shapeConfig: shapeConfigSchema.optional(),
 
       style: shapeStyleValidationSchema.optional(),
     }),

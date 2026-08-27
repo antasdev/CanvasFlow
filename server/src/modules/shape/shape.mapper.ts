@@ -2,6 +2,11 @@ import { Shape, ShapeDocument, ShapeType, ShapeConnectorData } from "./shape.typ
 import {
   ShapeResponseDto,
   RectangleShapeResponseDto,
+  CircleShapeResponseDto,
+  EllipseShapeResponseDto,
+  TriangleShapeResponseDto,
+  PolygonShapeResponseDto,
+  StarShapeResponseDto,
   TextShapeResponseDto,
   StickyNoteShapeResponseDto,
   FreehandShapeResponseDto,
@@ -205,6 +210,103 @@ export class ShapeMapper {
         },
       };
       return connDto;
+    }
+
+    if (shapeType === "CIRCLE") {
+      const circleDto: CircleShapeResponseDto = {
+        ...base,
+        type: "circle",
+        style: {
+          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
+          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
+          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
+          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        },
+      };
+      return circleDto;
+    }
+
+    if (shapeType === "ELLIPSE") {
+      const ellipseDto: EllipseShapeResponseDto = {
+        ...base,
+        type: "ellipse",
+        style: {
+          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
+          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
+          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
+          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        },
+      };
+      return ellipseDto;
+    }
+
+    if (shapeType === "TRIANGLE") {
+      const triangleDto: TriangleShapeResponseDto = {
+        ...base,
+        type: "triangle",
+        style: {
+          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
+          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
+          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
+          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        },
+      };
+      return triangleDto;
+    }
+
+    if (shapeType === "POLYGON") {
+      const docWithConfig = doc as (ShapeDocument | Shape) & {
+        shapeConfig?: { sides?: number };
+      };
+      const sides =
+        typeof docWithConfig.shapeConfig?.sides === "number"
+          ? docWithConfig.shapeConfig.sides
+          : 5;
+
+      const polygonDto: PolygonShapeResponseDto = {
+        ...base,
+        type: "polygon",
+        shapeConfig: {
+          sides,
+        },
+        style: {
+          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
+          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
+          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
+          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        },
+      };
+      return polygonDto;
+    }
+
+    if (shapeType === "STAR") {
+      const docWithConfig = doc as (ShapeDocument | Shape) & {
+        shapeConfig?: { points?: number; innerRadiusRatio?: number };
+      };
+      const points =
+        typeof docWithConfig.shapeConfig?.points === "number"
+          ? docWithConfig.shapeConfig.points
+          : 5;
+      const innerRadiusRatio =
+        typeof docWithConfig.shapeConfig?.innerRadiusRatio === "number"
+          ? docWithConfig.shapeConfig.innerRadiusRatio
+          : 0.5;
+
+      const starDto: StarShapeResponseDto = {
+        ...base,
+        type: "star",
+        shapeConfig: {
+          points,
+          innerRadiusRatio,
+        },
+        style: {
+          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
+          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
+          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
+          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        },
+      };
+      return starDto;
     }
 
     // Default to rectangle

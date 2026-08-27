@@ -93,6 +93,21 @@ const shapeSchema = new Schema<Shape>(
       },
     },
 
+    shapeConfig: {
+      sides: {
+        type: Number,
+        required: false,
+      },
+      points: {
+        type: Number,
+        required: false,
+      },
+      innerRadiusRatio: {
+        type: Number,
+        required: false,
+      },
+    },
+
     style: {
       type: Schema.Types.Mixed,
       default: {},
