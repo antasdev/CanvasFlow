@@ -237,7 +237,19 @@ export class InteractionManager {
 
     interaction.updatedAt = new Date().toISOString();
     if (data !== undefined) {
-      interaction.data = { ...interaction.data, ...data };
+      if (Array.isArray(data.pointsBatch)) {
+        const existingPoints = Array.isArray(interaction.data?.points)
+          ? (interaction.data.points as number[])
+          : [];
+        const combinedPoints = [...existingPoints, ...(data.pointsBatch as number[])].slice(-4000);
+        interaction.data = {
+          ...interaction.data,
+          ...data,
+          points: combinedPoints,
+        };
+      } else {
+        interaction.data = { ...interaction.data, ...data };
+      }
     }
 
     return {

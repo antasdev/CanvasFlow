@@ -30,6 +30,7 @@ type ShapeTransformUpdate = {
   width: number;
   height: number;
   rotation: number;
+  points?: number[];
 };
 
 type RectangleTransformUpdate = ShapeTransformUpdate;

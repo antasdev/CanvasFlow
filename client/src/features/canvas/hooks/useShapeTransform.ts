@@ -15,6 +15,7 @@ type TransformValues = {
   width: number;
   height: number;
   rotation: number;
+  points?: number[];
 };
 
 export const useShapeTransform = ({
@@ -164,6 +165,7 @@ export const useShapeTransform = ({
             width: finalTransform.width,
             height: finalTransform.height,
             rotation: finalTransform.rotation,
+            points: finalTransform.points,
           });
         } catch (err) {
           toast.error(

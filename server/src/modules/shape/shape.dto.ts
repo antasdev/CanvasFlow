@@ -21,6 +21,9 @@ export type ShapeStyleDto = {
   textAlign?: "left" | "center" | "right";
   backgroundColor?: string;
   textColor?: string;
+
+  // Freehand styles / points fallback
+  points?: number[];
 };
 
 /**
@@ -86,12 +89,26 @@ export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
 };
 
 /**
+ * Freehand Shape Response DTO
+ */
+export type FreehandShapeResponseDto = BaseShapeResponseDto & {
+  type: "freehand";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
+/**
  * Discriminated Union of Shape API Response DTOs
  */
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
   | TextShapeResponseDto
-  | StickyNoteShapeResponseDto;
+  | StickyNoteShapeResponseDto
+  | FreehandShapeResponseDto;
 
 /**
  * Shape Creation DTO (Service/Internal)
@@ -104,6 +121,7 @@ export type CreateShapeDto = {
   width: number;
   height: number;
   rotation?: number;
+  points?: number[];
   style?: ShapeStyleDto;
 };
 
@@ -117,5 +135,6 @@ export type UpdateShapeDto = {
   width?: number;
   height?: number;
   rotation?: number;
+  points?: number[];
   style?: ShapeStyleDto;
 };

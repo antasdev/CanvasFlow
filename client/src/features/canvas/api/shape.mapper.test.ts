@@ -170,4 +170,80 @@ describe("Shape Mapper", () => {
     expect(rectangle.strokeWidth).toBe(2);
     expect(rectangle.opacity).toBe(1);
   });
+
+  it("maps ShapeResponseDto to FreehandShape correctly", () => {
+    const dto = {
+      id: "freehand-1",
+      canvasId: "canvas-1",
+      type: "freehand" as const,
+      x: 50,
+      y: 80,
+      width: 120,
+      height: 90,
+      rotation: 0,
+      zIndex: 3,
+      version: 1,
+      points: [0, 0, 40, 30, 120, 90],
+      style: {
+        stroke: "#3b82f6",
+        strokeWidth: 4,
+        opacity: 0.8,
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+
+    expect(shape).toEqual({
+      id: "freehand-1",
+      type: "freehand",
+      x: 50,
+      y: 80,
+      width: 120,
+      height: 90,
+      rotation: 0,
+      zIndex: 3,
+      version: 1,
+      points: [0, 0, 40, 30, 120, 90],
+      stroke: "#3b82f6",
+      strokeWidth: 4,
+      opacity: 0.8,
+    });
+  });
+
+  it("maps FreehandShape from style.points fallback if top-level points is omitted", () => {
+    const dto = {
+      id: "freehand-fallback",
+      canvasId: "canvas-1",
+      type: "freehand" as const,
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      rotation: 0,
+      zIndex: 1,
+      version: 1,
+      style: {
+        stroke: "#ef4444",
+        strokeWidth: 3,
+        opacity: 1,
+        points: [0, 0, 50, 25, 100, 50],
+      },
+      createdBy: "user-123",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto as unknown as ShapeResponseDto);
+
+    if (shape.type === "freehand") {
+      expect(shape.points).toEqual([0, 0, 50, 25, 100, 50]);
+      expect(shape.stroke).toBe("#ef4444");
+      expect(shape.strokeWidth).toBe(3);
+    } else {
+      throw new Error("Expected shape type to be freehand");
+    }
+  });
 });

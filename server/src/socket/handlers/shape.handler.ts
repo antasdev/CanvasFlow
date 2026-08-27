@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
-import { shapeService, ShapeMapper, ShapeType } from "@/modules/shape";
+import { shapeService, ShapeMapper, ShapeType, shapePointsSchema } from "@/modules/shape";
 import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
@@ -49,21 +49,47 @@ const shapeStyleSocketSchema = z.object({
   textAlign: z.enum(["left", "center", "right"]).optional(),
   backgroundColor: z.string().trim().optional(),
   textColor: z.string().trim().optional(),
+  points: shapePointsSchema.optional(),
 });
 
-const createShapeSocketSchema = z.object({
-  canvasId: objectIdSchema,
-  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
-  type: z
-    .enum(["rectangle", "RECTANGLE", "text", "TEXT", "sticky_note", "STICKY_NOTE"])
-    .default("rectangle"),
-  x: z.number().finite("x must be a finite number."),
-  y: z.number().finite("y must be a finite number."),
-  width: z.number().positive("Width must be greater than 0."),
-  height: z.number().positive("Height must be greater than 0."),
-  rotation: z.number().finite("Rotation must be a finite number.").optional(),
-  style: shapeStyleSocketSchema.optional(),
-});
+const createShapeSocketSchema = z
+  .object({
+    canvasId: objectIdSchema,
+    mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
+    type: z
+      .enum([
+        "rectangle",
+        "RECTANGLE",
+        "text",
+        "TEXT",
+        "sticky_note",
+        "STICKY_NOTE",
+        "freehand",
+        "FREEHAND",
+      ])
+      .default("rectangle"),
+    x: z.number().finite("x must be a finite number."),
+    y: z.number().finite("y must be a finite number."),
+    width: z.number().positive("Width must be greater than 0."),
+    height: z.number().positive("Height must be greater than 0."),
+    rotation: z.number().finite("Rotation must be a finite number.").optional(),
+    points: shapePointsSchema.optional(),
+    style: shapeStyleSocketSchema.optional(),
+  })
+  .refine(
+    (val) => {
+      const upper = val.type.toUpperCase();
+      if (upper === "FREEHAND") {
+        const pts = val.points ?? val.style?.points;
+        return Array.isArray(pts) && pts.length >= 2;
+      }
+      return true;
+    },
+    {
+      message: "Freehand shape must include points array with at least 1 point [x, y].",
+      path: ["points"],
+    }
+  );
 
 const updateShapeSocketSchema = z.object({
   shapeId: objectIdSchema,
@@ -75,6 +101,7 @@ const updateShapeSocketSchema = z.object({
     width: z.number().positive("Width must be greater than 0.").optional(),
     height: z.number().positive("Height must be greater than 0.").optional(),
     rotation: z.number().finite("Rotation must be a finite number.").optional(),
+    points: shapePointsSchema.optional(),
     style: shapeStyleSocketSchema.optional(),
   }),
 });
@@ -149,7 +176,11 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           shapeType = ShapeType.TEXT;
         } else if (rawType === "STICKY_NOTE") {
           shapeType = ShapeType.STICKY_NOTE;
+        } else if (rawType === "FREEHAND") {
+          shapeType = ShapeType.FREEHAND;
         }
+
+        const effectivePoints = parsed.data.points ?? parsed.data.style?.points;
 
         // 5. Authoritative persistence via ShapeService & atomic revision increment
         const { result, meta } = await collaborationVersionService.executeWithRevision(
@@ -167,6 +198,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
                 width: parsed.data.width,
                 height: parsed.data.height,
                 rotation: parsed.data.rotation ?? 0,
+                points: effectivePoints,
                 style: parsed.data.style,
               },
               session

@@ -12,6 +12,7 @@ const ACTIVITY_LABELS: Record<PresenceActivity, string> = {
   resizing: "Resizing shape",
   "editing-text": "Editing text",
   commenting: "Commenting",
+  drawing: "Drawing",
 };
 
 const MAX_VISIBLE_AVATARS = 4;

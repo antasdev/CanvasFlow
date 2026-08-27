@@ -4,6 +4,7 @@ import {
   RectangleShapeResponseDto,
   TextShapeResponseDto,
   StickyNoteShapeResponseDto,
+  FreehandShapeResponseDto,
 } from "./shape.dto";
 
 export class ShapeMapper {
@@ -88,6 +89,27 @@ export class ShapeMapper {
         },
       };
       return stickyDto;
+    }
+
+    if (shapeType === ShapeType.FREEHAND || shapeType === "FREEHAND") {
+      const docWithPoints = doc as ShapeDocument & { points?: number[] };
+      const rawPoints = Array.isArray(docWithPoints.points)
+        ? docWithPoints.points
+        : Array.isArray(style.points)
+        ? (style.points as number[])
+        : [];
+
+      const freehandDto: FreehandShapeResponseDto = {
+        ...base,
+        type: "freehand",
+        points: rawPoints,
+        style: {
+          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
+          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
+          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        },
+      };
+      return freehandDto;
     }
 
     // Default to rectangle

@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Group, Path, Rect, Text } from "react-konva";
+import { Group, Line, Path, Rect, Text } from "react-konva";
 import { usePresenceStore, useInteractionStore, useCanvasStore } from "../store";
 import { useAuthStore } from "@/store";
 import { getCursorColor, getCursorLabel } from "../utils/cursor.utils";
@@ -14,7 +14,43 @@ const INTERACTION_LABELS: Record<string, string> = {
   rotating: "rotating",
   "editing-text": "editing text",
   commenting: "commenting",
+  drawing: "drawing",
 };
+
+type RemoteDrawingPreviewProps = {
+  interaction: CollaborativeInteraction;
+};
+
+const RemoteDrawingPreview = memo(function RemoteDrawingPreview({
+  interaction,
+}: RemoteDrawingPreviewProps): React.JSX.Element | null {
+  const points = interaction.data?.points;
+  if (!Array.isArray(points) || points.length < 4) {
+    return null;
+  }
+
+  const stroke =
+    typeof interaction.data?.stroke === "string"
+      ? interaction.data.stroke
+      : "#1f2937";
+  const strokeWidth =
+    typeof interaction.data?.strokeWidth === "number"
+      ? interaction.data.strokeWidth
+      : 2;
+
+  return (
+    <Line
+      points={points as number[]}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      lineCap="round"
+      lineJoin="round"
+      tension={0.2}
+      opacity={0.85}
+      listening={false}
+    />
+  );
+});
 
 type RemoteCursorItemProps = {
   cursor: PresenceCursor;
@@ -155,9 +191,29 @@ export const RemoteCursorLayer = memo(function RemoteCursorLayer(): React.JSX.El
 
   return (
     <Group listening={false}>
+      {/* Remote Active Drawing Previews */}
+      {interactions.map((interaction: CollaborativeInteraction) => {
+        if (
+          interaction.userId === currentAuthUser?.id ||
+          interaction.type !== "drawing"
+        ) {
+          return null;
+        }
+
+        return (
+          <RemoteDrawingPreview
+            key={interaction.interactionId}
+            interaction={interaction}
+          />
+        );
+      })}
+
       {/* Remote Shape Manipulation Highlights */}
       {interactions.map((interaction: CollaborativeInteraction) => {
-        if (interaction.userId === currentAuthUser?.id) {
+        if (
+          interaction.userId === currentAuthUser?.id ||
+          interaction.type === "drawing"
+        ) {
           return null;
         }
 

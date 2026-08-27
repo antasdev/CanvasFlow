@@ -74,7 +74,7 @@ export class FrontendInteractionManager {
           conflict: {
             code: "INTERACTION_CONFLICT",
             resourceType: (result.error.resourceType as any) ?? "shape",
-            resourceId: result.error.resourceId ?? targets[0].id,
+            resourceId: result.error.resourceId ?? targets[0]?.id ?? "",
             ownerUserId: result.error.ownerUserId ?? "unknown",
             interactionType: (result.error.interactionType as any) ?? type,
           },

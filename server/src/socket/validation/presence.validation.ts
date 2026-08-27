@@ -33,9 +33,10 @@ export const presenceActivitySchema = z.object({
     "resizing",
     "editing-text",
     "commenting",
+    "drawing",
   ] as const, {
     message:
-      "Invalid activity. Supported: idle, cursor, selecting, moving, resizing, editing-text, commenting.",
+      "Invalid activity. Supported: idle, cursor, selecting, moving, resizing, editing-text, commenting, drawing.",
   }),
 });
 

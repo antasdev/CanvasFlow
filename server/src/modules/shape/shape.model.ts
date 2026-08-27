@@ -50,6 +50,11 @@ const shapeSchema = new Schema<Shape>(
       required: true,
     },
 
+    points: {
+      type: [Number],
+      required: false,
+    },
+
     style: {
       type: Schema.Types.Mixed,
       default: {},

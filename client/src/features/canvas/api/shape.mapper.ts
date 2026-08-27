@@ -3,6 +3,7 @@ import type {
   RectangleShape,
   TextShape,
   StickyNoteShape,
+  FreehandShape,
 } from "../types";
 import type { ShapeResponseDto } from "./shape.api";
 
@@ -10,6 +11,32 @@ import type { ShapeResponseDto } from "./shape.api";
  * Maps Shape API/Socket response DTO to frontend Shape discriminated union.
  */
 export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
+  if (dto.type === "freehand") {
+    const legacyStyle = dto.style as { points?: number[] };
+    const rawPoints = Array.isArray(dto.points)
+      ? dto.points
+      : Array.isArray(legacyStyle?.points)
+      ? legacyStyle.points
+      : [];
+
+    const freehandShape: FreehandShape = {
+      id: dto.id,
+      type: "freehand",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: dto.style?.opacity ?? 1,
+      points: rawPoints,
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+    };
+    return freehandShape;
+  }
+
   if (dto.type === "text") {
     const textShape: TextShape = {
       id: dto.id,

@@ -611,4 +611,106 @@ describe("canvas store history & remote synchronization", () => {
         expect(useCanvasStore.getState().past).toHaveLength(1);
         expect(useCanvasStore.getState().future).toHaveLength(0);
     });
+
+    it("undoes and redoes freehand stroke creation cleanly with ONE history entry", () => {
+        const freehandShape = {
+            id: "freehand-1",
+            type: "freehand" as const,
+            x: 100,
+            y: 100,
+            width: 80,
+            height: 60,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            version: 1,
+            points: [0, 0, 40, 30, 80, 60],
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().addShape(freehandShape);
+
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().past).toHaveLength(1);
+
+        // Undo removes the entire stroke
+        useCanvasStore.getState().undo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(0);
+        expect(useCanvasStore.getState().future).toHaveLength(1);
+
+        // Redo restores the entire stroke
+        useCanvasStore.getState().redo();
+        expect(useCanvasStore.getState().shapes).toHaveLength(1);
+        expect(useCanvasStore.getState().shapes[0].id).toBe("freehand-1");
+    });
+
+    it("moves freehand shape changing only x and y while leaving points array completely untouched", () => {
+        const initialPoints = [0, 0, 20, 10, 50, 30];
+        const freehandShape = {
+            id: "freehand-move",
+            type: "freehand" as const,
+            x: 100,
+            y: 150,
+            width: 50,
+            height: 30,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            version: 1,
+            points: initialPoints,
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().addShape(freehandShape);
+        useCanvasStore.getState().setSelectedShapeIds(["freehand-move"]);
+
+        // Move by deltaX: 40, deltaY: 60
+        useCanvasStore.getState().moveSelectedShapes(40, 60);
+
+        const movedShape = useCanvasStore.getState().shapes[0] as typeof freehandShape;
+        expect(movedShape.x).toBe(140);
+        expect(movedShape.y).toBe(210);
+        // Points array MUST NOT be rewritten during translation!
+        expect(movedShape.points).toEqual(initialPoints);
+    });
+
+    it("updates freehand transform including rescaled points on updateShapeTransform", () => {
+        const freehandShape = {
+            id: "freehand-transform",
+            type: "freehand" as const,
+            x: 100,
+            y: 100,
+            width: 50,
+            height: 50,
+            rotation: 0,
+            opacity: 1,
+            zIndex: 1,
+            version: 1,
+            points: [0, 0, 25, 25, 50, 50],
+            stroke: "#1f2937",
+            strokeWidth: 2,
+        };
+
+        useCanvasStore.getState().addShape(freehandShape);
+
+        const rescaledPoints = [0, 0, 50, 50, 100, 100];
+        useCanvasStore.getState().updateShapeTransform("freehand-transform", {
+            x: 120,
+            y: 130,
+            width: 100,
+            height: 100,
+            rotation: 45,
+            points: rescaledPoints,
+        });
+
+        const transformedShape = useCanvasStore.getState().shapes[0] as typeof freehandShape;
+        expect(transformedShape.x).toBe(120);
+        expect(transformedShape.y).toBe(130);
+        expect(transformedShape.width).toBe(100);
+        expect(transformedShape.height).toBe(100);
+        expect(transformedShape.rotation).toBe(45);
+        expect(transformedShape.points).toEqual(rescaledPoints);
+    });
 });

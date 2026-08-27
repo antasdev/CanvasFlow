@@ -14,7 +14,8 @@ export type InteractionType =
   | "resizing"
   | "rotating"
   | "editing-text"
-  | "commenting";
+  | "commenting"
+  | "drawing";
 
 export const INTERACTION_TYPES: readonly InteractionType[] = [
   "selecting",
@@ -23,6 +24,7 @@ export const INTERACTION_TYPES: readonly InteractionType[] = [
   "rotating",
   "editing-text",
   "commenting",
+  "drawing",
 ] as const;
 
 export type InteractionTargetType = "shape" | "comment";

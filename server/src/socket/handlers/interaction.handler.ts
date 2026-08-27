@@ -1,4 +1,6 @@
+import { Types } from "mongoose";
 import { Server } from "socket.io";
+import { boardService } from "@/modules/board";
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
 import { interactionManager } from "../presence/interaction.manager";
@@ -32,7 +34,7 @@ export function registerInteractionHandlers(
   // -------------------------------------------------------------
   // interaction:start
   // -------------------------------------------------------------
-  socket.on("interaction:start", (payload: InteractionStartPayload, callback) => {
+  socket.on("interaction:start", async (payload: InteractionStartPayload, callback) => {
     try {
       const parsed = interactionStartSchema.safeParse(payload);
       if (!parsed.success) {
@@ -56,6 +58,25 @@ export function registerInteractionHandlers(
           },
         });
         return;
+      }
+
+      // Drawing interaction authorization guard: Viewers cannot initiate drawing
+      if (parsed.data.type === "drawing") {
+        try {
+          await boardService.authorizeCanvasMutation(
+            new Types.ObjectId(parsed.data.boardId),
+            socket.data.user.userId
+          );
+        } catch {
+          callback?.({
+            success: false,
+            error: {
+              code: "FORBIDDEN",
+              message: "Viewers are not permitted to draw on this canvas.",
+            },
+          });
+          return;
+        }
       }
 
       const userId = socket.data.user.userId.toString();

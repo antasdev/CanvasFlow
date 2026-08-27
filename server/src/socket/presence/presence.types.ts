@@ -13,7 +13,8 @@ export type PresenceActivity =
   | "moving"
   | "resizing"
   | "editing-text"
-  | "commenting";
+  | "commenting"
+  | "drawing";
 
 export const PRESENCE_ACTIVITIES: readonly PresenceActivity[] = [
   "idle",
@@ -23,6 +24,7 @@ export const PRESENCE_ACTIVITIES: readonly PresenceActivity[] = [
   "resizing",
   "editing-text",
   "commenting",
+  "drawing",
 ] as const;
 
 /**

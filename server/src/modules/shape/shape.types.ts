@@ -11,6 +11,7 @@ export enum ShapeType {
   ARROW = "ARROW",
   IMAGE = "IMAGE",
   STICKY_NOTE = "STICKY_NOTE",
+  FREEHAND = "FREEHAND",
 }
 
 /**
@@ -32,6 +33,8 @@ export type Shape = {
   rotation: number;
 
   zIndex: number;
+
+  points?: number[];
 
   style: Record<string, unknown>;
 
@@ -60,6 +63,8 @@ export type CreateShapeData = {
   rotation?: number;
 
   zIndex: number;
+
+  points?: number[];
 
   style?: Record<string, unknown>;
 

@@ -107,13 +107,25 @@ export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
   };
 };
 
+export type FreehandShapeResponseDto = BaseShapeResponseDto & {
+  type: "freehand";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+    points?: number[];
+  };
+};
+
 /**
  * Shape response data transfer object matching API & socket broadcasts.
  */
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
   | TextShapeResponseDto
-  | StickyNoteShapeResponseDto;
+  | StickyNoteShapeResponseDto
+  | FreehandShapeResponseDto;
 
 /**
  * Board Room Lifecycle Payloads
@@ -149,17 +161,19 @@ export type ShapeStylePayload = {
   textAlign?: "left" | "center" | "right";
   backgroundColor?: string;
   textColor?: string;
+  points?: number[];
 };
 
 export type CreateShapePayload = {
   canvasId: string;
   mutationId?: string;
-  type: "rectangle" | "text" | "sticky_note";
+  type: "rectangle" | "text" | "sticky_note" | "freehand";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
+  points?: number[];
   style?: ShapeStylePayload;
 };
 
@@ -173,6 +187,7 @@ export type UpdateShapePayload = {
     width?: number;
     height?: number;
     rotation?: number;
+    points?: number[];
     style?: ShapeStylePayload;
   };
 };
@@ -232,7 +247,8 @@ export type PresenceActivity =
   | "moving"
   | "resizing"
   | "editing-text"
-  | "commenting";
+  | "commenting"
+  | "drawing";
 
 export const PRESENCE_ACTIVITIES: readonly PresenceActivity[] = [
   "idle",
@@ -242,6 +258,7 @@ export const PRESENCE_ACTIVITIES: readonly PresenceActivity[] = [
   "resizing",
   "editing-text",
   "commenting",
+  "drawing",
 ] as const;
 
 /**
@@ -757,7 +774,8 @@ export type InteractionType =
   | "resizing"
   | "rotating"
   | "editing-text"
-  | "commenting";
+  | "commenting"
+  | "drawing";
 
 export type InteractionTargetType = "shape" | "comment";
 

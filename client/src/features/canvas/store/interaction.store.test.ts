@@ -155,4 +155,39 @@ describe("Interaction Store (Slice 16) Unit Tests", () => {
     expect(canvasStoreAfter.future.length).toBe(futureLengthBefore);
     expect(Object.keys(useMutationStore.getState().mutations).length).toBe(pendingMutationsBefore);
   });
+
+  it("accumulates incremental pointsBatch updates for drawing interactions", () => {
+    useInteractionStore.getState().addInteraction({
+      interactionId: "int-draw",
+      socketId: "sock-draw",
+      userId: "user-draw",
+      boardId: "board-1",
+      type: "drawing",
+      targets: [],
+      data: {
+        points: [0, 0, 1, 1],
+        stroke: "#1f2937",
+        strokeWidth: 2,
+      },
+      startedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Send batch2: [2, 2, 3, 3]
+    useInteractionStore.getState().updateInteraction("int-draw", {
+      data: {
+        pointsBatch: [2, 2, 3, 3],
+      },
+    });
+
+    // Send batch3: [4, 4, 5, 5]
+    useInteractionStore.getState().updateInteraction("int-draw", {
+      data: {
+        pointsBatch: [4, 4, 5, 5],
+      },
+    });
+
+    const interaction = useInteractionStore.getState().interactions["int-draw"];
+    expect(interaction?.data?.points).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5]);
+  });
 });

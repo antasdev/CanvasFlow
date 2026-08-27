@@ -15,25 +15,38 @@ export const interactionTargetSchema = z.object({
   id: objectIdSchema,
 });
 
-export const interactionStartSchema = z.object({
-  boardId: objectIdSchema,
-  type: z.enum([
-    "selecting",
-    "moving",
-    "resizing",
-    "rotating",
-    "editing-text",
-    "commenting",
-  ] as const, {
-    message:
-      "Invalid interaction type. Supported: selecting, moving, resizing, rotating, editing-text, commenting.",
-  }),
-  targets: z
-    .array(interactionTargetSchema)
-    .min(1, "At least one target is required.")
-    .max(50, "Maximum of 50 targets allowed per interaction."),
-  data: z.record(z.string(), z.unknown()).optional(),
-});
+export const interactionStartSchema = z
+  .object({
+    boardId: objectIdSchema,
+    type: z.enum([
+      "selecting",
+      "moving",
+      "resizing",
+      "rotating",
+      "editing-text",
+      "commenting",
+      "drawing",
+    ] as const, {
+      message:
+        "Invalid interaction type. Supported: selecting, moving, resizing, rotating, editing-text, commenting, drawing.",
+    }),
+    targets: z
+      .array(interactionTargetSchema)
+      .max(50, "Maximum of 50 targets allowed per interaction."),
+    data: z.record(z.string(), z.unknown()).optional(),
+  })
+  .refine(
+    (val) => {
+      if (val.type !== "drawing") {
+        return val.targets.length >= 1;
+      }
+      return true;
+    },
+    {
+      message: "At least one target is required for this interaction type.",
+      path: ["targets"],
+    }
+  );
 
 export const interactionUpdateSchema = z.object({
   boardId: objectIdSchema,

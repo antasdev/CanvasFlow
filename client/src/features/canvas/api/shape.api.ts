@@ -52,10 +52,21 @@ export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
   };
 };
 
+export type FreehandShapeResponseDto = BaseShapeResponseDto & {
+  type: "freehand";
+  points: number[];
+  style: {
+    stroke: string;
+    strokeWidth: number;
+    opacity: number;
+  };
+};
+
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
   | TextShapeResponseDto
-  | StickyNoteShapeResponseDto;
+  | StickyNoteShapeResponseDto
+  | FreehandShapeResponseDto;
 
 export type ShapeStyleRequest = {
   fill?: string;
@@ -70,16 +81,18 @@ export type ShapeStyleRequest = {
   textAlign?: "left" | "center" | "right";
   backgroundColor?: string;
   textColor?: string;
+  points?: number[];
 };
 
 export type CreateShapeRequest = {
   canvasId: string;
-  type: "rectangle" | "text" | "sticky_note";
+  type: "rectangle" | "text" | "sticky_note" | "freehand";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
+  points?: number[];
   style?: ShapeStyleRequest;
 };
 
@@ -89,6 +102,7 @@ export type UpdateShapeRequest = {
   width?: number;
   height?: number;
   rotation?: number;
+  points?: number[];
   style?: ShapeStyleRequest;
 };
 

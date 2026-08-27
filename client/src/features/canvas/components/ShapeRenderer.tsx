@@ -3,6 +3,7 @@ import type { Shape, TextShape, StickyNoteShape } from "../types";
 import RectangleNode from "./RectangleNode";
 import TextNode from "./TextNode";
 import StickyNoteNode from "./StickyNoteNode";
+import FreehandNode from "./FreehandNode";
 
 type ShapeRendererProps = {
   shape: Shape;
@@ -18,6 +19,15 @@ export default function ShapeRenderer({
   onStartEditing,
 }: ShapeRendererProps): React.JSX.Element | null {
   switch (shape.type) {
+    case "freehand":
+      return (
+        <FreehandNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+        />
+      );
+
     case "rectangle":
       return (
         <RectangleNode

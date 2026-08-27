@@ -139,17 +139,19 @@ export type ShapeStylePayload = {
   textAlign?: "left" | "center" | "right";
   backgroundColor?: string;
   textColor?: string;
+  points?: number[];
 };
 
 export type CreateShapePayload = {
   canvasId: string;
   mutationId?: string;
-  type: "rectangle" | "text" | "sticky_note";
+  type: "rectangle" | "text" | "sticky_note" | "freehand";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
+  points?: number[];
   style?: ShapeStylePayload;
 };
 
@@ -163,6 +165,7 @@ export type UpdateShapePayload = {
     width?: number;
     height?: number;
     rotation?: number;
+    points?: number[];
     style?: ShapeStylePayload;
   };
 };

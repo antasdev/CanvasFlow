@@ -1552,3 +1552,219 @@ Looking up an exclusive owner, registering a lock, or releasing all socket locks
 2. **Redis Pub/Sub**: Broadcast `interaction:start`, `interaction:update`, and `interaction:end` across server nodes using the Socket.IO Redis Adapter.
 3. **Heartbeat Refresh**: The active socket extends the Redis key TTL via `PEXPIRE` during `interaction:update`.
 4. **Disconnect Sweeper**: On socket disconnect, the local node deletes its owned Redis keys and publishes `interaction:end`.
+
+---
+
+## 29. Slice 17 — Advanced Canvas Tools: Production-Quality Collaborative Freehand Drawing Architecture
+
+### 29.1 Overview & System Objectives
+Slice 17 integrates production-grade, collaborative freehand drawing into CanvasFlow's unified distributed architecture. Unlike trivial client-only canvas drawing widgets, CanvasFlow's freehand engine is designed for high-concurrency multi-user whiteboards with strict persistence guarantees, OCC conflict protection, zero bandwidth waste, and rigorous RBAC:
+- **Geometry Model**: `points` is treated strictly as **Shape Geometry** (flat coordinate array `[x0, y0, x1, y1, ...]`), normalized to the shape's local bounding box `(x, y)`. Visual styling (`stroke`, `strokeWidth`, `opacity`) remains cleanly separated.
+- **Ramer-Douglas-Peucker (RDP) Simplification**: Raw mouse/pointer strokes containing redundant points along linear segments or below radial jitter thresholds are simplified before durable persistence, substantially reducing database payload and rendering complexity while preserving perceptual contour.
+- **Non-blocking Ephemeral Streaming**: During active gesture drawing (`pointerdown` -> `pointermove`), strokes are transmitted at ~30 FPS as incremental point batches (`pointsBatch`) via the Slice 16 Ephemeral Interaction layer.
+- **Absolute Durable Purity**: While drawing, **ZERO** MongoDB writes occur, `collaborationRevision` remains strictly unchanged, `Shape.version` is untouched, **ZERO** `MutationRecord` entries are generated, and local undo history is pristine. Only the final stroke release commits a durable shape.
+- **Scale Normalization on Transform**: Freehand strokes integrate seamlessly with Konva's `<Transformer>`, normalizing scale factors on transform end and recalculating local coordinates so strokes can be rotated, scaled, and translated identically to primitive shapes.
+
+```text
+[POINTER DOWN]
+      │
+      ▼
+Local Component State: `freehandDrawing`
+Emit `interaction:start("drawing", [], { points, stroke, strokeWidth })`
+      │
+      ▼ (Pointer Move ~30 FPS)
+Local Append with Jitter Filter (>= 1px)
+Emit `interaction:update(interactionId, { pointsBatch, stroke, strokeWidth })`
+      │
+      ▼ [POINTER UP]
+End Ephemeral Interaction `interaction:end(interactionId)`
+RDP Simplification + Bounding Box Calculation + Coordinate Normalization
+      │
+      ▼
+Durable Commit: `socketClientService.createShape({ type: "freehand", x, y, width, height, points, style })`
+      │
+      ▼
+Server Authorizes RBAC -> Creates MongoDB Shape -> Increments Revision -> Broadcasts `shape:created`
+      │
+      ▼
+Client Commits to Zustand `useCanvasStore.shapes` (Exactly 1 Undo History Entry)
+```
+
+---
+
+### 29.2 Geometry vs. Visual Style Separation
+A major architectural antipattern in naive canvas applications is dumping coordinate points into a `style` dictionary (e.g. `style.points`). CanvasFlow strictly separates:
+1. **Root Geometry**:
+   - `x`, `y`: Top-left world coordinate of the stroke's axis-aligned bounding box (AABB).
+   - `width`, `height`: Span of the bounding box including stroke thickness padding.
+   - `rotation`: Angle in degrees.
+   - `points`: Flat `number[]` array of local coordinates `[lx0, ly0, lx1, ly1, ...]` relative to `(x, y)`.
+2. **Visual Style**:
+   - `stroke`: Stroke color hex string (`#1f2937`).
+   - `strokeWidth`: Stroke thickness integer (`2` - `32`).
+   - `opacity`: Alpha channel (`0.0` - `1.0`).
+
+#### Translation Invariant
+Because points are normalized to the local origin `(0, 0)`:
+$$\text{localPoint}_i = (\text{worldPoint}_i.x - \text{minX}, \text{worldPoint}_i.y - \text{minY})$$
+Dragging or translating a freehand stroke modifies **only** the root `x` and `y` coordinates. The internal `points` array remains completely immutable during translation.
+
+#### Scale Normalization Invariant
+When a user rescales a freehand stroke with the Konva Transformer:
+1. Konva applies temporary scale transforms: `scaleX != 1` or `scaleY != 1`.
+2. On `onTransformEnd`:
+   - The node's scale factors are captured: $s_x = \text{node.scaleX()}$, $s_y = \text{node.scaleY()}$.
+   - The node's scale is immediately reset to $1$: `node.scaleX(1); node.scaleY(1);`.
+   - Points are multiplied by the scale factors: $lx'_i = lx_i \cdot s_x, ly'_i = ly_i \cdot s_y$.
+   - The bounding box is recomputed, and points are re-normalized to local coordinates relative to the new origin:
+     $$x_{\text{final}} = \text{node.x()} + \text{bbox.x}, \quad y_{\text{final}} = \text{node.y()} + \text{bbox.y}$$
+   - The final normalized points and bounding box dimensions are committed in a single authoritative `shape:update` socket event.
+
+---
+
+### 29.3 Network Efficiency: Incremental Point Streaming
+In naive real-time collaborative drawing implementations, clients emit the entire accumulated points array on every `pointermove`. For a stroke with $N$ points sampled over 3 seconds:
+$$\text{Bandwidth Naive} = \sum_{k=1}^N k \cdot \text{sizeOf}(\text{Point}) = O(N^2)$$
+For a 500-point stroke, this sends $125,250$ coordinate points over the wire!
+
+CanvasFlow implements **Incremental Batch Streaming**:
+1. While drawing, local moves push coordinates into an `unstreamedPointsRef` buffer.
+2. A throttled interval (~33ms) drains the buffer and transmits only the newly collected points (`pointsBatch`):
+   $$\text{Bandwidth CanvasFlow} = \sum_{k=1}^M \text{batch}_k = O(N)$$
+3. Remote collaborator clients receive `interaction:update` and append `pointsBatch` to the peer's transient drawing preview.
+4. The server's `InteractionManager` accumulates batches in memory so newly joined clients or recovering tabs immediately render the in-progress stroke via `interaction:snapshot`.
+
+---
+
+### 29.4 Dual-Layer Runtime RBAC Enforcement
+CanvasFlow guarantees that unauthorized users or users whose permissions are revoked mid-session can never corrupt board data:
+1. **Layer 1 (Ephemeral Interaction Start)**:
+   When `interaction:start` is called with `type: "drawing"`, `interaction.handler.ts` invokes `boardService.authorizeCanvasMutation(boardId, userId)`. Sockets with `VIEWER` roles are immediately rejected with `403 FORBIDDEN`, suppressing transient stroke broadcasts.
+2. **Layer 2 (Durable Shape Commit)**:
+   When the user releases the pointer and emits `shape:create`, `shape.handler.ts` executes a fresh, authoritative database permission check. If an EDITOR was downgraded to a VIEWER while drawing the stroke:
+   - `shape:create` is rejected with `403 FORBIDDEN`.
+   - Zero shapes are inserted into MongoDB.
+   - `collaborationRevision` is not incremented.
+   - Zero `MutationRecord` entries are generated.
+   - The client resets its local transient stroke, keeping Zustand state pristine.
+
+---
+
+## 30. Senior Engineering Interview Q&A: Collaborative Freehand Drawing Architecture
+
+### Q1: Why must freehand drawing points be stored as geometry at the root level rather than inside the style object?
+**Answer:**
+1. **Domain Integrity**: Coordinates represent fundamental shape geometry (spatial position, dimensions, vertices), whereas `style` defines rendering appearance (stroke color, fill, opacity, line caps).
+2. **Transform Pipeline Consistency**: CanvasFlow's transformation system (`useShapeTransform`, `TransformerNode`) operates on geometric properties (`x`, `y`, `width`, `height`, `rotation`, `points`). Mixing geometric vertices into style creates leaky abstractions where visual style mappers must understand spatial projection.
+3. **Database Indexing & Querying**: If spatial bounding boxes or intersection indexes (R-Tree / 2D spatial indices) are later introduced, geometry must reside at known schema paths, not buried within free-form style JSON blobs.
+
+### Q2: Explain the Ephemeral/Durable Invariant and why it is critical for whiteboard scalability.
+**Answer:**
+Active pointer movement is transient user telemetry, not durable canvas state.
+- If every pointer move updated MongoDB or incremented `collaborationRevision`:
+  1. A single 2-second pencil stroke would trigger 60 database writes and 60 revision increments.
+  2. Every peer client would experience 60 OCC version updates and potential reconciliation thrashing.
+  3. Every dropped TCP packet would trigger a false revision desynchronization recovery.
+  4. The user's undo history would contain 60 micro-steps instead of one unified stroke.
+- By isolating drawing to the ephemeral interaction layer and committing only on pointer release, CanvasFlow achieves 60 FPS fluidity with exactly **ONE** atomic database transaction and **ONE** clean undo stack entry.
+
+### Q3: Why does CanvasFlow normalize points to local coordinates `[lx, ly]` relative to the bounding box rather than storing absolute world coordinates?
+**Answer:**
+1. **$O(1)$ Translation**: When a user drags a 1,000-point freehand stroke across the board, storing absolute coordinates would require re-calculating and saving all 1,000 coordinates on drag end ($O(N)$ payload and CPU work). With local normalization, dragging updates only root `x` and `y` ($O(1)$).
+2. **Transformer Uniformity**: Konva's `<Transformer>` scales and rotates nodes based on their origin `(x, y)`. Local coordinates allow standard Konva scale normalization and matrix multiplication without offset drift.
+3. **Storage Compression**: Local coordinates are small relative offsets (e.g. `[0, 0, 12, 18, 45, 60]`), which serialize into substantially fewer bytes in JSON/BSON than absolute world coordinates (e.g. `[19482.4, 48291.8, 19494.4, 48309.8]`).
+
+### Q4: How does the Ramer-Douglas-Peucker (RDP) algorithm work, and why is radial distance pre-filtering applied before RDP?
+**Answer:**
+- **RDP Algorithm**: Given a curve composed of line segments, RDP recursively identifies the point with the maximum perpendicular distance from the line joining the curve's endpoints. If this distance exceeds a threshold $\epsilon$ (tolerance), the point is retained and the algorithm recurses on both sub-curves; otherwise, intermediate points are discarded.
+- **Radial Distance Pre-Filtering**: Pointer events fire at up to 120–240 Hz on high-refresh mice/tablets, generating dense clusters of points separated by $< 1$ pixel. Running RDP directly ($O(N \log N)$ average, $O(N^2)$ worst-case) on thousands of points causes frame drops. Radial filtering discards points closer than a minimum distance threshold ($d < 1.0\text{px}$) in a single $O(N)$ pass, eliminating up to 60% of points before RDP runs.
+
+### Q5: How does CanvasFlow prevent the $O(N^2)$ bandwidth trap during collaborative freehand streaming?
+**Answer:**
+In naive implementations, clients emit the entire accumulated stroke array `points` on every `pointermove`. If a stroke has $N$ points, the total coordinates transmitted is $\sum_{k=1}^N k = \frac{N(N+1)}{2} = O(N^2)$.
+- CanvasFlow implements **Incremental Batching**:
+  1. The client buffers points into an `unstreamedPointsRef` array.
+  2. Every ~33ms (~30 FPS), the buffer is flushed and transmitted as `pointsBatch` via `interaction:update`.
+  3. Total bandwidth is strictly $O(N)$ — each coordinate pair is transmitted across the WebSocket connection exactly once.
+
+### Q6: What happens if a collaborator disconnects or experiences a network partition while drawing?
+**Answer:**
+1. The ephemeral interaction is tied to the physical socket session ID (`socket.id`).
+2. When the socket disconnects, the server's `SocketServer` catches the disconnect event and calls `interactionManager.removeSocketInteractions(socket.id)`.
+3. The server broadcasts `interaction:end` to all remaining room members.
+4. Peers immediately discard the transient drawing preview from their `RemoteCursorLayer`.
+5. Because zero database records or revision increments occurred, the canvas remains 100% pristine with zero orphaned fragments.
+
+### Q7: How does CanvasFlow handle runtime RBAC downgrades (e.g., EDITOR -> VIEWER) during an active drawing stroke?
+**Answer:**
+CanvasFlow enforces **Dual-Layer Authorization**:
+1. Sockets cannot bypass the REST/Socket authorization boundaries. When the user begins drawing, `interaction:start` verifies the user has `EDITOR`, `ADMIN`, or `OWNER` permissions.
+2. If an administrator downgrades the user to `VIEWER` while their mouse is pressed down:
+   - When the user releases the pointer, the client emits `shape:create`.
+   - The server handler executes `boardService.authorizeCanvasMutation(boardId, userId)`.
+   - The check detects the updated `VIEWER` role in MongoDB and rejects the commit with `403 FORBIDDEN`.
+   - Zero database mutations occur, and the client displays a toast notifying the user that their permissions were revoked.
+
+### Q8: How does the Konva Transformer normalize scale for freehand strokes on `onTransformEnd`?
+**Answer:**
+Konva's `<Transformer>` applies 2D scaling to the visual node rather than altering its geometry, resulting in `scaleX != 1` or `scaleY != 1`. If left un-normalized, subsequent stroke width or bounding box calculations become distorted.
+- In `FreehandNode.tsx`:
+  1. Reads `scaleX = node.scaleX()`, `scaleY = node.scaleY()`.
+  2. Resets the node's internal scale to unity: `node.scaleX(1); node.scaleY(1);`.
+  3. Rescales each local coordinate: $lx'_i = lx_i \cdot \text{scaleX}$, $ly'_i = ly_i \cdot \text{scaleY}$.
+  4. Recalculates the bounding box using `computeBoundingBox(rescaledPoints)`.
+  5. Re-normalizes points so the top-left vertex aligns with `(0, 0)`:
+     $$x_{\text{final}} = \text{node.x()} + \text{bbox.x}, \quad y_{\text{final}} = \text{node.y()} + \text{bbox.y}$$
+  6. Emits `shape:update` with the updated bounding box, new local `points`, and the expected OCC version.
+
+### Q9: Why does board state recovery (Slice 10) retrieve freehand strokes from MongoDB rather than replaying socket events?
+**Answer:**
+Event replay architectures require maintaining an append-only event log (event sourcing) and replaying thousands of socket packets upon reconnection, which is prone to race conditions, missed ACKs, and unbounded memory consumption.
+- CanvasFlow uses **State-Based REST Hydration**:
+  1. MongoDB is the single authoritative source of truth.
+  2. When a client reconnects, it calls `GET /api/v1/shapes/canvas/:canvasId`.
+  3. The response contains fully materialized, canonical shape DTOs, including freehand strokes with simplified points.
+  4. The client replaces its local shapes atomically without replaying transient gestures, guaranteeing 100% convergence.
+
+### Q10: How does the client ensure that drawing a stroke produces exactly ONE entry in the undo/redo history?
+**Answer:**
+1. While drawing (`pointerdown` -> `pointermove`), all coordinates are stored in component-local React state (`useState<FreehandDrawingState>`).
+2. Zustand's durable `shapes` array and `past` history stack are **never touched** during active pointer moves.
+3. On `pointerup`, the finalized stroke is sent to the server via `socketClientService.createShape(...)`.
+4. Upon server ACK, the returned shape is added to the store via `addShape(freehandShape)`.
+5. `addShape` pushes the previous canvas state into `past` exactly once, enabling the user to undo the entire stroke in a single `Ctrl+Z`.
+
+### Q11: How does the server prevent malicious or malformed freehand stroke payloads from degrading canvas performance?
+**Answer:**
+`shape.validation.ts` enforces strict Zod validation on `shapePointsSchema`:
+1. **Coordinate Format**: Must be an array of finite numbers (rejects `NaN`, `Infinity`, strings, and nulls).
+2. **Even Array Length**: Array length must be an even number ($2k$), representing coordinate pairs $(x, y)$.
+3. **Minimum Length**: Minimum 4 numbers (at least 2 points). Single clicks that fail to move are rejected.
+4. **Maximum Points Bound**: Bounded at `MAX_FREEHAND_POINTS = 2000` (1,000 vertices). Strokes exceeding this limit are rejected with `BAD_REQUEST`.
+5. **Coordinate Range Bounds**: Each coordinate must fall within $[-100000, 100000]$ to prevent integer overflow and canvas rendering crashes.
+
+### Q12: Why are multiple concurrent freehand drawings non-exclusive (unlike shape dragging or resizing)?
+**Answer:**
+- Shape dragging, resizing, and text editing modify **existing shared objects**. If User A and User B drag Shape 1 concurrently, their operations collide, requiring exclusive target locking (`INTERACTION_CONFLICT`).
+- Freehand drawing creates a **brand-new shape** upon completion. While drawing, User A and User B are creating independent strokes in separate memory buffers with empty `targets: []`.
+- Therefore, the interaction system treats `"drawing"` as non-exclusive, allowing hundreds of users to sketch on the canvas simultaneously without blocking each other.
+
+### Q13: How does CanvasFlow avoid rendering artifacts (stitching, gaps) while maintaining 60 FPS drawing smoothness?
+**Answer:**
+1. **Tension Spline Smoothing**: In Konva, `<Line>` is configured with `tension={0.2}`, `lineCap="round"`, and `lineJoin="round"`. This uses cardinal spline interpolation to smooth sharp corners without distorting user intent.
+2. **Jitter Threshold Filtering**: During `pointermove`, points with Euclidean distance $\Delta x^2 + \Delta y^2 < 1.0\text{px}^2$ are discarded, preventing micro-jitter when the mouse hovers in place.
+3. **Transient Preview Node**: The active stroke is rendered as a standalone `<Line>` in the shapes layer with `listening={false}`, bypassing event hit-detection trees and avoiding re-renders of existing canvas shapes.
+
+### Q14: How does CanvasFlow synchronize in-progress strokes when a peer joins a board mid-drawing?
+**Answer:**
+1. While User A draws, the server accumulates incoming `pointsBatch` chunks inside `interaction.data.points` in the `InteractionManager`.
+2. When User B joins the board, their client requests `interaction:snapshot`.
+3. The server returns all active interactions, including User A's current accumulated points.
+4. User B's `RemoteCursorLayer` immediately renders User A's in-progress stroke preview, ensuring complete visual continuity for late joiners.
+
+### Q15: How would you architect pressure-sensitive stylus/tablet drawing (e.g. Apple Pencil or Wacom) in CanvasFlow?
+**Answer:**
+1. **PointerEvent API**: Read `e.pressure` (normalized $0.0 - 1.0$) alongside `e.clientX` and `e.clientY`.
+2. **Point Data Structure**: Extend the coordinate streaming tuple from 2D `[x, y]` to 3D `[x, y, pressure]` or normalize pressure into a parallel byte array `Uint8Array`.
+3. **Variable Width Polygonal Meshing**: Use an algorithm such as Chaikin's smoothing or a polygon extrusion library (e.g. `perfect-freehand`) to convert pressure-stamped points into a closed outline path.
+4. **SVG Path Storage**: Persist the resulting outline as an SVG path string (`M ... C ... Z`) in MongoDB, allowing GPU-accelerated path rendering without client-side stroke-width interpolation overhead.

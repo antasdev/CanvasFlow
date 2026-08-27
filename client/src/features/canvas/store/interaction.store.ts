@@ -90,10 +90,26 @@ export const useInteractionStore = create<InteractionState>((set, get) => ({
       const existing = state.interactions[interactionId];
       if (!existing) return state;
 
+      let mergedData = existing.data;
+      if (updates.data !== undefined) {
+        if (Array.isArray(updates.data.pointsBatch)) {
+          const existingPoints = Array.isArray(existing.data?.points)
+            ? (existing.data.points as number[])
+            : [];
+          mergedData = {
+            ...existing.data,
+            ...updates.data,
+            points: [...existingPoints, ...(updates.data.pointsBatch as number[])],
+          };
+        } else {
+          mergedData = { ...existing.data, ...updates.data };
+        }
+      }
+
       const updated: CollaborativeInteraction = {
         ...existing,
         targets: updates.targets ? [...updates.targets] : existing.targets,
-        data: updates.data !== undefined ? { ...existing.data, ...updates.data } : existing.data,
+        data: mergedData,
         updatedAt: updates.updatedAt ?? new Date().toISOString(),
       };
 
