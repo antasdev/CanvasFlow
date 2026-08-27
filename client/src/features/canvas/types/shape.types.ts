@@ -25,6 +25,17 @@ export type ShapeConnectorData = {
   routing?: ConnectorRouting;
 };
 
+export type StrokeStyle = "solid" | "dashed" | "dotted";
+
+export type ShapeShadow = {
+  enabled: boolean;
+  color: string;
+  blur: number;
+  offsetX: number;
+  offsetY: number;
+  opacity: number;
+};
+
 export type BaseShape = {
   id: string;
   type: ShapeType;
@@ -36,6 +47,8 @@ export type BaseShape = {
   opacity: number;
   zIndex: number;
   version?: number;
+  strokeStyle?: StrokeStyle;
+  shadow?: ShapeShadow;
 };
 
 export type RectangleShape = BaseShape & {
@@ -43,6 +56,8 @@ export type RectangleShape = BaseShape & {
   fill: string;
   stroke: string;
   strokeWidth: number;
+  strokeStyle?: StrokeStyle;
+  shadow?: ShapeShadow;
 };
 
 export type TextFontStyle = "normal" | "italic";
@@ -122,7 +137,7 @@ export type LineShape = BaseShape & {
   points: number[];
   stroke: string;
   strokeWidth: number;
-  strokeStyle?: "solid" | "dashed";
+  strokeStyle?: StrokeStyle;
 };
 
 export type ArrowShape = BaseShape & {
@@ -130,6 +145,7 @@ export type ArrowShape = BaseShape & {
   points: number[];
   stroke: string;
   strokeWidth: number;
+  strokeStyle?: StrokeStyle;
   arrowHeadEnd: boolean;
   arrowHeadStart?: boolean;
   pointerLength?: number;
@@ -141,6 +157,7 @@ export type ConnectorShape = BaseShape & {
   points: number[];
   stroke: string;
   strokeWidth: number;
+  strokeStyle?: StrokeStyle;
   connector?: ShapeConnectorData;
   arrowHeadEnd?: boolean;
   arrowHeadStart?: boolean;
@@ -153,6 +170,7 @@ export type FreehandShape = BaseShape & {
   points: number[];
   stroke: string;
   strokeWidth: number;
+  strokeStyle?: StrokeStyle;
 };
 
 export type Shape =
@@ -168,3 +186,29 @@ export type Shape =
   | ArrowShape
   | ConnectorShape
   | FreehandShape;
+
+export type ShapeStyle = {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  strokeStyle?: StrokeStyle;
+  opacity?: number;
+  shadow?: Partial<ShapeShadow>;
+  text?: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: TextFontStyle;
+  textDecoration?: TextDecoration;
+  textAlign?: TextAlign;
+  verticalAlign?: TextVerticalAlign;
+  padding?: number;
+  lineHeight?: number;
+  backgroundColor?: string;
+  textColor?: string;
+  points?: number[];
+  arrowHeadEnd?: boolean;
+  arrowHeadStart?: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
+};

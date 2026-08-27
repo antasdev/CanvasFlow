@@ -1,17 +1,29 @@
 import { Types } from "mongoose";
 
-import { ShapeType, ShapeConfigData } from "./shape.types";
+import { ShapeType, ShapeConfigData, StrokeStyle } from "./shape.types";
+
+export type ShapeShadowDto = {
+  enabled?: boolean;
+  color?: string;
+  blur?: number;
+  offsetX?: number;
+  offsetY?: number;
+  opacity?: number;
+};
+
+export type ShapeAppearanceStyleDto = {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  strokeStyle?: StrokeStyle;
+  opacity?: number;
+  shadow?: ShapeShadowDto;
+};
 
 /**
  * Shape Visual Style DTO
  */
-export type ShapeStyleDto = {
-  // Rectangle / Generic styles
-  fill?: string;
-  stroke?: string;
-  strokeWidth?: number;
-  opacity?: number;
-
+export type ShapeStyleDto = ShapeAppearanceStyleDto & {
   // Text / Rich Text / Sticky Note styles
   text?: string;
   fontSize?: number;
@@ -28,7 +40,6 @@ export type ShapeStyleDto = {
 
   // Freehand styles / points fallback
   points?: number[];
-  strokeStyle?: "solid" | "dashed";
   arrowHeadEnd?: boolean;
   arrowHeadStart?: boolean;
   pointerLength?: number;
@@ -62,7 +73,9 @@ export type RectangleShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -84,6 +97,7 @@ export type TextShapeResponseDto = BaseShapeResponseDto & {
     opacity: number;
     padding: number;
     lineHeight: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -98,6 +112,7 @@ export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
     backgroundColor: string;
     textColor: string;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -110,7 +125,9 @@ export type FreehandShapeResponseDto = BaseShapeResponseDto & {
   style: {
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -132,7 +149,8 @@ export type LineShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
-    strokeStyle?: "solid" | "dashed";
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -146,6 +164,8 @@ export type ArrowShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
     arrowHeadEnd: boolean;
     arrowHeadStart?: boolean;
     pointerLength?: number;
@@ -164,6 +184,8 @@ export type ConnectorShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
     arrowHeadEnd?: boolean;
     arrowHeadStart?: boolean;
     pointerLength?: number;
@@ -180,7 +202,9 @@ export type CircleShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -193,7 +217,9 @@ export type EllipseShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -206,7 +232,9 @@ export type TriangleShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -222,7 +250,9 @@ export type PolygonShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -239,7 +269,9 @@ export type StarShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 

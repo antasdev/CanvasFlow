@@ -3,7 +3,15 @@ import { z } from "zod";
 
 import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas";
-import { shapeService, ShapeMapper, ShapeType, shapePointsSchema, shapeConnectorSchema, shapeConfigSchema } from "@/modules/shape";
+import {
+  shapeService,
+  ShapeMapper,
+  ShapeType,
+  shapePointsSchema,
+  shapeConnectorSchema,
+  shapeConfigSchema,
+  shapeStyleValidationSchema,
+} from "@/modules/shape";
 import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus, Messages } from "@/shared/constants";
@@ -24,42 +32,7 @@ const objectIdSchema = z
   .string()
   .regex(/^[0-9a-fA-F]{24}$/, "Invalid ID format.");
 
-const shapeStyleSocketSchema = z.object({
-  fill: z.string().trim().optional(),
-  stroke: z.string().trim().optional(),
-  strokeWidth: z
-    .number()
-    .min(0, "Stroke width cannot be negative.")
-    .max(50)
-    .optional(),
-  opacity: z
-    .number()
-    .min(0, "Opacity must be at least 0.")
-    .max(1, "Opacity cannot exceed 1.")
-    .optional(),
-  strokeStyle: z.enum(["solid", "dashed"]).optional(),
-  arrowHeadEnd: z.boolean().optional(),
-  arrowHeadStart: z.boolean().optional(),
-  pointerLength: z.number().min(2).max(50).optional(),
-  pointerWidth: z.number().min(2).max(50).optional(),
-  text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
-  fontSize: z
-    .number()
-    .min(8, "Font size must be at least 8.")
-    .max(200, "Font size cannot exceed 200.")
-    .optional(),
-  fontFamily: z.string().trim().max(100).optional(),
-  fontWeight: z.union([z.string().trim().max(20), z.number()]).optional(),
-  fontStyle: z.enum(["normal", "italic"]).optional(),
-  textDecoration: z.enum(["none", "underline"]).optional(),
-  textAlign: z.enum(["left", "center", "right"]).optional(),
-  verticalAlign: z.enum(["top", "middle", "bottom"]).optional(),
-  padding: z.number().min(0).max(100).optional(),
-  lineHeight: z.number().min(0.5).max(5).optional(),
-  backgroundColor: z.string().trim().optional(),
-  textColor: z.string().trim().optional(),
-  points: shapePointsSchema.optional(),
-});
+const shapeStyleSocketSchema = shapeStyleValidationSchema;
 
 const createShapeSocketSchema = z
   .object({

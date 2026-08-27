@@ -7,6 +7,7 @@ import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { RectangleShape } from "../types";
+import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
 type RectangleNodeProps = {
   shape: RectangleShape;
@@ -39,6 +40,8 @@ export default function RectangleNode({
     endTransform,
   } = useShapeTransform({ shape, boardId });
 
+  const styleProps = getKonvaStyleProps(shape, isLockedByOther);
+
   useEffect(() => {
     const transformer = transformerRef.current;
     const rect = rectRef.current;
@@ -66,10 +69,17 @@ export default function RectangleNode({
         width={displayTransform.width}
         height={displayTransform.height}
         rotation={displayTransform.rotation}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
-        fill={shape.fill}
-        stroke={shape.stroke}
-        strokeWidth={shape.strokeWidth}
+        opacity={styleProps.opacity}
+        fill={styleProps.fill}
+        stroke={styleProps.stroke}
+        strokeWidth={styleProps.strokeWidth}
+        dash={styleProps.dash}
+        shadowEnabled={styleProps.shadowEnabled}
+        shadowColor={styleProps.shadowColor}
+        shadowBlur={styleProps.shadowBlur}
+        shadowOffsetX={styleProps.shadowOffset.x}
+        shadowOffsetY={styleProps.shadowOffset.y}
+        shadowOpacity={styleProps.shadowOpacity}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;

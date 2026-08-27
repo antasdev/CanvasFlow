@@ -8,6 +8,7 @@ import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { ArrowShape } from "../types";
 import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
+import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
 type ArrowNodeProps = {
   shape: ArrowShape;
@@ -40,6 +41,8 @@ function ArrowNodeComponent({
     endTransform,
   } = useShapeTransform({ shape, boardId });
 
+  const styleProps = getKonvaStyleProps(shape, isLockedByOther);
+
   // Attach Transformer when selected
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -65,8 +68,6 @@ function ArrowNodeComponent({
   const remoteScaleY =
     displayTransform.height && shape.height ? displayTransform.height / shape.height : 1;
 
-  const strokeColor = shape.stroke || "#1f2937";
-  const strokeWidth = shape.strokeWidth || 2;
   const pointerLength = shape.pointerLength ?? 10;
   const pointerWidth = shape.pointerWidth ?? 10;
   const pointerAtEnding = shape.arrowHeadEnd !== false;
@@ -79,20 +80,27 @@ function ArrowNodeComponent({
         x={displayTransform.x}
         y={displayTransform.y}
         points={shape.points}
-        stroke={strokeColor}
-        fill={strokeColor}
-        strokeWidth={strokeWidth}
-        hitStrokeWidth={Math.max(strokeWidth + 12, 16)}
+        stroke={styleProps.stroke}
+        fill={styleProps.stroke}
+        strokeWidth={styleProps.strokeWidth}
+        hitStrokeWidth={Math.max((styleProps.strokeWidth || 2) + 12, 16)}
         pointerLength={pointerLength}
         pointerWidth={pointerWidth}
         pointerAtEnding={pointerAtEnding}
         pointerAtBeginning={pointerAtBeginning}
         lineCap="round"
         lineJoin="round"
+        dash={styleProps.dash}
+        shadowEnabled={styleProps.shadowEnabled}
+        shadowColor={styleProps.shadowColor}
+        shadowBlur={styleProps.shadowBlur}
+        shadowOffsetX={styleProps.shadowOffset.x}
+        shadowOffsetY={styleProps.shadowOffset.y}
+        shadowOpacity={styleProps.shadowOpacity}
         rotation={displayTransform.rotation}
         scaleX={isLockedByOther ? remoteScaleX : 1}
         scaleY={isLockedByOther ? remoteScaleY : 1}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity ?? 1}
+        opacity={styleProps.opacity}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;
@@ -243,7 +251,7 @@ function ArrowNodeComponent({
           );
 
           // Calculate normalized bounding box (handling flipping/negative scale)
-          const bbox = computeBoundingBox(rescaledPoints, strokeWidth);
+          const bbox = computeBoundingBox(rescaledPoints, styleProps.strokeWidth || 2);
           const normalizedLocalPoints = normalizePointsToLocal(rescaledPoints, bbox.x, bbox.y);
 
           const finalX = node.x() + bbox.x;

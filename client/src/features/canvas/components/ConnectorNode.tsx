@@ -9,6 +9,7 @@ import { useCanvasStore } from "../store";
 import type { ConnectorShape } from "../types";
 import { getShapeAnchorPoint } from "../utils/anchor.utils";
 import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
+import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
 type ConnectorNodeProps = {
   shape: ConnectorShape;
@@ -42,6 +43,8 @@ function ConnectorNodeComponent({
     endTransform,
   } = useShapeTransform({ shape, boardId });
 
+  const styleProps = getKonvaStyleProps(shape, isLockedByOther);
+
   // Resolve connected source and target shapes from canvas store
   const connector = shape.connector;
   const sourceShape = connector?.sourceShapeId
@@ -51,24 +54,23 @@ function ConnectorNodeComponent({
     ? shapes.find((s) => s.id === connector.targetShapeId)
     : undefined;
 
-  const hasSourceAttachment = Boolean(sourceShape && connector?.sourceAnchor);
-  const hasTargetAttachment = Boolean(targetShape && connector?.targetAnchor);
-  const isAttached = hasSourceAttachment || hasTargetAttachment;
+  const isAttached = Boolean(connector?.sourceShapeId || connector?.targetShapeId);
 
-  // Derive start and end endpoints
-  // If attached to a valid shape, derive dynamically from anchor position; otherwise fallback to stored geometry
-  const fallbackStartX = shape.x + (shape.points[0] ?? 0);
-  const fallbackStartY = shape.y + (shape.points[1] ?? 0);
-  const fallbackEndX = shape.x + (shape.points[2] ?? shape.width);
-  const fallbackEndY = shape.y + (shape.points[3] ?? shape.height);
+  // Derive start and end anchor positions (world canvas space)
+  const fallbackStartX = shape.x + (shape.points?.[0] ?? 0);
+  const fallbackStartY = shape.y + (shape.points?.[1] ?? 0);
+  const fallbackEndX = shape.x + (shape.points?.[2] ?? shape.width);
+  const fallbackEndY = shape.y + (shape.points?.[3] ?? shape.height);
 
-  const startWorld = hasSourceAttachment && sourceShape && connector?.sourceAnchor
-    ? getShapeAnchorPoint(sourceShape, connector.sourceAnchor)
-    : { x: fallbackStartX, y: fallbackStartY };
+  const startWorld =
+    sourceShape && connector?.sourceAnchor
+      ? getShapeAnchorPoint(sourceShape, connector.sourceAnchor)
+      : { x: fallbackStartX, y: fallbackStartY };
 
-  const endWorld = hasTargetAttachment && targetShape && connector?.targetAnchor
-    ? getShapeAnchorPoint(targetShape, connector.targetAnchor)
-    : { x: fallbackEndX, y: fallbackEndY };
+  const endWorld =
+    targetShape && connector?.targetAnchor
+      ? getShapeAnchorPoint(targetShape, connector.targetAnchor)
+      : { x: fallbackEndX, y: fallbackEndY };
 
   // Attach Transformer when selected and completely unattached
   useEffect(() => {
@@ -95,8 +97,6 @@ function ConnectorNodeComponent({
     transformer.getLayer()?.batchDraw();
   }, [activeTool, isSelected, isLockedByOther, isAttached, canEditCanvas]);
 
-  const strokeColor = shape.stroke || "#1f2937";
-  const strokeWidth = shape.strokeWidth || 2;
   const pointerLength = shape.pointerLength ?? 10;
   const pointerWidth = shape.pointerWidth ?? 10;
   const pointerAtEnding = shape.arrowHeadEnd !== false;
@@ -113,17 +113,24 @@ function ConnectorNodeComponent({
         x={0}
         y={0}
         points={derivedPoints}
-        stroke={strokeColor}
-        fill={strokeColor}
-        strokeWidth={strokeWidth}
-        hitStrokeWidth={Math.max(strokeWidth + 12, 16)}
+        stroke={styleProps.stroke}
+        fill={styleProps.stroke}
+        strokeWidth={styleProps.strokeWidth}
+        hitStrokeWidth={Math.max((styleProps.strokeWidth || 2) + 12, 16)}
         pointerLength={pointerLength}
         pointerWidth={pointerWidth}
         pointerAtEnding={pointerAtEnding}
         pointerAtBeginning={pointerAtBeginning}
         lineCap="round"
         lineJoin="round"
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity ?? 1}
+        dash={styleProps.dash}
+        shadowEnabled={styleProps.shadowEnabled}
+        shadowColor={styleProps.shadowColor}
+        shadowBlur={styleProps.shadowBlur}
+        shadowOffsetX={styleProps.shadowOffset.x}
+        shadowOffsetY={styleProps.shadowOffset.y}
+        shadowOpacity={styleProps.shadowOpacity}
+        opacity={styleProps.opacity}
         draggable={false}
         onMouseDown={(event) => {
           event.cancelBubble = true;
@@ -165,20 +172,27 @@ function ConnectorNodeComponent({
         x={displayTransform.x}
         y={displayTransform.y}
         points={shape.points}
-        stroke={strokeColor}
-        fill={strokeColor}
-        strokeWidth={strokeWidth}
-        hitStrokeWidth={Math.max(strokeWidth + 12, 16)}
+        stroke={styleProps.stroke}
+        fill={styleProps.stroke}
+        strokeWidth={styleProps.strokeWidth}
+        hitStrokeWidth={Math.max((styleProps.strokeWidth || 2) + 12, 16)}
         pointerLength={pointerLength}
         pointerWidth={pointerWidth}
         pointerAtEnding={pointerAtEnding}
         pointerAtBeginning={pointerAtBeginning}
         lineCap="round"
         lineJoin="round"
+        dash={styleProps.dash}
+        shadowEnabled={styleProps.shadowEnabled}
+        shadowColor={styleProps.shadowColor}
+        shadowBlur={styleProps.shadowBlur}
+        shadowOffsetX={styleProps.shadowOffset.x}
+        shadowOffsetY={styleProps.shadowOffset.y}
+        shadowOpacity={styleProps.shadowOpacity}
         rotation={displayTransform.rotation}
         scaleX={isLockedByOther ? remoteScaleX : 1}
         scaleY={isLockedByOther ? remoteScaleY : 1}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity ?? 1}
+        opacity={styleProps.opacity}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;
@@ -326,7 +340,7 @@ function ConnectorNodeComponent({
             i % 2 === 0 ? val * scaleX : val * scaleY
           );
 
-          const bbox = computeBoundingBox(rescaledPoints, strokeWidth);
+          const bbox = computeBoundingBox(rescaledPoints, styleProps.strokeWidth || 2);
           const normalizedLocalPoints = normalizePointsToLocal(rescaledPoints, bbox.x, bbox.y);
 
           const finalX = node.x() + bbox.x;

@@ -123,6 +123,15 @@ export type BoardJoinAckData = {
   activeUsers: ActiveUser[];
 };
 
+export type ShapeShadowPayload = {
+  enabled?: boolean;
+  color?: string;
+  blur?: number;
+  offsetX?: number;
+  offsetY?: number;
+  opacity?: number;
+};
+
 /**
  * Shape Event Payloads (Foundation Contracts)
  */
@@ -144,7 +153,8 @@ export type ShapeStylePayload = {
   backgroundColor?: string;
   textColor?: string;
   points?: number[];
-  strokeStyle?: "solid" | "dashed";
+  strokeStyle?: "solid" | "dashed" | "dotted";
+  shadow?: ShapeShadowPayload;
   arrowHeadEnd?: boolean;
   arrowHeadStart?: boolean;
   pointerLength?: number;

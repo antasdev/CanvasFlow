@@ -55,6 +55,26 @@ export type ShapeConfigData = {
   innerRadiusRatio?: number;
 };
 
+export type StrokeStyle = "solid" | "dashed" | "dotted";
+
+export type ShapeShadowData = {
+  enabled: boolean;
+  color: string;
+  blur: number;
+  offsetX: number;
+  offsetY: number;
+  opacity: number;
+};
+
+export type ShapeAppearanceStyleData = {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  strokeStyle?: StrokeStyle;
+  opacity?: number;
+  shadow?: ShapeShadowData;
+};
+
 /**
  * Shape Entity
  */

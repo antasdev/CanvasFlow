@@ -23,7 +23,7 @@ import {
 } from "../hooks";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore, usePresenceStore } from "../store";
-import type { TextShape, StickyNoteShape } from "../types";
+import type { TextShape, StickyNoteShape, ShapeStyle } from "../types";
 import { screenToWorld } from "../utils/canvas.coordinates";
 import {
     simplifyStroke,
@@ -39,9 +39,11 @@ import CollaboratorShapeLock from "./CollaboratorShapeLock";
 import RemoteCursorLayer from "./RemoteCursorLayer";
 import TextEditorOverlay from "./TextEditorOverlay";
 import TextFormattingToolbar from "./TextFormattingToolbar";
+import ShapeStyleToolbar from "./ShapeStyleToolbar";
 import ShapeRenderer from "./ShapeRenderer";
 import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
 import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
+import { getShapeStyle } from "../utils/shape-style.utils";
 import {
     useComments,
     useCommentSocket,
@@ -305,6 +307,47 @@ export default function CanvasEditor({
         if (found && found.type === "text") return found as TextShape;
         return null;
     }, [selectedShapeIds, shapes]);
+
+    const selectedShapes = useMemo(() => {
+        if (selectedShapeIds.length === 0) return [];
+        const idSet = new Set(selectedShapeIds);
+        return shapes.filter((s) => idSet.has(s.id));
+    }, [selectedShapeIds, shapes]);
+
+    const updateMultipleShapesStyle = useCanvasStore(
+        (state) => state.updateMultipleShapesStyle
+    );
+
+    const handleCommitShapesStyle = async (
+        shapeIds: string[],
+        style: Partial<ShapeStyle>
+    ): Promise<void> => {
+        const idSet = new Set(shapeIds);
+        const targetShapes = shapes.filter((s) => idSet.has(s.id));
+
+        await Promise.all(
+            targetShapes.map(async (targetShape) => {
+                try {
+                    await socketClientService.updateShape(
+                        targetShape.id,
+                        {
+                            style: {
+                                ...getShapeStyle(targetShape),
+                                ...style,
+                            },
+                        },
+                        targetShape.version
+                    );
+                } catch (err) {
+                    toast.error(
+                        err instanceof Error
+                            ? err.message
+                            : "Failed to persist shape style change."
+                    );
+                }
+            })
+        );
+    };
 
     // Automatically enforce SELECT tool and clear transient drawing when user lacks edit permissions
     useEffect(() => {
@@ -1392,6 +1435,23 @@ export default function CanvasEditor({
                         updateShapeFormatting(shapeId, formatting);
                     }}
                 />
+            )}
+
+            {selectedShapes.length > 0 &&
+                !selectedTextShape &&
+                activeTool === CANVAS_TOOLS.SELECT &&
+                !editingShape &&
+                !textCreationContext && (
+                    <ShapeStyleToolbar
+                        selectedShapes={selectedShapes}
+                        pan={pan}
+                        zoom={zoom}
+                        canEditCanvas={canEditCanvas}
+                        onUpdateStyle={(shapeIds, style, isLivePreview) => {
+                            updateMultipleShapesStyle(shapeIds, style, isLivePreview);
+                        }}
+                        onCommitStyle={handleCommitShapesStyle}
+                    />
             )}
 
             {size.width > 0 &&

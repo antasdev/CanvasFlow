@@ -78,15 +78,80 @@ export const shapeConnectorSchema = z
     }
   );
 
+export const MIN_STROKE_WIDTH = 0;
+export const MAX_STROKE_WIDTH = 100;
+
+export const MIN_SHADOW_BLUR = 0;
+export const MAX_SHADOW_BLUR = 100;
+export const MIN_SHADOW_OFFSET = -100;
+export const MAX_SHADOW_OFFSET = 100;
+export const MIN_SHADOW_OPACITY = 0;
+export const MAX_SHADOW_OPACITY = 1;
+
+export const colorSchema = z
+  .string()
+  .trim()
+  .refine(
+    (val) =>
+      val === "transparent" ||
+      /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(val) ||
+      /^rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(,\s*(0|1|0?\.\d+)\s*)?\)$/.test(val),
+    {
+      message: "Invalid color format. Must be a valid hex, rgb/rgba, or 'transparent'.",
+    }
+  );
+
+export const strokeStyleSchema = z.enum(["solid", "dashed", "dotted"]);
+
+export const shapeShadowSchema = z.object({
+  enabled: z.boolean().optional(),
+  color: colorSchema.optional(),
+  blur: z
+    .number()
+    .finite("Shadow blur must be a finite number.")
+    .min(MIN_SHADOW_BLUR, `Shadow blur cannot be less than ${MIN_SHADOW_BLUR}.`)
+    .max(MAX_SHADOW_BLUR, `Shadow blur cannot exceed ${MAX_SHADOW_BLUR}.`)
+    .optional(),
+  offsetX: z
+    .number()
+    .finite("Shadow offsetX must be a finite number.")
+    .min(MIN_SHADOW_OFFSET, `Shadow offsetX cannot be less than ${MIN_SHADOW_OFFSET}.`)
+    .max(MAX_SHADOW_OFFSET, `Shadow offsetX cannot exceed ${MAX_SHADOW_OFFSET}.`)
+    .optional(),
+  offsetY: z
+    .number()
+    .finite("Shadow offsetY must be a finite number.")
+    .min(MIN_SHADOW_OFFSET, `Shadow offsetY cannot be less than ${MIN_SHADOW_OFFSET}.`)
+    .max(MAX_SHADOW_OFFSET, `Shadow offsetY cannot exceed ${MAX_SHADOW_OFFSET}.`)
+    .optional(),
+  opacity: z
+    .number()
+    .finite("Shadow opacity must be a finite number.")
+    .min(MIN_SHADOW_OPACITY, `Shadow opacity cannot be less than ${MIN_SHADOW_OPACITY}.`)
+    .max(MAX_SHADOW_OPACITY, `Shadow opacity cannot exceed ${MAX_SHADOW_OPACITY}.`)
+    .optional(),
+});
+
 export const shapeStyleValidationSchema = z.object({
   // Rectangle / Shared styles
-  fill: z.string().trim().optional(),
-  stroke: z.string().trim().optional(),
-  strokeWidth: z.number().min(0, "Stroke width cannot be negative.").max(50).optional(),
-  opacity: z.number().min(0, "Opacity must be at least 0.").max(1, "Opacity cannot exceed 1.").optional(),
+  fill: colorSchema.optional(),
+  stroke: colorSchema.optional(),
+  strokeWidth: z
+    .number()
+    .finite("Stroke width must be a finite number.")
+    .min(MIN_STROKE_WIDTH, "Stroke width cannot be negative.")
+    .max(MAX_STROKE_WIDTH, `Stroke width cannot exceed ${MAX_STROKE_WIDTH}.`)
+    .optional(),
+  opacity: z
+    .number()
+    .finite("Opacity must be a finite number.")
+    .min(0, "Opacity must be at least 0.")
+    .max(1, "Opacity cannot exceed 1.")
+    .optional(),
 
-  // Vector stroke styles
-  strokeStyle: z.enum(["solid", "dashed"]).optional(),
+  // Vector / Shared stroke styles
+  strokeStyle: strokeStyleSchema.optional(),
+  shadow: shapeShadowSchema.optional(),
   arrowHeadEnd: z.boolean().optional(),
   arrowHeadStart: z.boolean().optional(),
   pointerLength: z.number().min(2).max(50).optional(),

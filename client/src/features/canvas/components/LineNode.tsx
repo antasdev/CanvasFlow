@@ -8,6 +8,7 @@ import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { LineShape } from "../types";
 import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
+import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
 type LineNodeProps = {
   shape: LineShape;
@@ -40,6 +41,8 @@ function LineNodeComponent({
     endTransform,
   } = useShapeTransform({ shape, boardId });
 
+  const styleProps = getKonvaStyleProps(shape, isLockedByOther);
+
   // Attach Transformer when selected
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -65,8 +68,6 @@ function LineNodeComponent({
   const remoteScaleY =
     displayTransform.height && shape.height ? displayTransform.height / shape.height : 1;
 
-  const isDashed = shape.strokeStyle === "dashed";
-
   return (
     <>
       <Line
@@ -74,16 +75,22 @@ function LineNodeComponent({
         x={displayTransform.x}
         y={displayTransform.y}
         points={shape.points}
-        stroke={shape.stroke || "#1f2937"}
-        strokeWidth={shape.strokeWidth || 2}
-        hitStrokeWidth={Math.max((shape.strokeWidth || 2) + 12, 16)}
+        stroke={styleProps.stroke}
+        strokeWidth={styleProps.strokeWidth}
+        hitStrokeWidth={Math.max((styleProps.strokeWidth || 2) + 12, 16)}
         lineCap="round"
         lineJoin="round"
-        dash={isDashed ? [10, 5] : undefined}
+        dash={styleProps.dash}
+        shadowEnabled={styleProps.shadowEnabled}
+        shadowColor={styleProps.shadowColor}
+        shadowBlur={styleProps.shadowBlur}
+        shadowOffsetX={styleProps.shadowOffset.x}
+        shadowOffsetY={styleProps.shadowOffset.y}
+        shadowOpacity={styleProps.shadowOpacity}
         rotation={displayTransform.rotation}
         scaleX={isLockedByOther ? remoteScaleX : 1}
         scaleY={isLockedByOther ? remoteScaleY : 1}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity ?? 1}
+        opacity={styleProps.opacity}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;

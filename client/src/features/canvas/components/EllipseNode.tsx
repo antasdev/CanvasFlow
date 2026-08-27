@@ -8,6 +8,7 @@ import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { EllipseShape } from "../types";
 import { calculateEllipseGeometry } from "../utils/shape-geometry.utils";
+import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
 type EllipseNodeProps = {
   shape: EllipseShape;
@@ -39,6 +40,8 @@ export default function EllipseNode({
     emitTransformFrame,
     endTransform,
   } = useShapeTransform({ shape, boardId });
+
+  const styleProps = getKonvaStyleProps(shape, isLockedByOther);
 
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -72,7 +75,7 @@ export default function EllipseNode({
         width={displayTransform.width}
         height={displayTransform.height}
         rotation={displayTransform.rotation}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
+        opacity={styleProps.opacity}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;
@@ -240,9 +243,16 @@ export default function EllipseNode({
           y={ellipseGeom.centerY}
           radiusX={ellipseGeom.radiusX}
           radiusY={ellipseGeom.radiusY}
-          fill={shape.fill}
-          stroke={shape.stroke}
-          strokeWidth={shape.strokeWidth}
+          fill={styleProps.fill}
+          stroke={styleProps.stroke}
+          strokeWidth={styleProps.strokeWidth}
+          dash={styleProps.dash}
+          shadowEnabled={styleProps.shadowEnabled}
+          shadowColor={styleProps.shadowColor}
+          shadowBlur={styleProps.shadowBlur}
+          shadowOffsetX={styleProps.shadowOffset.x}
+          shadowOffsetY={styleProps.shadowOffset.y}
+          shadowOpacity={styleProps.shadowOpacity}
         />
       </Group>
 

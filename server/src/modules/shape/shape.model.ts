@@ -5,6 +5,52 @@ import {
   ShapeType,
 } from "./shape.types";
 
+const shapeShadowSchema = new Schema(
+  {
+    enabled: {
+      type: Boolean,
+      required: false,
+    },
+    color: {
+      type: String,
+      required: false,
+    },
+    blur: {
+      type: Number,
+      required: false,
+    },
+    offsetX: {
+      type: Number,
+      required: false,
+    },
+    offsetY: {
+      type: Number,
+      required: false,
+    },
+    opacity: {
+      type: Number,
+      required: false,
+    },
+  },
+  { _id: false }
+);
+
+const shapeStyleSchema = new Schema(
+  {
+    fill: { type: String, required: false },
+    stroke: { type: String, required: false },
+    strokeWidth: { type: Number, required: false },
+    strokeStyle: {
+      type: String,
+      enum: ["solid", "dashed", "dotted"],
+      required: false,
+    },
+    opacity: { type: Number, required: false },
+    shadow: { type: shapeShadowSchema, required: false },
+  },
+  { _id: false, strict: false }
+);
+
 const shapeSchema = new Schema<Shape>(
   {
     canvasId: {
@@ -109,8 +155,8 @@ const shapeSchema = new Schema<Shape>(
     },
 
     style: {
-      type: Schema.Types.Mixed,
-      default: {},
+      type: shapeStyleSchema,
+      default: () => ({}),
     },
 
     createdBy: {

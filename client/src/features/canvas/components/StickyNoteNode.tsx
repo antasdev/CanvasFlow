@@ -259,9 +259,14 @@ export default function StickyNoteNode({
           height={displayTransform.height}
           fill={shape.backgroundColor || "#fef08a"}
           cornerRadius={4}
-          shadowColor="rgba(0, 0, 0, 0.15)"
-          shadowBlur={6}
-          shadowOffset={{ x: 2, y: 3 }}
+          shadowColor={shape.shadow?.enabled ? (shape.shadow.color ?? "#000000") : "rgba(0, 0, 0, 0.15)"}
+          shadowBlur={shape.shadow?.enabled ? (shape.shadow.blur ?? 6) : 6}
+          shadowOffset={
+            shape.shadow?.enabled
+              ? { x: shape.shadow.offsetX ?? 2, y: shape.shadow.offsetY ?? 3 }
+              : { x: 2, y: 3 }
+          }
+          shadowOpacity={shape.shadow?.enabled ? (shape.shadow.opacity ?? 0.3) : 1}
           stroke="rgba(0, 0, 0, 0.08)"
           strokeWidth={1}
         />

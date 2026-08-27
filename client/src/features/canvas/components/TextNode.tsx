@@ -105,6 +105,12 @@ export default function TextNode({
         wrap="word"
         fill={shape.text ? shape.fill : "#9ca3af"}
         opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : (shape.opacity ?? 1)}
+        shadowEnabled={Boolean(shape.shadow?.enabled)}
+        shadowColor={shape.shadow?.color ?? "#000000"}
+        shadowBlur={typeof shape.shadow?.blur === "number" ? shape.shadow.blur : 10}
+        shadowOffsetX={typeof shape.shadow?.offsetX === "number" ? shape.shadow.offsetX : 0}
+        shadowOffsetY={typeof shape.shadow?.offsetY === "number" ? shape.shadow.offsetY : 4}
+        shadowOpacity={typeof shape.shadow?.opacity === "number" ? shape.shadow.opacity : 0.3}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onDblClick={handleDoubleClick}
         onDblTap={handleDoubleClick}

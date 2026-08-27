@@ -662,6 +662,9 @@ describe("Shape Mapper", () => {
       version: 1,
       opacity: 1,
       sides: 6,
+      shapeConfig: {
+        sides: 6,
+      },
       fill: "#f59e0b",
       stroke: "#b45309",
       strokeWidth: 2,
@@ -714,6 +717,50 @@ describe("Shape Mapper", () => {
       fill: "#eab308",
       stroke: "#ca8a04",
       strokeWidth: 2,
+    });
+  });
+
+  it("maps appearance properties (strokeStyle, shadow) correctly across shapes", () => {
+    const dto = {
+      id: "rect-shadow-1",
+      canvasId: "canvas-1",
+      type: "rectangle" as const,
+      x: 100,
+      y: 100,
+      width: 150,
+      height: 100,
+      rotation: 0,
+      zIndex: 1,
+      version: 2,
+      style: {
+        fill: "#3b82f6",
+        stroke: "#1d4ed8",
+        strokeWidth: 4,
+        strokeStyle: "dotted" as const,
+        opacity: 0.85,
+        shadow: {
+          enabled: true,
+          color: "#111827",
+          blur: 15,
+          offsetX: 3,
+          offsetY: 6,
+          opacity: 0.4,
+        },
+      },
+      createdBy: "user-1",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      updatedAt: "2026-08-27T00:00:00.000Z",
+    };
+
+    const shape = mapShapeResponseToShape(dto);
+    expect(shape.strokeStyle).toBe("dotted");
+    expect(shape.shadow).toEqual({
+      enabled: true,
+      color: "#111827",
+      blur: 15,
+      offsetX: 3,
+      offsetY: 6,
+      opacity: 0.4,
     });
   });
 });

@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+import type { StrokeStyle, ShapeShadow } from "../types/shape.types";
 
 const SHAPE_ENDPOINT = "/shapes";
 
@@ -17,13 +18,17 @@ export type BaseShapeResponseDto = {
   updatedAt: string;
 };
 
+export type ShapeShadowDto = Partial<ShapeShadow>;
+
 export type RectangleShapeResponseDto = BaseShapeResponseDto & {
   type: "rectangle";
   style: {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -43,6 +48,7 @@ export type TextShapeResponseDto = BaseShapeResponseDto & {
     opacity?: number;
     padding?: number;
     lineHeight?: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -54,6 +60,7 @@ export type StickyNoteShapeResponseDto = BaseShapeResponseDto & {
     backgroundColor: string;
     textColor: string;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -64,6 +71,8 @@ export type FreehandShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -82,7 +91,8 @@ export type LineShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
-    strokeStyle?: "solid" | "dashed";
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -93,6 +103,8 @@ export type ArrowShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
     arrowHeadEnd: boolean;
     arrowHeadStart?: boolean;
     pointerLength?: number;
@@ -108,6 +120,8 @@ export type ConnectorShapeResponseDto = BaseShapeResponseDto & {
     stroke: string;
     strokeWidth: number;
     opacity: number;
+    strokeStyle?: StrokeStyle;
+    shadow?: ShapeShadowDto;
     arrowHeadEnd?: boolean;
     arrowHeadStart?: boolean;
     pointerLength?: number;
@@ -127,7 +141,9 @@ export type CircleShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -137,7 +153,9 @@ export type EllipseShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -147,7 +165,9 @@ export type TriangleShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -160,7 +180,9 @@ export type PolygonShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 
@@ -174,7 +196,9 @@ export type StarShapeResponseDto = BaseShapeResponseDto & {
     fill: string;
     stroke: string;
     strokeWidth: number;
+    strokeStyle?: StrokeStyle;
     opacity: number;
+    shadow?: ShapeShadowDto;
   };
 };
 

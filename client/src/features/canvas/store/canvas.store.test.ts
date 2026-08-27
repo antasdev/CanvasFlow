@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useCanvasStore } from "./canvas.store";
-import type { TextShape } from "../types";
+import type { TextShape, RectangleShape, LineShape } from "../types";
 
 describe("canvas store history & remote synchronization", () => {
     beforeEach(() => {
@@ -1081,5 +1081,229 @@ describe("canvas store history & remote synchronization", () => {
         useCanvasStore.getState().redo();
         expect(useCanvasStore.getState().shapes).toHaveLength(2);
         expect(useCanvasStore.getState().shapes[1].id).toBe("star-1");
+    });
+
+    describe("Slice 21: Shape Styling & Appearance Actions", () => {
+        beforeEach(() => {
+            useCanvasStore.getState().resetCanvas();
+        });
+
+        it("updates shape appearance style including nested shadow and strokeStyle", () => {
+            const rect: RectangleShape = {
+                id: "rect-style-1",
+                type: "rectangle",
+                x: 10,
+                y: 10,
+                width: 100,
+                height: 100,
+                rotation: 0,
+                zIndex: 1,
+                opacity: 1,
+                fill: "#ffffff",
+                stroke: "#000000",
+                strokeWidth: 2,
+            };
+            useCanvasStore.getState().addShape(rect);
+
+            useCanvasStore.getState().updateShapeStyle("rect-style-1", {
+                fill: "#3b82f6",
+                stroke: "#1d4ed8",
+                strokeWidth: 6,
+                strokeStyle: "dashed",
+                opacity: 0.8,
+                shadow: {
+                    enabled: true,
+                    color: "#000000",
+                    blur: 15,
+                    offsetX: 2,
+                    offsetY: 6,
+                    opacity: 0.5,
+                },
+            });
+
+            const updated = useCanvasStore.getState().shapes[0] as RectangleShape;
+            expect(updated.fill).toBe("#3b82f6");
+            expect(updated.stroke).toBe("#1d4ed8");
+            expect(updated.strokeWidth).toBe(6);
+            expect(updated.strokeStyle).toBe("dashed");
+            expect(updated.opacity).toBe(0.8);
+            expect(updated.shadow?.enabled).toBe(true);
+            expect(updated.shadow?.blur).toBe(15);
+            expect(updated.shadow?.offsetX).toBe(2);
+            expect(updated.shadow?.offsetY).toBe(6);
+        });
+
+        it("filters styling capabilities per shape type during multi-selection update", () => {
+            const rect: RectangleShape = {
+                id: "r1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                rotation: 0,
+                zIndex: 1,
+                opacity: 1,
+                fill: "#ffffff",
+                stroke: "#000000",
+                strokeWidth: 2,
+            };
+            const line: LineShape = {
+                id: "l1",
+                type: "line",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                rotation: 0,
+                zIndex: 2,
+                opacity: 1,
+                points: [0, 0, 100, 100],
+                stroke: "#000000",
+                strokeWidth: 2,
+            };
+            const text: TextShape = {
+                id: "t1",
+                type: "text",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+                rotation: 0,
+                zIndex: 3,
+                opacity: 1,
+                text: "Hello",
+                fontSize: 16,
+                fontFamily: "Inter",
+                fontWeight: "normal",
+                fontStyle: "normal",
+                textDecoration: "none",
+                textAlign: "left",
+                verticalAlign: "top",
+                fill: "#000000",
+                padding: 4,
+                lineHeight: 1.2,
+            };
+
+            useCanvasStore.getState().setShapes([rect, line, text]);
+
+            // Apply style with fill, stroke, strokeWidth to all 3 shapes
+            useCanvasStore.getState().updateMultipleShapesStyle(["r1", "l1", "t1"], {
+                fill: "#ef4444",
+                stroke: "#3b82f6",
+                strokeWidth: 8,
+                strokeStyle: "dotted",
+            });
+
+            const shapes = useCanvasStore.getState().shapes;
+            const updatedRect = shapes.find((s) => s.id === "r1") as RectangleShape;
+            const updatedLine = shapes.find((s) => s.id === "l1") as LineShape;
+            const updatedText = shapes.find((s) => s.id === "t1") as TextShape;
+
+            // Rectangle should have fill, stroke, strokeWidth, strokeStyle
+            expect(updatedRect.fill).toBe("#ef4444");
+            expect(updatedRect.stroke).toBe("#3b82f6");
+            expect(updatedRect.strokeWidth).toBe(8);
+            expect(updatedRect.strokeStyle).toBe("dotted");
+
+            // Line should NOT have fill, but should have stroke, strokeWidth, strokeStyle
+            expect((updatedLine as any).fill).toBeUndefined();
+            expect(updatedLine.stroke).toBe("#3b82f6");
+            expect(updatedLine.strokeWidth).toBe(8);
+            expect(updatedLine.strokeStyle).toBe("dotted");
+
+            // Text should have fill (text color), but NOT stroke or strokeWidth or strokeStyle
+            expect(updatedText.fill).toBe("#ef4444");
+            expect((updatedText as any).stroke).toBeUndefined();
+            expect((updatedText as any).strokeWidth).toBeUndefined();
+        });
+
+        it("creates exactly ONE atomic undo step when multi-styling multiple shapes", () => {
+            const s1: RectangleShape = {
+                id: "s1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+                rotation: 0,
+                zIndex: 1,
+                opacity: 1,
+                fill: "#111111",
+                stroke: "#222222",
+                strokeWidth: 1,
+            };
+            const s2: RectangleShape = {
+                id: "s2",
+                type: "rectangle",
+                x: 20,
+                y: 20,
+                width: 10,
+                height: 10,
+                rotation: 0,
+                zIndex: 2,
+                opacity: 1,
+                fill: "#333333",
+                stroke: "#444444",
+                strokeWidth: 1,
+            };
+
+            useCanvasStore.getState().setShapes([s1, s2]);
+            expect(useCanvasStore.getState().past).toHaveLength(0);
+
+            // Update both simultaneously
+            useCanvasStore.getState().updateMultipleShapesStyle(["s1", "s2"], {
+                fill: "#999999",
+            });
+
+            expect(useCanvasStore.getState().past).toHaveLength(1);
+            expect((useCanvasStore.getState().shapes[0] as RectangleShape).fill).toBe("#999999");
+            expect((useCanvasStore.getState().shapes[1] as RectangleShape).fill).toBe("#999999");
+
+            // Single undo restores BOTH shapes to their previous states
+            useCanvasStore.getState().undo();
+            expect(useCanvasStore.getState().past).toHaveLength(0);
+            expect((useCanvasStore.getState().shapes[0] as RectangleShape).fill).toBe("#111111");
+            expect((useCanvasStore.getState().shapes[1] as RectangleShape).fill).toBe("#333333");
+
+            // Single redo re-applies style to BOTH shapes
+            useCanvasStore.getState().redo();
+            expect((useCanvasStore.getState().shapes[0] as RectangleShape).fill).toBe("#999999");
+            expect((useCanvasStore.getState().shapes[1] as RectangleShape).fill).toBe("#999999");
+        });
+
+        it("live preview updates shapes without pushing to history", () => {
+            const rect: RectangleShape = {
+                id: "r-preview",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 10,
+                height: 10,
+                rotation: 0,
+                zIndex: 1,
+                opacity: 1,
+                fill: "#000000",
+                stroke: "#000000",
+                strokeWidth: 1,
+            };
+
+            useCanvasStore.getState().setShapes([rect]);
+            expect(useCanvasStore.getState().past).toHaveLength(0);
+
+            // Live preview dragging opacity
+            useCanvasStore.getState().updateShapeStyle("r-preview", { opacity: 0.5 }, true);
+            expect((useCanvasStore.getState().shapes[0] as RectangleShape).opacity).toBe(0.5);
+            expect(useCanvasStore.getState().past).toHaveLength(0); // 0 history pushes!
+
+            useCanvasStore.getState().updateShapeStyle("r-preview", { opacity: 0.3 }, true);
+            expect((useCanvasStore.getState().shapes[0] as RectangleShape).opacity).toBe(0.3);
+            expect(useCanvasStore.getState().past).toHaveLength(0);
+
+            // Interaction commit
+            useCanvasStore.getState().updateShapeStyle("r-preview", { opacity: 0.3 }, false);
+            expect((useCanvasStore.getState().shapes[0] as RectangleShape).opacity).toBe(0.3);
+            expect(useCanvasStore.getState().past).toHaveLength(1);
+        });
     });
 });

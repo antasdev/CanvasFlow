@@ -1,4 +1,4 @@
-import { Shape, ShapeDocument, ShapeType, ShapeConnectorData } from "./shape.types";
+import { Shape, ShapeDocument, ShapeType, ShapeConnectorData, StrokeStyle } from "./shape.types";
 import {
   ShapeResponseDto,
   RectangleShapeResponseDto,
@@ -14,14 +14,50 @@ import {
   ArrowShapeResponseDto,
   ConnectorShapeResponseDto,
   ShapeConnectorDto,
+  ShapeAppearanceStyleDto,
 } from "./shape.dto";
 
 export class ShapeMapper {
   /**
+   * Helper to map shared appearance properties (fill, stroke, strokeWidth, strokeStyle, opacity, shadow).
+   */
+  private static mapAppearanceStyle(style: Record<string, unknown>): ShapeAppearanceStyleDto {
+    const appearance: ShapeAppearanceStyleDto = {
+      fill: typeof style.fill === "string" ? style.fill : undefined,
+      stroke: typeof style.stroke === "string" ? style.stroke : undefined,
+      strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : undefined,
+      strokeStyle:
+        style.strokeStyle === "solid" || style.strokeStyle === "dashed" || style.strokeStyle === "dotted"
+          ? (style.strokeStyle as StrokeStyle)
+          : undefined,
+      opacity: typeof style.opacity === "number" ? style.opacity : undefined,
+    };
+
+    if (style.shadow && typeof style.shadow === "object") {
+      const s = style.shadow as Record<string, unknown>;
+      appearance.shadow = {
+        enabled: Boolean(s.enabled),
+        color: typeof s.color === "string" ? s.color : "#000000",
+        blur: typeof s.blur === "number" ? s.blur : 10,
+        offsetX: typeof s.offsetX === "number" ? s.offsetX : 0,
+        offsetY: typeof s.offsetY === "number" ? s.offsetY : 4,
+        opacity: typeof s.opacity === "number" ? s.opacity : 0.3,
+      };
+    }
+
+    return appearance;
+  }
+
+  /**
    * Maps internal MongoDB shape document or entity to public API response DTO.
    */
   static toResponseDto(doc: ShapeDocument | Shape): ShapeResponseDto {
-    const style = (doc.style ?? {}) as Record<string, unknown>;
+    const rawStyle = doc.style;
+    const style = (
+      rawStyle && typeof (rawStyle as any).toObject === "function"
+        ? (rawStyle as any).toObject()
+        : rawStyle ?? {}
+    ) as Record<string, unknown>;
 
     const base = {
       id: doc._id.toString(),
@@ -39,6 +75,8 @@ export class ShapeMapper {
     };
 
     const shapeType = String(doc.type).toUpperCase();
+
+    const appearance = ShapeMapper.mapAppearanceStyle(style);
 
     if (shapeType === "TEXT") {
       const docWithText = doc as (ShapeDocument | Shape) & { text?: string };
@@ -70,10 +108,11 @@ export class ShapeMapper {
             style.verticalAlign === "middle" || style.verticalAlign === "bottom"
               ? style.verticalAlign
               : "top",
-          fill: typeof style.fill === "string" ? style.fill : "#1f2937",
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          fill: appearance.fill ?? (typeof style.fill === "string" ? style.fill : "#1f2937"),
+          opacity: appearance.opacity ?? 1,
           padding: typeof style.padding === "number" ? style.padding : 4,
           lineHeight: typeof style.lineHeight === "number" ? style.lineHeight : 1.2,
+          shadow: appearance.shadow,
         },
       };
       return textDto;
@@ -89,16 +128,15 @@ export class ShapeMapper {
           backgroundColor:
             typeof style.backgroundColor === "string"
               ? style.backgroundColor
-              : typeof style.fill === "string"
-              ? style.fill
-              : "#fef08a",
+              : appearance.fill ?? "#fef08a",
           textColor:
             typeof style.textColor === "string"
               ? style.textColor
               : typeof style.fill === "string"
               ? style.fill
               : "#1f2937",
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          opacity: appearance.opacity ?? 1,
+          shadow: appearance.shadow,
         },
       };
       return stickyDto;
@@ -117,9 +155,11 @@ export class ShapeMapper {
         type: "freehand",
         points: rawPoints,
         style: {
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
         },
       };
       return freehandDto;
@@ -138,10 +178,11 @@ export class ShapeMapper {
         type: "line",
         points: rawPoints,
         style: {
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
-          strokeStyle: style.strokeStyle === "dashed" ? "dashed" : "solid",
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle ?? "solid",
+          shadow: appearance.shadow,
         },
       };
       return lineDto;
@@ -160,9 +201,11 @@ export class ShapeMapper {
         type: "arrow",
         points: rawPoints,
         style: {
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
           arrowHeadEnd: typeof style.arrowHeadEnd === "boolean" ? style.arrowHeadEnd : true,
           arrowHeadStart: typeof style.arrowHeadStart === "boolean" ? style.arrowHeadStart : false,
           pointerLength: typeof style.pointerLength === "number" ? style.pointerLength : 10,
@@ -200,9 +243,11 @@ export class ShapeMapper {
         points: rawPoints,
         connector: connectorDto,
         style: {
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
           arrowHeadEnd: typeof style.arrowHeadEnd === "boolean" ? style.arrowHeadEnd : true,
           arrowHeadStart: typeof style.arrowHeadStart === "boolean" ? style.arrowHeadStart : false,
           pointerLength: typeof style.pointerLength === "number" ? style.pointerLength : 10,
@@ -217,10 +262,12 @@ export class ShapeMapper {
         ...base,
         type: "circle",
         style: {
-          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          fill: appearance.fill ?? "#ffffff",
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
         },
       };
       return circleDto;
@@ -231,10 +278,12 @@ export class ShapeMapper {
         ...base,
         type: "ellipse",
         style: {
-          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          fill: appearance.fill ?? "#ffffff",
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
         },
       };
       return ellipseDto;
@@ -245,10 +294,12 @@ export class ShapeMapper {
         ...base,
         type: "triangle",
         style: {
-          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          fill: appearance.fill ?? "#ffffff",
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
         },
       };
       return triangleDto;
@@ -270,10 +321,12 @@ export class ShapeMapper {
           sides,
         },
         style: {
-          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          fill: appearance.fill ?? "#ffffff",
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
         },
       };
       return polygonDto;
@@ -300,10 +353,12 @@ export class ShapeMapper {
           innerRadiusRatio,
         },
         style: {
-          fill: typeof style.fill === "string" ? style.fill : "#ffffff",
-          stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-          strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-          opacity: typeof style.opacity === "number" ? style.opacity : 1,
+          fill: appearance.fill ?? "#ffffff",
+          stroke: appearance.stroke ?? "#1f2937",
+          strokeWidth: appearance.strokeWidth ?? 2,
+          opacity: appearance.opacity ?? 1,
+          strokeStyle: appearance.strokeStyle,
+          shadow: appearance.shadow,
         },
       };
       return starDto;
@@ -314,10 +369,12 @@ export class ShapeMapper {
       ...base,
       type: "rectangle",
       style: {
-        fill: typeof style.fill === "string" ? style.fill : "#ffffff",
-        stroke: typeof style.stroke === "string" ? style.stroke : "#1f2937",
-        strokeWidth: typeof style.strokeWidth === "number" ? style.strokeWidth : 2,
-        opacity: typeof style.opacity === "number" ? style.opacity : 1,
+        fill: appearance.fill ?? "#ffffff",
+        stroke: appearance.stroke ?? "#1f2937",
+        strokeWidth: appearance.strokeWidth ?? 2,
+        opacity: appearance.opacity ?? 1,
+        strokeStyle: appearance.strokeStyle,
+        shadow: appearance.shadow,
       },
     };
     return rectDto;

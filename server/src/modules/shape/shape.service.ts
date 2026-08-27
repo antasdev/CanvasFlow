@@ -195,7 +195,39 @@ export class ShapeService {
     const effectiveShapeConfig = dto.shapeConfig
       ? { ...(existing.shapeConfig ?? {}), ...dto.shapeConfig }
       : existing.shapeConfig;
-    const updateDto = dto.shapeConfig ? { ...dto, shapeConfig: effectiveShapeConfig } : dto;
+
+    const existingObj =
+      typeof (existing as any).toObject === "function"
+        ? (existing as any).toObject()
+        : existing;
+    const existingStyle = (existingObj.style ?? {}) as Record<string, unknown>;
+    const rawExistingShadow = existingStyle.shadow;
+    const existingShadow = (
+      rawExistingShadow && typeof (rawExistingShadow as any).toObject === "function"
+        ? (rawExistingShadow as any).toObject()
+        : rawExistingShadow ?? {}
+    ) as Record<string, unknown>;
+
+    const effectiveStyle = dto.style
+      ? {
+          ...existingStyle,
+          ...dto.style,
+          ...(dto.style.shadow && typeof dto.style.shadow === "object"
+            ? {
+                shadow: {
+                  ...existingShadow,
+                  ...dto.style.shadow,
+                },
+              }
+            : {}),
+        }
+      : existing.style;
+
+    const updateDto = {
+      ...dto,
+      ...(dto.shapeConfig ? { shapeConfig: effectiveShapeConfig } : {}),
+      ...(dto.style ? { style: effectiveStyle } : {}),
+    };
 
     if (effectiveExpectedVersion !== undefined) {
       updatedShape = await shapeRepository.updateWithExpectedVersion(

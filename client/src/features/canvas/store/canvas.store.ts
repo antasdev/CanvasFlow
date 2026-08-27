@@ -4,7 +4,8 @@ import {
   CANVAS_TOOLS,
   type CanvasTool,
 } from "../constants";
-import type { Shape, TextShape } from "../types";
+import type { Shape, TextShape, ShapeStyle } from "../types";
+import { isShapeCompatibleWithProperty } from "../utils/shape-style-capabilities.utils";
 import type {
   RemoteCursor,
   RemoteSelection,
@@ -91,6 +92,18 @@ type CanvasStore = {
     formatting: Partial<Omit<TextShape, "id" | "type" | "x" | "y" | "width" | "height" | "rotation" | "zIndex" | "version">>
   ) => void;
 
+  updateShapeStyle: (
+    shapeId: string,
+    style: Partial<ShapeStyle>,
+    isLivePreview?: boolean
+  ) => void;
+
+  updateMultipleShapesStyle: (
+    shapeIds: string[],
+    style: Partial<ShapeStyle>,
+    isLivePreview?: boolean
+  ) => void;
+
   resetCanvas: () => void;
 
   deleteShape: (shapeId: string) => void;
@@ -157,6 +170,35 @@ type CanvasStore = {
 
   canRedo: () => boolean;
 };
+
+function applyStyleToShape(shape: Shape, style: Partial<ShapeStyle>): Shape {
+  const updated: Record<string, unknown> = { ...shape };
+
+  if (style.fill !== undefined && isShapeCompatibleWithProperty(shape.type, "fill")) {
+    updated.fill = style.fill;
+  }
+  if (style.stroke !== undefined && isShapeCompatibleWithProperty(shape.type, "stroke")) {
+    updated.stroke = style.stroke;
+  }
+  if (style.strokeWidth !== undefined && isShapeCompatibleWithProperty(shape.type, "strokeWidth")) {
+    updated.strokeWidth = style.strokeWidth;
+  }
+  if (style.strokeStyle !== undefined && isShapeCompatibleWithProperty(shape.type, "strokeStyle")) {
+    updated.strokeStyle = style.strokeStyle;
+  }
+  if (style.opacity !== undefined && isShapeCompatibleWithProperty(shape.type, "opacity")) {
+    updated.opacity = style.opacity;
+  }
+  if (style.shadow !== undefined && isShapeCompatibleWithProperty(shape.type, "shadow")) {
+    const existingShadow = (shape.shadow ?? {}) as Record<string, unknown>;
+    updated.shadow = {
+      ...existingShadow,
+      ...style.shadow,
+    };
+  }
+
+  return updated as Shape;
+}
 
 export const useCanvasStore = create<CanvasStore>(
   (set, get) => ({
@@ -376,6 +418,47 @@ export const useCanvasStore = create<CanvasStore>(
           shapes: nextShapes,
         };
       });
+    },
+
+    updateMultipleShapesStyle: (
+      shapeIds: string[],
+      style: Partial<ShapeStyle>,
+      isLivePreview = false
+    ): void => {
+      set((state) => {
+        if (!shapeIds || shapeIds.length === 0) {
+          return state;
+        }
+
+        const idSet = new Set(shapeIds);
+        let hasChanges = false;
+
+        const nextShapes = state.shapes.map((shape) => {
+          if (!idSet.has(shape.id)) {
+            return shape;
+          }
+          hasChanges = true;
+          return applyStyleToShape(shape, style);
+        });
+
+        if (!hasChanges) {
+          return state;
+        }
+
+        return {
+          past: isLivePreview ? state.past : [...state.past, state.shapes],
+          future: isLivePreview ? state.future : [],
+          shapes: nextShapes,
+        };
+      });
+    },
+
+    updateShapeStyle: (
+      shapeId: string,
+      style: Partial<ShapeStyle>,
+      isLivePreview = false
+    ): void => {
+      get().updateMultipleShapesStyle([shapeId], style, isLivePreview);
     },
 
     resetCanvas: (): void => {

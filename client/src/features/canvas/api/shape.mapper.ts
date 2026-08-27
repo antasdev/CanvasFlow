@@ -12,13 +12,29 @@ import type {
   LineShape,
   ArrowShape,
   ConnectorShape,
+  ShapeShadow,
 } from "../types";
-import type { ShapeResponseDto } from "./shape.api";
+import type { ShapeResponseDto, ShapeShadowDto } from "./shape.api";
+
+function mapShadowDto(shadow?: ShapeShadowDto): ShapeShadow | undefined {
+  if (!shadow) return undefined;
+  return {
+    enabled: Boolean(shadow.enabled),
+    color: shadow.color ?? "#000000",
+    blur: typeof shadow.blur === "number" ? shadow.blur : 10,
+    offsetX: typeof shadow.offsetX === "number" ? shadow.offsetX : 0,
+    offsetY: typeof shadow.offsetY === "number" ? shadow.offsetY : 4,
+    opacity: typeof shadow.opacity === "number" ? shadow.opacity : 0.3,
+  };
+}
 
 /**
  * Maps Shape API/Socket response DTO to frontend Shape discriminated union.
  */
 export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
+  const shadow = mapShadowDto(dto.style?.shadow);
+  const strokeStyle = dto.style && "strokeStyle" in dto.style ? dto.style.strokeStyle : undefined;
+
   if (dto.type === "freehand") {
     const legacyStyle = dto.style as { points?: number[] };
     const rawPoints = Array.isArray(dto.points)
@@ -41,6 +57,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       points: rawPoints,
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
     return freehandShape;
   }
@@ -60,7 +78,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle: dto.style?.strokeStyle === "dashed" ? "dashed" : "solid",
+      strokeStyle: strokeStyle ?? "solid",
+      shadow,
     };
     return lineShape;
   }
@@ -80,6 +99,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
       arrowHeadEnd: typeof dto.style?.arrowHeadEnd === "boolean" ? dto.style.arrowHeadEnd : true,
       arrowHeadStart: typeof dto.style?.arrowHeadStart === "boolean" ? dto.style.arrowHeadStart : false,
       pointerLength: typeof dto.style?.pointerLength === "number" ? dto.style.pointerLength : 10,
@@ -103,6 +124,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
       connector: dto.connector
         ? {
             sourceShapeId: dto.connector.sourceShapeId ?? null,
@@ -156,6 +179,7 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#1f2937",
       padding: typeof dto.style?.padding === "number" ? dto.style.padding : 4,
       lineHeight: typeof dto.style?.lineHeight === "number" ? dto.style.lineHeight : 1.2,
+      shadow,
     };
     return textShape;
   }
@@ -176,6 +200,7 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fontSize: dto.style.fontSize ?? 20,
       backgroundColor: dto.style.backgroundColor ?? "#fef08a",
       textColor: dto.style.textColor ?? "#1f2937",
+      shadow,
     };
     return stickyShape;
   }
@@ -195,6 +220,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
     return circleShape;
   }
@@ -214,6 +241,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
     return ellipseShape;
   }
@@ -233,6 +262,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
     return triangleShape;
   }
@@ -257,6 +288,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
     return polygonShape;
   }
@@ -286,6 +319,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
     return starShape;
   }
@@ -300,10 +335,12 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
     rotation: dto.rotation,
     zIndex: dto.zIndex,
     version: dto.version ?? 1,
-    opacity: dto.style.opacity ?? 1,
-    fill: dto.style.fill ?? "#ffffff",
-    stroke: dto.style.stroke ?? "#1f2937",
-    strokeWidth: dto.style.strokeWidth ?? 2,
+    opacity: dto.style?.opacity ?? 1,
+    fill: dto.style?.fill ?? "#ffffff",
+    stroke: dto.style?.stroke ?? "#1f2937",
+    strokeWidth: dto.style?.strokeWidth ?? 2,
+    strokeStyle,
+    shadow,
   };
   return rectShape;
 }
@@ -315,6 +352,9 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
 export function mapShapeResponseToRectangleShape(
   dto: ShapeResponseDto
 ): RectangleShape {
+  const shadow = mapShadowDto(dto.style?.shadow);
+  const strokeStyle = dto.style && "strokeStyle" in dto.style ? dto.style.strokeStyle : undefined;
+
   if (dto.type === "rectangle") {
     return {
       id: dto.id,
@@ -326,10 +366,12 @@ export function mapShapeResponseToRectangleShape(
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
-      opacity: dto.style.opacity ?? 1,
-      fill: dto.style.fill ?? "#ffffff",
-      stroke: dto.style.stroke ?? "#1f2937",
-      strokeWidth: dto.style.strokeWidth ?? 2,
+      opacity: dto.style?.opacity ?? 1,
+      fill: dto.style?.fill ?? "#ffffff",
+      stroke: dto.style?.stroke ?? "#1f2937",
+      strokeWidth: dto.style?.strokeWidth ?? 2,
+      strokeStyle,
+      shadow,
     };
   }
 
@@ -347,5 +389,7 @@ export function mapShapeResponseToRectangleShape(
     fill: "#ffffff",
     stroke: "#1f2937",
     strokeWidth: 2,
+    strokeStyle,
+    shadow,
   };
 }

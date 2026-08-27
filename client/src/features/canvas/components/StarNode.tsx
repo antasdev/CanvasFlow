@@ -8,6 +8,7 @@ import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { StarShape } from "../types";
 import { calculateStarPoints } from "../utils/shape-geometry.utils";
+import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
 type StarNodeProps = {
   shape: StarShape;
@@ -39,6 +40,8 @@ export default function StarNode({
     emitTransformFrame,
     endTransform,
   } = useShapeTransform({ shape, boardId });
+
+  const styleProps = getKonvaStyleProps(shape, isLockedByOther);
 
   useEffect(() => {
     const transformer = transformerRef.current;
@@ -74,7 +77,7 @@ export default function StarNode({
         width={displayTransform.width}
         height={displayTransform.height}
         rotation={displayTransform.rotation}
-        opacity={isLockedByOther ? (shape.opacity ?? 1) * 0.8 : shape.opacity}
+        opacity={styleProps.opacity}
         draggable={canEditCanvas && activeTool === CANVAS_TOOLS.SELECT && !isLockedByOther}
         onMouseDown={(event) => {
           event.cancelBubble = true;
@@ -240,9 +243,16 @@ export default function StarNode({
         <Line
           points={starPoints}
           closed
-          fill={shape.fill}
-          stroke={shape.stroke}
-          strokeWidth={shape.strokeWidth}
+          fill={styleProps.fill}
+          stroke={styleProps.stroke}
+          strokeWidth={styleProps.strokeWidth}
+          dash={styleProps.dash}
+          shadowEnabled={styleProps.shadowEnabled}
+          shadowColor={styleProps.shadowColor}
+          shadowBlur={styleProps.shadowBlur}
+          shadowOffsetX={styleProps.shadowOffset.x}
+          shadowOffsetY={styleProps.shadowOffset.y}
+          shadowOpacity={styleProps.shadowOpacity}
           lineCap="round"
           lineJoin="round"
         />

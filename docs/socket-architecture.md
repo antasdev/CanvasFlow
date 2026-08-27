@@ -2447,3 +2447,139 @@ Connectors calculate anchor attachment points (`top`, `right`, `bottom`, `left`,
 **Answer:**
 1. **Server Validation**: The server validates incoming `shapeConfig.sides` with Zod schema `z.number().int().min(3).max(64)`. A payload with 2 or 100 sides is rejected with `400 BAD_REQUEST`.
 2. **Frontend Clamping**: In `shape-geometry.utils.ts`, `calculatePolygonPoints` enforces `Math.min(64, Math.max(3, Math.round(sides)))`, guaranteeing that rendering never crashes or enters an invalid geometric state even under unexpected network inputs.
+
+---
+
+# Section 37: Slice 21 — Shape Styling & Advanced Appearance Architecture
+
+### 37.1 Architecture & Design Philosophy
+Slice 21 implements an extensible, capability-aware appearance and styling engine shared across the entire CanvasFlow shape hierarchy (`rectangle`, `circle`, `ellipse`, `triangle`, `polygon`, `star`, `line`, `arrow`, `connector`, `freehand`, `text`, `sticky_note`).
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SLICE 21: SHAPE APPEARANCE & STYLING                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                                   Client
+                ┌─────────────────────────────────────────┐
+                │        ShapeStyleToolbar / UI           │
+                │   (Fill, Stroke, Width, Dash, Shadow)   │
+                └───────────────────┬─────────────────────┘
+                                    │
+                                    ├─── 60fps Drag (isLivePreview=true)
+                                    │    └─► Local Zustand Store Only (0 DB writes)
+                                    │
+                                    └─── Commit / Pointer Up (isLivePreview=false)
+                                         ├─► Atomic Undo Snapshot (1 past entry)
+                                         └─► Socket.IO 'shape:update' (with expectedVersion)
+                                                  │
+                                                  ▼
+                                                Server
+                ┌─────────────────────────────────────────────────────────┐
+                │ 1. ShapeHandler Socket Controller                       │
+                │    └─ Zod shapeStyleValidationSchema                     │
+                │ 2. Runtime RBAC Check                                   │
+                │    └─ CanvasMutationGuard (OWNER / ADMIN / EDITOR)      │
+                │ 3. ShapeService Deep-Merge Partial Update               │
+                │    ├─ Object unwrap: existing.toObject()                │
+                │    ├─ Partial style merge: { ...style, ...dto.style }   │
+                │    └─ Nested shadow merge: { ...shadow, ...dto.shadow } │
+                │ 4. OCC Concurrency Check                                │
+                │    └─ Shape.version === expectedVersion (409 Conflict)  │
+                │ 5. Atomic Durable Mutation Execution                    │
+                │    ├─ Increment Shape.version                           │
+                │    ├─ Increment Canvas.collaborationRevision            │
+                │    └─ Create MutationRecord (UNDO/REDO durable audit)   │
+                │ 6. Broadcast 'shape:updated' to Board Room              │
+                └─────────────────────────────────────────────────────────┘
+```
+
+### 37.2 Single Source of Truth Principle
+Appearance properties strictly reside inside `style`:
+- `style.fill?: string`
+- `style.stroke?: string`
+- `style.strokeWidth?: number`
+- `style.strokeStyle?: "solid" | "dashed" | "dotted"`
+- `style.opacity?: number`
+- `style.shadow?: { enabled?: boolean; color?: string; blur?: number; offsetX?: number; offsetY?: number; opacity?: number }`
+
+Parallel or duplicate top-level fields (such as `shape.strokeStyle` alongside `shape.style.strokeStyle`) are strictly disallowed. All persistent MongoDB schemas, Zod validation schemas, client mappers, and socket contracts treat `style` as the sole authority for appearance attributes.
+
+### 37.3 Capability Matrix
+Different shape families possess distinct rendering capabilities. The client resolver `getShapeStyleCapabilities(type)` and multi-shape aggregator `getMultiShapeCapabilities(shapes)` enforce capability boundaries:
+
+| Shape Family | Types | Fill | Stroke | Stroke Width | Stroke Style | Opacity | Shadow |
+|---|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Filled Shapes** | `rectangle`, `circle`, `ellipse`, `triangle`, `polygon`, `star` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Vector Paths** | `line`, `arrow`, `connector`, `freehand` | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Text** | `text` | ✅ *(color)* | ❌ | ❌ | ❌ | ✅ | ✅ |
+| **Sticky Note** | `sticky_note` | ✅ *(bg)* | ❌ | ❌ | ❌ | ✅ | ✅ |
+
+### 37.4 Multi-Selection & Atomic Undo Invariants
+1. **Multi-Selection Aggregation**: When multiple heterogeneous shapes are selected, only properties supported by at least one shape are presented in the floating toolbar.
+2. **Safe Filtered Application**: Applying a styling update across a heterogeneous selection safely updates compatible shapes while silently ignoring incompatible properties on others (e.g., applying `fill` and `stroke` to a selection containing a Rectangle and a Line updates both properties on the Rectangle, but only updates `stroke` on the Line without corrupting it).
+3. **Atomic Undo History**: `canvas.store.ts` pushes exactly ONE snapshot of `state.shapes` to `past` during a multi-shape styling update. A single invocation of `undo()` restores all selected shapes simultaneously to their exact prior styles.
+4. **Ephemeral Purity**: During continuous user interactions (such as dragging opacity sliders or live previewing color swatches), `isLivePreview = true` prevents polluting the undo stack with hundreds of micro-states. When the interaction commits on release, a single durable update is recorded.
+
+### 37.5 Deep-Merge Partial Updates in Backend Service
+When updating appearance attributes, clients often send partial style payloads (e.g., updating only `strokeWidth`, or updating `shadow.blur` without re-sending `shadow.offsetY`). In `server/src/modules/shape/shape.service.ts`, nested appearance properties undergo defensive deep-merging:
+```typescript
+const existingShadow = (existingObj.style?.shadow ?? {}) as Record<string, unknown>;
+const incomingShadow = (dto.style.shadow ?? {}) as Record<string, unknown>;
+
+mergedStyle = {
+  ...existingObj.style,
+  ...dto.style,
+  ...(dto.style.shadow
+    ? {
+        shadow: {
+          ...existingShadow,
+          ...incomingShadow,
+        },
+      }
+    : {}),
+};
+```
+This guarantees that updating a single appearance property never zeroes out sibling properties.
+
+---
+
+# Section 38: Production Architecture FAQ (Slice 21)
+
+### Q1: Why does Mongoose require `.toObject()` unwrapping when deep-merging nested schemas?
+**Answer:**
+Mongoose document instances wrap sub-documents in specialized proxy getters. Spreading `{ ...existing.style }` when `style` has a sub-schema can produce internal Mongoose metadata properties and omit fields configured with `{ strict: false }`. Defensively unwrapping via `(typeof existing.toObject === "function" ? existing.toObject() : existing)` yields a pristine plain JavaScript object, allowing accurate shallow and deep spreads without mutating Mongoose internal state.
+
+---
+
+### Q2: How does CanvasFlow prevent conflicting style edits on the same shape?
+**Answer:**
+CanvasFlow enforces Optimistic Concurrency Control (OCC) through `Shape.version`:
+1. Every client mutation must supply `expectedVersion`.
+2. The server compares `shape.version === expectedVersion`.
+3. If versions do not match (because another collaborator updated the shape's fill or stroke first), the server immediately rejects the update with `409 CONFLICT`.
+4. The client reconciles with the authoritative state and notifies the user.
+
+---
+
+### Q3: Why does `updateShapeSocketSchema` not define default values for partial updates?
+**Answer:**
+In partial update validation schemas, Zod `.default(...)` directives on nested fields are hazardous: if a client emits `{ style: { strokeWidth: 5 } }`, Zod schemas configured with `.default()` would inject defaults for missing fields (e.g. injecting `shadow: { enabled: false, blur: 10 }`), inadvertently overwriting custom shadow configurations in MongoDB. By declaring all nested fields as `.optional()`, incoming payloads remain strictly partial and allow true deep-merge behavior.
+
+---
+
+### Q4: How is 60fps performance maintained during slider drags in the styling toolbar?
+**Answer:**
+1. **Zustand Reactivity**: Dragging an opacity or blur slider dispatches an optimistic state update with `isLivePreview = true`.
+2. **Zero Network Traffic**: 0 Socket.IO packets are emitted and 0 database writes occur during the continuous drag gesture.
+3. **Konva Direct Batch Draw**: React-Konva nodes re-render in local canvas memory at 60fps.
+4. **Commit on Release**: Only when the user releases the slider pointer (`onMouseUp` / `onTouchEnd`) does the client push an undo snapshot to Zustand and dispatch the single durable `shape:update` socket event.
+
+---
+
+### Q5: How are mixed values rendered in the styling toolbar when multiple shapes are selected?
+**Answer:**
+`getMixedStyleValue(shapes, selector)` compares the property across all selected shapes supporting that property:
+- If all compatible shapes have identical values (e.g., both have `strokeWidth: 4`), `{ isMixed: false, value: 4 }` is returned, and the UI displays `4px`.
+- If values differ (e.g., one has `strokeWidth: 2` and another has `strokeWidth: 6`), `{ isMixed: true, value: undefined }` is returned.
+- The UI gracefully renders a `"Mixed"` indicator in dropdowns, a multi-color gradient swatch in color pickers, and a `"Mix"` label in sliders, without forcing an arbitrary default upon the selection until the user explicitly selects a new value.
