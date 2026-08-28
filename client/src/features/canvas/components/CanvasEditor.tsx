@@ -298,6 +298,26 @@ export default function CanvasEditor({
         (state) => state.clearSelection,
     );
 
+    const editingGroupId = useCanvasStore(
+        (state) => state.editingGroupId,
+    );
+
+    const enterGroup = useCanvasStore(
+        (state) => state.enterGroup,
+    );
+
+    const exitGroup = useCanvasStore(
+        (state) => state.exitGroup,
+    );
+
+    const groupShapes = useCanvasStore(
+        (state) => state.groupShapes,
+    );
+
+    const ungroupShapes = useCanvasStore(
+        (state) => state.ungroupShapes,
+    );
+
     const [textCreationContext, setTextCreationContext] =
         useState<{ x: number; y: number } | null>(null);
 
@@ -483,7 +503,57 @@ export default function CanvasEditor({
             }
 
             if (event.key === "Escape") {
+                if (editingGroupId) {
+                    exitGroup();
+                    return;
+                }
                 clearSelection();
+                return;
+            }
+
+            if (event.key === "Enter" && selectedShapeIds.length === 1) {
+                const selected = shapes.find((s) => s.id === selectedShapeIds[0]);
+                if (selected && selected.type === "group" && canEditCanvas) {
+                    event.preventDefault();
+                    enterGroup(selected.id);
+                    return;
+                }
+            }
+
+            if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "g") {
+                event.preventDefault();
+                if (!canEditCanvas) return;
+                const groupToUngroup = shapes.find(
+                    (s) => selectedShapeIds.includes(s.id) && s.type === "group"
+                );
+                if (groupToUngroup && canvasId) {
+                    ungroupShapes(groupToUngroup.id);
+                    socketClientService.ungroupShape(canvasId, groupToUngroup.id, groupToUngroup.version).catch((err) => {
+                        toast.error(err instanceof Error ? err.message : "Failed to ungroup shapes.");
+                    });
+                }
+                return;
+            }
+
+            if ((event.ctrlKey || event.metaKey) && !event.shiftKey && event.key.toLowerCase() === "g") {
+                event.preventDefault();
+                if (!canEditCanvas || selectedShapeIds.length < 2) return;
+                const shapesToGroup = shapes.filter((s) => selectedShapeIds.includes(s.id));
+                if (shapesToGroup.length >= 2 && canvasId) {
+                    const firstParent = shapesToGroup[0].parentId ?? null;
+                    if (shapesToGroup.every((s) => (s.parentId ?? null) === firstParent)) {
+                        const expectedVersions: Record<string, number> = {};
+                        for (const s of shapesToGroup) {
+                            if (s.version) expectedVersions[s.id] = s.version;
+                        }
+                        const group = groupShapes(selectedShapeIds);
+                        if (group) {
+                            socketClientService.groupShapes(canvasId, selectedShapeIds, expectedVersions).catch((err) => {
+                                toast.error(err instanceof Error ? err.message : "Failed to group shapes.");
+                            });
+                        }
+                    }
+                }
                 return;
             }
 
@@ -512,6 +582,14 @@ export default function CanvasEditor({
         deleteShape,
         clearSelection,
         selectAllShapes,
+        editingGroupId,
+        exitGroup,
+        enterGroup,
+        groupShapes,
+        ungroupShapes,
+        shapes,
+        canEditCanvas,
+        canvasId,
     ]);
 
     /*
@@ -617,6 +695,9 @@ export default function CanvasEditor({
         }
 
         if (isEmptyCanvas) {
+            if (editingGroupId) {
+                exitGroup();
+            }
             clearSelection();
         }
 
@@ -1446,6 +1527,7 @@ export default function CanvasEditor({
                         selectedShapes={selectedShapes}
                         pan={pan}
                         zoom={zoom}
+                        canvasId={canvasId}
                         canEditCanvas={canEditCanvas}
                         onUpdateStyle={(shapeIds, style, isLivePreview) => {
                             updateMultipleShapesStyle(shapeIds, style, isLivePreview);
@@ -1491,7 +1573,9 @@ export default function CanvasEditor({
                             height={size.height}
                         />
 
-                        {shapes.map((shape) => (
+                        {shapes
+                            .filter((shape) => !shape.parentId)
+                            .map((shape) => (
                             <ShapeRenderer
                                 key={shape.id}
                                 shape={shape}

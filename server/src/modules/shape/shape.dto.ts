@@ -59,6 +59,7 @@ export type BaseShapeResponseDto = {
   rotation: number;
   zIndex: number;
   createdBy: string;
+  parentId?: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -276,6 +277,14 @@ export type StarShapeResponseDto = BaseShapeResponseDto & {
 };
 
 /**
+ * Group Shape Response DTO
+ */
+export type GroupShapeResponseDto = BaseShapeResponseDto & {
+  type: "group";
+  style?: Record<string, unknown>;
+};
+
+/**
  * Discriminated Union of Shape API Response DTOs
  */
 export type ShapeResponseDto =
@@ -290,7 +299,8 @@ export type ShapeResponseDto =
   | FreehandShapeResponseDto
   | LineShapeResponseDto
   | ArrowShapeResponseDto
-  | ConnectorShapeResponseDto;
+  | ConnectorShapeResponseDto
+  | GroupShapeResponseDto;
 
 /**
  * Shape Creation DTO (Service/Internal)
@@ -308,6 +318,7 @@ export type CreateShapeDto = {
   connector?: ShapeConnectorDto;
   shapeConfig?: ShapeConfigData;
   style?: ShapeStyleDto;
+  parentId?: Types.ObjectId | null;
 };
 
 /**
@@ -325,4 +336,23 @@ export type UpdateShapeDto = {
   connector?: ShapeConnectorDto;
   shapeConfig?: ShapeConfigData;
   style?: ShapeStyleDto;
+  parentId?: Types.ObjectId | null;
+};
+
+/**
+ * Group Shapes DTO (Service/Internal)
+ */
+export type GroupShapesDto = {
+  canvasId: Types.ObjectId;
+  shapeIds: Types.ObjectId[];
+  expectedVersions?: Record<string, number>;
+};
+
+/**
+ * Ungroup Shape DTO (Service/Internal)
+ */
+export type UngroupShapeDto = {
+  canvasId: Types.ObjectId;
+  groupId: Types.ObjectId;
+  expectedVersion?: number;
 };

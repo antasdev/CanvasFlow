@@ -13,6 +13,7 @@ import {
   LineShapeResponseDto,
   ArrowShapeResponseDto,
   ConnectorShapeResponseDto,
+  GroupShapeResponseDto,
   ShapeConnectorDto,
   ShapeAppearanceStyleDto,
 } from "./shape.dto";
@@ -69,12 +70,22 @@ export class ShapeMapper {
       rotation: doc.rotation ?? 0,
       zIndex: doc.zIndex,
       createdBy: doc.createdBy.toString(),
+      parentId: doc.parentId ? doc.parentId.toString() : null,
       version: doc.version ?? 1,
       createdAt: doc.createdAt ? new Date(doc.createdAt).toISOString() : new Date().toISOString(),
       updatedAt: doc.updatedAt ? new Date(doc.updatedAt).toISOString() : new Date().toISOString(),
     };
 
     const shapeType = String(doc.type).toUpperCase();
+
+    if (shapeType === "GROUP") {
+      const groupDto: GroupShapeResponseDto = {
+        ...base,
+        type: "group",
+        style: {},
+      };
+      return groupDto;
+    }
 
     const appearance = ShapeMapper.mapAppearanceStyle(style);
 

@@ -17,6 +17,7 @@ export enum ShapeType {
   STICKY_NOTE = "STICKY_NOTE",
   FREEHAND = "FREEHAND",
   CONNECTOR = "CONNECTOR",
+  GROUP = "GROUP",
 }
 
 export type AnchorPosition = "top" | "right" | "bottom" | "left" | "center";
@@ -107,6 +108,8 @@ export type Shape = {
 
   createdBy: Types.ObjectId;
 
+  parentId?: Types.ObjectId | null;
+
   version: number;
 
   createdAt: Date;
@@ -142,6 +145,8 @@ export type CreateShapeData = {
   style?: Record<string, unknown>;
 
   createdBy: Types.ObjectId;
+
+  parentId?: Types.ObjectId | null;
 
   version?: number;
 };

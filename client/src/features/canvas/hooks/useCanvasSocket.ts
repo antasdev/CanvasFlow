@@ -5,6 +5,8 @@ import type {
   CanvasSyncPayload,
   CursorMovedPayload,
   DeleteShapePayload,
+  GroupShapesBroadcastPayload,
+  UngroupShapeBroadcastPayload,
   SelectionChangedPayload,
   ShapeCreatedPayload,
   ShapeDeletedPayload,
@@ -43,6 +45,12 @@ export const useCanvasSocket = (
   );
   const applyRemoteShapeDeleted = useCanvasStore(
     (state) => state.applyRemoteShapeDeleted
+  );
+  const applyRemoteShapeGrouped = useCanvasStore(
+    (state) => state.applyRemoteShapeGrouped
+  );
+  const applyRemoteShapeUngrouped = useCanvasStore(
+    (state) => state.applyRemoteShapeUngrouped
   );
   const setRemoteCursor = useCanvasStore(
     (state) => state.setRemoteCursor
@@ -173,6 +181,43 @@ export const useCanvasSocket = (
       removeRemoteShapeTransform(shapeId);
     };
 
+    // Handle remote shape grouping with revision freshness guard
+    const handleShapeGrouped = (payload: GroupShapesBroadcastPayload): void => {
+      const meta = payload.meta;
+      if (meta && boardId) {
+        const freshness = useCollaborationStore.getState().checkEventFreshness(boardId, meta.revision);
+        if (freshness.action === "ignore") {
+          return;
+        }
+        if (freshness.action === "gap") {
+          onGapDetected?.();
+          return;
+        }
+      }
+
+      const group = mapShapeResponseToShape(payload.group);
+      const children = payload.children.map(mapShapeResponseToShape);
+      applyRemoteShapeGrouped(group, children);
+    };
+
+    // Handle remote shape ungrouping with revision freshness guard
+    const handleShapeUngrouped = (payload: UngroupShapeBroadcastPayload): void => {
+      const meta = payload.meta;
+      if (meta && boardId) {
+        const freshness = useCollaborationStore.getState().checkEventFreshness(boardId, meta.revision);
+        if (freshness.action === "ignore") {
+          return;
+        }
+        if (freshness.action === "gap") {
+          onGapDetected?.();
+          return;
+        }
+      }
+
+      const children = payload.children.map(mapShapeResponseToShape);
+      applyRemoteShapeUngrouped(payload.groupId, children);
+    };
+
     // 6. Handle collaborator cursor movement
     const handleCursorMoved = (payload: CursorMovedPayload): void => {
       if (payload.boardId === boardId) {
@@ -263,6 +308,8 @@ export const useCanvasSocket = (
     socket.on(SocketEvents.SHAPE_CREATED, handleShapeCreated);
     socket.on(SocketEvents.SHAPE_UPDATED, handleShapeUpdated);
     socket.on(SocketEvents.SHAPE_DELETED, handleShapeDeleted);
+    socket.on(SocketEvents.SHAPE_GROUPED, handleShapeGrouped);
+    socket.on(SocketEvents.SHAPE_UNGROUPED, handleShapeUngrouped);
     socket.on(SocketEvents.CURSOR_MOVED, handleCursorMoved);
     socket.on(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
     socket.on(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
@@ -278,6 +325,8 @@ export const useCanvasSocket = (
       socket.off(SocketEvents.SHAPE_CREATED, handleShapeCreated);
       socket.off(SocketEvents.SHAPE_UPDATED, handleShapeUpdated);
       socket.off(SocketEvents.SHAPE_DELETED, handleShapeDeleted);
+      socket.off(SocketEvents.SHAPE_GROUPED, handleShapeGrouped);
+      socket.off(SocketEvents.SHAPE_UNGROUPED, handleShapeUngrouped);
       socket.off(SocketEvents.CURSOR_MOVED, handleCursorMoved);
       socket.off(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
       socket.off(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
@@ -300,6 +349,8 @@ export const useCanvasSocket = (
     applyRemoteShapeCreated,
     applyRemoteShapeUpdated,
     applyRemoteShapeDeleted,
+    applyRemoteShapeGrouped,
+    applyRemoteShapeUngrouped,
     setRemoteCursor,
     removeRemoteCursor,
     clearRemoteCursors,

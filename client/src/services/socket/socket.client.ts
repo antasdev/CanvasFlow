@@ -17,6 +17,10 @@ import type {
   CursorMovePayload,
   DeleteCommentPayload,
   DeleteShapePayload,
+  GroupShapesPayload,
+  GroupShapesAckData,
+  UngroupShapePayload,
+  UngroupShapeAckData,
   CollaborativeInteraction,
   InteractionBroadcastPayload,
   InteractionEndBroadcastPayload,
@@ -368,6 +372,98 @@ export class SocketClientService {
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to delete shape.";
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
+          }
+          reject(err);
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape grouping request to authoritative backend over Socket.IO.
+   *
+   * @param canvasId - Canvas identifier
+   * @param shapeIds - Array of shape IDs to group together
+   * @param expectedVersions - Optional OCC expected versions
+   * @param mutationId - Optional client mutation UUID
+   */
+  public groupShapes(
+    canvasId: string,
+    shapeIds: string[],
+    expectedVersions?: Record<string, number>,
+    mutationId?: string
+  ): Promise<GroupShapesAckData> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: GroupShapesPayload = {
+        canvasId,
+        shapeIds,
+        expectedVersions,
+        mutationId,
+      };
+
+      socket.emit(SocketEvents.SHAPE_GROUP, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to group shapes.";
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            (err as any).mutationId = response.mutationId;
+          }
+          reject(err);
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape ungrouping request to authoritative backend over Socket.IO.
+   *
+   * @param canvasId - Canvas identifier
+   * @param groupId - Group shape identifier to dissolve
+   * @param expectedVersion - Optional OCC expected version of the group
+   * @param mutationId - Optional client mutation UUID
+   */
+  public ungroupShape(
+    canvasId: string,
+    groupId: string,
+    expectedVersion?: number,
+    mutationId?: string
+  ): Promise<UngroupShapeAckData> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: UngroupShapePayload = {
+        canvasId,
+        groupId,
+        expectedVersion,
+        mutationId,
+      };
+
+      socket.emit(SocketEvents.SHAPE_UNGROUP, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to ungroup shape.";
           const err = new Error(errorMessage);
           if (errorObj) {
             Object.assign(err, errorObj);

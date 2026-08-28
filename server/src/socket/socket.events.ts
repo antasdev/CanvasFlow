@@ -22,6 +22,12 @@ export const SocketEvents = {
   SHAPE_DELETE: "shape:delete",
   SHAPE_DELETED: "shape:deleted",
 
+  SHAPE_GROUP: "shape:group",
+  SHAPE_GROUPED: "shape:grouped",
+
+  SHAPE_UNGROUP: "shape:ungroup",
+  SHAPE_UNGROUPED: "shape:ungrouped",
+
   CURSOR_MOVE: "cursor:move",
   CURSOR_MOVED: "cursor:moved",
 

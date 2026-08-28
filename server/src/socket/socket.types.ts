@@ -190,7 +190,8 @@ export type CreateShapePayload = {
     | "freehand"
     | "line"
     | "arrow"
-    | "connector";
+    | "connector"
+    | "group";
   x: number;
   y: number;
   width: number;
@@ -201,6 +202,7 @@ export type CreateShapePayload = {
   connector?: ShapeConnectorPayload;
   shapeConfig?: ShapeConfigPayload;
   style?: ShapeStylePayload;
+  parentId?: string | null;
 };
 
 export type UpdateShapePayload = {
@@ -218,6 +220,7 @@ export type UpdateShapePayload = {
     connector?: ShapeConnectorPayload;
     shapeConfig?: ShapeConfigPayload;
     style?: ShapeStylePayload;
+    parentId?: string | null;
   };
 };
 
@@ -225,6 +228,42 @@ export type DeleteShapePayload = {
   shapeId: string;
   mutationId?: string;
   expectedVersion?: number;
+};
+
+export type GroupShapesPayload = {
+  canvasId: string;
+  shapeIds: string[];
+  expectedVersions?: Record<string, number>;
+  mutationId?: string;
+};
+
+export type GroupShapesBroadcastPayload = {
+  meta: CollaborationEventMeta;
+  group: ShapeResponseDto;
+  children: ShapeResponseDto[];
+};
+
+export type GroupShapesAckData = {
+  group: ShapeResponseDto;
+  children: ShapeResponseDto[];
+};
+
+export type UngroupShapePayload = {
+  canvasId: string;
+  groupId: string;
+  expectedVersion?: number;
+  mutationId?: string;
+};
+
+export type UngroupShapeBroadcastPayload = {
+  meta: CollaborationEventMeta;
+  groupId: string;
+  children: ShapeResponseDto[];
+};
+
+export type UngroupShapeAckData = {
+  groupId: string;
+  children: ShapeResponseDto[];
 };
 
 /**
@@ -471,6 +510,16 @@ export interface ClientToServerEvents {
     callback?: (response: SocketAck) => void
   ) => void;
 
+  "shape:group": (
+    payload: GroupShapesPayload,
+    callback?: (response: SocketAck<GroupShapesAckData>) => void
+  ) => void;
+
+  "shape:ungroup": (
+    payload: UngroupShapePayload,
+    callback?: (response: SocketAck<UngroupShapeAckData>) => void
+  ) => void;
+
   "cursor:move": (payload: CursorMovePayload) => void;
 
   "selection:change": (payload: SelectionChangePayload) => void;
@@ -563,6 +612,8 @@ export interface ServerToClientEvents {
   "shape:created": (payload: ShapeCreatedPayload | ShapeResponseDto) => void;
   "shape:updated": (payload: ShapeUpdatedPayload | ShapeResponseDto) => void;
   "shape:deleted": (payload: ShapeDeletedPayload | DeleteShapePayload) => void;
+  "shape:grouped": (payload: GroupShapesBroadcastPayload) => void;
+  "shape:ungrouped": (payload: UngroupShapeBroadcastPayload) => void;
   "cursor:moved": (payload: CursorMovedPayload) => void;
   "selection:changed": (payload: SelectionChangedPayload) => void;
   "shape:locked": (payload: ShapeLockedPayload) => void;

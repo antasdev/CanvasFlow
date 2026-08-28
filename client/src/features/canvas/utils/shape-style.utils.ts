@@ -186,5 +186,8 @@ export function getShapeStyle(shape: Shape): ShapeStyle {
         textColor: shape.textColor,
         fontSize: shape.fontSize,
       };
+    case "group":
+    default:
+      return baseStyle;
   }
 }

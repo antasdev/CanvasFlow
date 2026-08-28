@@ -26,6 +26,10 @@ import {
   ShapeResponseDto,
   SocketAck,
   UpdateShapePayload,
+  GroupShapesPayload,
+  GroupShapesAckData,
+  UngroupShapePayload,
+  UngroupShapeAckData,
 } from "../socket.types";
 
 const objectIdSchema = z
@@ -38,6 +42,7 @@ const createShapeSocketSchema = z
   .object({
     canvasId: objectIdSchema,
     mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
+    parentId: objectIdSchema.nullable().optional(),
     type: z
       .enum([
         "rectangle",
@@ -64,6 +69,8 @@ const createShapeSocketSchema = z
         "ARROW",
         "connector",
         "CONNECTOR",
+        "group",
+        "GROUP",
       ])
       .default("rectangle"),
     x: z.number().finite("x must be a finite number."),
@@ -111,6 +118,7 @@ const updateShapeSocketSchema = z.object({
     connector: shapeConnectorSchema.optional(),
     shapeConfig: shapeConfigSchema.optional(),
     style: shapeStyleSocketSchema.optional(),
+    parentId: objectIdSchema.nullable().optional(),
   }),
 });
 
@@ -118,6 +126,25 @@ const deleteShapeSocketSchema = z.object({
   shapeId: objectIdSchema,
   mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
   expectedVersion: z.number().int().min(1).optional(),
+});
+
+const groupShapeSocketSchema = z.object({
+  canvasId: objectIdSchema,
+  shapeIds: z
+    .array(objectIdSchema)
+    .min(2, "Grouping requires at least 2 shapes.")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Duplicate shape IDs are not allowed in grouping.",
+    }),
+  expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
+});
+
+const ungroupShapeSocketSchema = z.object({
+  canvasId: objectIdSchema,
+  groupId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
 });
 
 /**
@@ -227,6 +254,7 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
                 connector: parsed.data.connector,
                 shapeConfig: parsed.data.shapeConfig,
                 style: parsed.data.style,
+                parentId: parsed.data.parentId ? new Types.ObjectId(parsed.data.parentId) : undefined,
               },
               session
             );
@@ -409,9 +437,18 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
           userId,
           socket.id,
           async (session) => {
+            const { parentId, ...restData } = parsed.data.data;
             return shapeService.updateShape(
               shapeObjectId,
-              parsed.data.data,
+              {
+                ...restData,
+                parentId:
+                  parentId === null
+                    ? null
+                    : parentId
+                    ? new Types.ObjectId(parentId)
+                    : undefined,
+              },
               session,
               parsed.data.expectedVersion
             );
@@ -671,6 +708,279 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
             ? error.message
             : "Failed to delete shape.";
 
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          mutationId: fallbackMutationId,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:group
+   */
+  socket.on(
+    SocketEvents.SHAPE_GROUP,
+    async (
+      payload: GroupShapesPayload,
+      callback?: (response: SocketAck<GroupShapesAckData>) => void
+    ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
+      try {
+        const parsed = groupShapeSocketSchema.safeParse(payload);
+        if (!parsed.success) {
+          const message = parsed.error.issues[0]?.message ?? "Invalid shape grouping payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const canvasObjectId = new Types.ObjectId(parsed.data.canvasId);
+
+        // 1. Resolve canvas & board
+        const canvas = await canvasRepository.findById(canvasObjectId);
+        if (!canvas) {
+          throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+        }
+
+        const boardId = canvas.boardId;
+
+        // 2. Authorize canvas mutation
+        await boardService.authorizeCanvasMutation(boardId, userId);
+
+        // 3. Verify socket is joined to the board room
+        const room = getBoardRoom(boardId.toString());
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before grouping shapes."
+          );
+        }
+
+        // 4. Authoritative persistence via ShapeService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.groupShapes(
+              userId,
+              {
+                canvasId: canvasObjectId,
+                shapeIds: parsed.data.shapeIds.map((id) => new Types.ObjectId(id)),
+                expectedVersions: parsed.data.expectedVersions,
+              },
+              session
+            );
+          },
+          parsed.data.mutationId,
+          "shape:group",
+          parsed.data
+        );
+
+        // 5. Transform to canonical response DTOs
+        const groupDto = ShapeMapper.toResponseDto(result.group);
+        const childrenDtos = result.children.map((c) => ShapeMapper.toResponseDto(c));
+
+        // 6. Broadcast envelope to other collaborators in the room
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_GROUPED, {
+            meta,
+            group: groupDto,
+            children: childrenDtos,
+          });
+        }
+
+        // 7. Acknowledge creator
+        callback?.({
+          success: true,
+          mutationId: parsed.data.mutationId,
+          data: {
+            group: groupDto,
+            children: childrenDtos,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof ApiError) {
+          const code =
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Failed to group shapes.";
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          mutationId: fallbackMutationId,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:ungroup
+   */
+  socket.on(
+    SocketEvents.SHAPE_UNGROUP,
+    async (
+      payload: UngroupShapePayload,
+      callback?: (response: SocketAck<UngroupShapeAckData>) => void
+    ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
+      try {
+        const parsed = ungroupShapeSocketSchema.safeParse(payload);
+        if (!parsed.success) {
+          const message = parsed.error.issues[0]?.message ?? "Invalid shape ungrouping payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const canvasObjectId = new Types.ObjectId(parsed.data.canvasId);
+
+        // 1. Resolve canvas & board
+        const canvas = await canvasRepository.findById(canvasObjectId);
+        if (!canvas) {
+          throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+        }
+
+        const boardId = canvas.boardId;
+
+        // 2. Authorize canvas mutation
+        await boardService.authorizeCanvasMutation(boardId, userId);
+
+        // 3. Verify socket is joined to the board room
+        const room = getBoardRoom(boardId.toString());
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before ungrouping shapes."
+          );
+        }
+
+        // 4. Authoritative persistence via ShapeService & atomic revision increment
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.ungroupShape(
+              userId,
+              {
+                canvasId: canvasObjectId,
+                groupId: new Types.ObjectId(parsed.data.groupId),
+                expectedVersion: parsed.data.expectedVersion,
+              },
+              session
+            );
+          },
+          parsed.data.mutationId,
+          "shape:ungroup",
+          parsed.data
+        );
+
+        // 5. Transform to canonical response DTOs
+        const childrenDtos = result.children.map((c) => ShapeMapper.toResponseDto(c));
+
+        // 6. Broadcast envelope to other collaborators in the room
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_UNGROUPED, {
+            meta,
+            groupId: parsed.data.groupId,
+            children: childrenDtos,
+          });
+        }
+
+        // 7. Acknowledge creator
+        callback?.({
+          success: true,
+          mutationId: parsed.data.mutationId,
+          data: {
+            groupId: parsed.data.groupId,
+            children: childrenDtos,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof ApiError) {
+          const code =
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Failed to ungroup shape.";
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,

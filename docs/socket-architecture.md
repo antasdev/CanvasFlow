@@ -2583,3 +2583,210 @@ In partial update validation schemas, Zod `.default(...)` directives on nested f
 - If all compatible shapes have identical values (e.g., both have `strokeWidth: 4`), `{ isMixed: false, value: 4 }` is returned, and the UI displays `4px`.
 - If values differ (e.g., one has `strokeWidth: 2` and another has `strokeWidth: 6`), `{ isMixed: true, value: undefined }` is returned.
 - The UI gracefully renders a `"Mixed"` indicator in dropdowns, a multi-color gradient swatch in color pickers, and a `"Mix"` label in sliders, without forcing an arbitrary default upon the selection until the user explicitly selects a new value.
+
+---
+
+# Section 39: Slice 22 — Grouping System Architecture & OCC
+
+### 39.1 Architectural Mandate & Single Source of Truth
+Slice 22 implements a production-grade Grouping & Ungrouping subsystem for the CanvasFlow collaborative whiteboard. The architecture adheres to three non-negotiable principles:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 SLICE 22: GROUPING SUBSYSTEM ARCHITECTURE                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                                   Client
+                ┌─────────────────────────────────────────┐
+                │ 1. CanvasEditor / ShapeStyleToolbar     │
+                │    - Multi-select (>= 2 shapes)         │
+                │    - Shortcuts (Ctrl+G, Ctrl+Shift+G)   │
+                │    - Group Edit Mode (double click)     │
+                └───────────────────┬─────────────────────┘
+                                    │
+                                    ├─── Group / Ungroup Request (Local Optimistic + Socket)
+                                    │    ├─► Pure Geometry (group-geometry.utils.ts)
+                                    │    ├─► Atomic Undo Snapshot (exactly 1 past entry)
+                                    │    └─► Socket.IO 'shape:group' / 'shape:ungroup'
+                                    │
+                                    ▼
+                                  Server
+                ┌─────────────────────────────────────────────────────────┐
+                │ 1. ShapeHandler Socket Controller                       │
+                │    └─ Zod groupShapeSocketSchema / ungroupSocketSchema  │
+                │ 2. Runtime RBAC Authorization                           │
+                │    └─ boardService.authorizeCanvasMutation              │
+                │ 3. ShapeService Transaction                             │
+                │    ├─ Validate identical canvasId & parentId            │
+                │    ├─ Cycle detection (hasCyclicHierarchy check)        │
+                │    ├─ OCC Verification (expectedVersions map)           │
+                │    ├─ Compute tight bounding box across all children    │
+                │    ├─ Convert child coords from World to Group Local   │
+                │    ├─ Create Group Shape document in MongoDB            │
+                │    ├─ Update children with parentId: group._id          │
+                │    └─ Increment Shape.versions & CollaborationRevision  │
+                │ 4. MutationRecord Generation ('shape:group' / 'ungroup')│
+                │ 5. Broadcast 'shape:grouped' / 'shape:ungrouped'        │
+                └─────────────────────────────────────────────────────────┘
+```
+
+1. **First-Class Group Shape**: A group is not a synthetic client-only concept or an ephemeral array of IDs. It is a full, first-class `Shape` document in MongoDB with `type: "group"`, its own `_id`, position (`x`, `y`), dimensions (`width`, `height`), `rotation`, `zIndex`, and `version`.
+2. **Parent-Child Hierarchy Source of Truth**: The hierarchy's sole source of truth is `child.parentId`. We strictly reject maintaining both `group.childIds` and `child.parentId` as competing sources of truth, which inevitably leads to distributed synchronization drift and phantom children.
+3. **Local-Space Coordinate Model**: Grouped children store coordinates **relative to their immediate parent group's origin** (`x: childWorldX - groupWorldX`, `y: childWorldY - groupWorldY`). When a group is translated, scaled, or rotated, only the group shape itself is mutated. Children coordinates are not rewritten on drag, achieving $O(1)$ updates rather than $O(N)$ database writes.
+
+### 39.2 Coordinate Transformation Mathematics
+Coordinate transformations between local and world space are handled by pure, deterministic geometric functions in `group-geometry.utils.ts`:
+
+- **World-to-Local Translation & Rotation**:
+  For an unrotated parent group, local coordinates are simply $x_{\text{local}} = x_{\text{world}} - x_{\text{group}}$ and $y_{\text{local}} = y_{\text{world}} - y_{\text{group}}$. For rotated parent groups, the point is translated to the group center, inversely rotated by $-\theta$, and mapped into group bounding box space.
+- **Nested Ancestor Accumulation**:
+  For deeply nested groups ($C \subset G_1 \subset G_2 \dots \subset \text{Root}$), `getShapeWorldTransform` traverses up the ancestor chain from immediate parent to root ancestor, composing affine transforms and guarding against circular hierarchies with an active `visitedSet`.
+- **Connector World Anchor Resolution**:
+  `getShapeWorldAnchorPoint(shape, shapes, anchor)` resolves a shape's true canvas world position and dimensions by calculating its world transform across all ancestors. Groups themselves are fully connectable, supporting `top`, `right`, `bottom`, `left`, and `center` anchors.
+
+### 39.3 Optimistic Concurrency Control (OCC) in Grouping & Ungrouping
+Grouping modifies multiple entities simultaneously: the new Group shape is created, and all child shapes are updated. Concurrency safety is enforced at the database level:
+
+1. **Grouping OCC Verification**:
+   The client passes `expectedVersions?: Record<string, number>`. Inside an atomic MongoDB transaction, `ShapeService.groupShapes` verifies that every shape's current `version` matches its expected version. If any child has been modified or deleted concurrently by another collaborator, a `ConflictError` is thrown, the transaction aborts, and the server returns `409 CONFLICT`.
+2. **Ungrouping OCC Verification**:
+   The client passes `expectedVersion?: number` for the group. `ShapeService.ungroupShape` verifies `group.version === expectedVersion`. If stale, a `ConflictError` is thrown, returning `409 CONFLICT`.
+3. **Zero Partial Mutation on Failure**:
+   Because all grouping/ungrouping mutations execute within `collaborationVersionService.executeWithRevision` in a MongoDB session, any failure (OCC mismatch, cycle detection, permission rejection) triggers an immediate `abortTransaction()`. Zero shapes are partially updated, zero revision numbers are consumed, and no broadcast is emitted.
+
+### 39.4 Runtime RBAC Matrix
+Role-based access control is validated on every grouping socket mutation:
+
+| Workspace Role | `shape:group` | `shape:ungroup` | Notes |
+| :--- | :---: | :---: | :--- |
+| **OWNER** | ✅ Permitted | ✅ Permitted | Full whiteboard ownership |
+| **ADMIN** | ✅ Permitted | ✅ Permitted | Full workspace administration |
+| **EDITOR** | ✅ Permitted | ✅ Permitted | Standard collaborative authoring |
+| **VIEWER** | ❌ Rejected (403) | ❌ Rejected (403) | Read-only canvas access |
+
+If an active user is downgraded from `EDITOR` to `VIEWER` while preparing a group action, the next socket event is rejected with `403 FORBIDDEN` via live database membership resolution.
+
+### 39.5 Cascade Deletion & Connector Survival
+- **Cascade Deletion**:
+  When a group shape is deleted via `shape:delete`, `ShapeRepository.findDescendantIds` traverses the MongoDB tree using recursive graph lookups, finding all direct children, grandchildren, and deeply nested shapes. All descendant shapes are deleted atomically in the same transaction.
+- **Connector Reference Nullification**:
+  When a group or any of its children are deleted, `ShapeRepository.nullifyConnectorsReferencingShapes` automatically sets `connector.sourceShapeId = null` and/or `connector.targetShapeId = null` on any surviving connector pointing to the deleted shapes, preventing dangling foreign key references.
+- **Connector Hierarchy Survival**:
+  When shapes are grouped or ungrouped, their stable `id` values are preserved. Existing connectors anchored to child shapes remain anchored and dynamically track the shape through its new parent transform.
+
+---
+
+# Section 40: Slice 22 — Group Event Contracts, Invariants & FAQ
+
+### 40.1 Socket Event Contracts
+
+#### 1. Group Shapes Request (`shape:group`)
+```typescript
+export type GroupShapesPayload = {
+  canvasId: string;
+  shapeIds: string[];                          // Minimum 2 shapes
+  expectedVersions?: Record<string, number>;  // OCC validation per shape
+  mutationId?: string;                         // Idempotency token
+};
+```
+
+#### 2. Group Shapes Acknowledgement (`SocketAck<GroupShapesAckData>`)
+```typescript
+export type GroupShapesAckData = {
+  group: ShapeResponseDto;
+  children: ShapeResponseDto[];
+};
+```
+
+#### 3. Group Shapes Broadcast (`shape:grouped`)
+```typescript
+export type GroupShapesBroadcastPayload = {
+  meta: CollaborationEventMeta;
+  group: ShapeResponseDto;
+  children: ShapeResponseDto[];
+};
+```
+
+#### 4. Ungroup Shape Request (`shape:ungroup`)
+```typescript
+export type UngroupShapePayload = {
+  canvasId: string;
+  groupId: string;
+  expectedVersion?: number;                    // OCC validation for group
+  mutationId?: string;
+};
+```
+
+#### 5. Ungroup Shape Broadcast (`shape:ungrouped`)
+```typescript
+export type UngroupShapeBroadcastPayload = {
+  meta: CollaborationEventMeta;
+  groupId: string;
+  children: ShapeResponseDto[];
+};
+```
+
+### 40.2 The 10 Core Architectural Invariants
+
+| # | Invariant | Enforcement Mechanism |
+|---|---|---|
+| **1** | **Single Parent** | A shape can have at most one parent (`parentId: ObjectId \| null`). |
+| **2** | **Non-Self-Parent** | A shape cannot be its own parent (`child._id !== parentId`). |
+| **3** | **Cycle Prevention** | Prospective parent cannot be an indirect descendant (`hasCyclicHierarchy` check). |
+| **4** | **Single Canvas** | A group and all its children must belong to the exact same `canvasId`. |
+| **5** | **Minimum Children** | Group creation requires $\ge 2$ shapes. |
+| **6** | **ID Stability** | Group and child `_id` values remain strictly stable during grouping/ungrouping. |
+| **7** | **Connector Stability** | Connectors reference permanent shape IDs; anchor points dynamically recompute via world bounds. |
+| **8** | **Nested Groups** | Arbitrary tree nesting supported; ungrouping sets `child.parentId = group.parentId`. |
+| **9** | **Atomic Undo/Redo** | Exactly ONE snapshot pushed to Zustand `past`; 1 undo restores pre-group state. |
+| **10**| **Zero History Pollution**| Remote `shape:grouped` and `shape:ungrouped` bypass history, modifying store with 0 undo pollution. |
+
+### 40.3 Senior Engineering Architecture FAQ
+
+#### Q1: Why did we choose `child.parentId` over a `group.childIds` array?
+**Answer:**
+Maintaining `group.childIds` introduces the dual-source-of-truth problem: if `group.childIds` contains shape $A$, but shape $A$ has `parentId: null` (or references a different group due to a network glitch or partial write), the system enters an ambiguous state.
+By using `child.parentId` as the single source of truth:
+1. A shape can physically only have one parent at any time.
+2. MongoDB compound indexes (`{ canvasId: 1, parentId: 1 }`) allow lightning-fast queries (`ShapeModel.find({ parentId: group._id })`).
+3. Hierarchy queries use standard relational tree algorithms with zero risk of array/pointer divergence.
+
+#### Q2: Why do grouped children use local coordinates instead of world coordinates?
+**Answer:**
+If children stored world coordinates:
+1. Dragging a group containing 50 shapes would require updating 51 documents in MongoDB on every frame or drag release ($O(N)$ writes).
+2. Rotating a group would require recalculating trigonometry for every child and issuing 50 database writes with potential rounding drift.
+3. Concurrent transforms by collaborators would produce severe race conditions across individual child coordinates.
+
+With local-space coordinates:
+- The child position is fixed relative to the group origin $(0, 0)$.
+- The group owns translation, scale, and rotation.
+- Moving or transforming a group requires updating **exactly 1 document in MongoDB** ($O(1)$ write), regardless of whether it contains 2 shapes or 500 shapes.
+
+#### Q3: How does Group Edit Mode work in Konva?
+**Answer:**
+When not in edit mode (`editingGroupId !== group.id`), a transparent hit rectangle covers the group's bounding box (`(0, 0, width, height)`). Any mouse clicks or drags interact with the group as a single unit, and the Konva `Transformer` binds to the group.
+When entering Group Edit Mode (via double-click or Enter):
+1. The transparent hit overlay is disabled (`listening={false}`).
+2. A dashed bounding outline renders around the group to provide clear visual feedback.
+3. Mouse events pass directly through to child shapes, allowing individual child selection, color styling, text editing, and repositioning within the group's coordinate space.
+4. Pressing Escape or clicking empty canvas space exits edit mode and restores the group hit box.
+
+#### Q4: How do connectors resolve anchor points when connected to a shape nested inside groups?
+**Answer:**
+Connectors call `getShapeWorldAnchorPoint(shape, shapes, anchor)`:
+1. It looks up `shape.parentId`.
+2. If `parentId` exists, it traverses the ancestor tree up to the root, composing translations and rotations.
+3. It derives the shape's true canvas world bounding box (`getShapeWorldBounds`).
+4. It computes the anchor coordinate (`top`, `right`, `bottom`, `left`, `center`) from the world bounding box and applies the accumulated world rotation.
+5. As the parent group is moved or rotated, the connector updates its endpoints in real time without needing to rewrite any connector properties.
+
+#### Q5: Why is OCC validation essential during shape grouping?
+**Answer:**
+Consider two users, Alice and Bob:
+- Alice selects Shape 1 and Shape 2 and clicks Group.
+- Bob simultaneously deletes Shape 2 or edits Shape 2's position.
+If grouping did not validate `expectedVersions`:
+1. Alice's group would capture an outdated position for Shape 2, converting stale coordinates into local space.
+2. If Bob deleted Shape 2, Alice's group would point to a non-existent child, creating an orphaned hierarchy.
+With OCC, Alice's payload sends `expectedVersions: { [s1.id]: 1, [s2.id]: 1 }`. When Bob's delete or edit commits first, Alice's group transaction detects `s2.version !== expectedVersion` and fails with `409 CONFLICT`. Alice's client automatically re-hydrates canonical state without data corruption.

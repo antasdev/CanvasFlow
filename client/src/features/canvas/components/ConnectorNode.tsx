@@ -7,7 +7,7 @@ import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { ConnectorShape } from "../types";
-import { getShapeAnchorPoint } from "../utils/anchor.utils";
+import { getShapeWorldAnchorPoint } from "../utils/anchor.utils";
 import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
 import { getKonvaStyleProps } from "../utils/shape-style.utils";
 
@@ -64,12 +64,12 @@ function ConnectorNodeComponent({
 
   const startWorld =
     sourceShape && connector?.sourceAnchor
-      ? getShapeAnchorPoint(sourceShape, connector.sourceAnchor)
+      ? getShapeWorldAnchorPoint(sourceShape, shapes, connector.sourceAnchor)
       : { x: fallbackStartX, y: fallbackStartY };
 
   const endWorld =
     targetShape && connector?.targetAnchor
-      ? getShapeAnchorPoint(targetShape, connector.targetAnchor)
+      ? getShapeWorldAnchorPoint(targetShape, shapes, connector.targetAnchor)
       : { x: fallbackEndX, y: fallbackEndY };
 
   // Attach Transformer when selected and completely unattached

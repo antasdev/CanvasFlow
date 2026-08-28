@@ -206,9 +206,12 @@ export const createShapeSchema = z
           "ARROW",
           "connector",
           "CONNECTOR",
+          "group",
+          "GROUP",
         ])
         .transform((val) => {
           const upper = val.toUpperCase();
+          if (upper === "GROUP") return "GROUP" as const;
           if (upper === "CIRCLE") return "CIRCLE" as const;
           if (upper === "ELLIPSE") return "ELLIPSE" as const;
           if (upper === "TRIANGLE") return "TRIANGLE" as const;
@@ -222,6 +225,8 @@ export const createShapeSchema = z
           if (upper === "CONNECTOR") return "CONNECTOR" as const;
           return "RECTANGLE" as const;
         }),
+
+      parentId: objectIdSchema.nullable().optional(),
 
       x: z.number().finite("x must be a finite number."),
 
@@ -305,6 +310,8 @@ export const updateShapeValidationSchema =
       shapeConfig: shapeConfigSchema.optional(),
 
       style: shapeStyleValidationSchema.optional(),
+
+      parentId: objectIdSchema.nullable().optional(),
     }),
   });
 
@@ -321,3 +328,20 @@ export const canvasShapeParamsSchema =
       canvasId: objectIdSchema,
     }),
   });
+
+export const groupShapesValidationSchema = z.object({
+  canvasId: objectIdSchema,
+  shapeIds: z
+    .array(objectIdSchema)
+    .min(2, "Grouping requires at least 2 shapes.")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Duplicate shape IDs are not allowed in grouping.",
+    }),
+  expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
+});
+
+export const ungroupShapeValidationSchema = z.object({
+  canvasId: objectIdSchema,
+  groupId: objectIdSchema,
+  expectedVersion: z.number().int().min(1).optional(),
+});

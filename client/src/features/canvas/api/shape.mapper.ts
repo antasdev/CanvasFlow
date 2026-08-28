@@ -12,7 +12,9 @@ import type {
   LineShape,
   ArrowShape,
   ConnectorShape,
+  GroupShape,
   ShapeShadow,
+  StrokeStyle,
 } from "../types";
 import type { ShapeResponseDto, ShapeShadowDto } from "./shape.api";
 
@@ -32,8 +34,27 @@ function mapShadowDto(shadow?: ShapeShadowDto): ShapeShadow | undefined {
  * Maps Shape API/Socket response DTO to frontend Shape discriminated union.
  */
 export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
-  const shadow = mapShadowDto(dto.style?.shadow);
-  const strokeStyle = dto.style && "strokeStyle" in dto.style ? dto.style.strokeStyle : undefined;
+  const shadow: ShapeShadow | undefined = mapShadowDto(dto.style?.shadow as ShapeShadowDto | undefined);
+  const strokeStyle: StrokeStyle | undefined = (dto.style && "strokeStyle" in dto.style
+    ? dto.style.strokeStyle
+    : undefined) as StrokeStyle | undefined;
+
+  if (dto.type === "group") {
+    const groupShape: GroupShape = {
+      id: dto.id,
+      type: "group",
+      x: dto.x,
+      y: dto.y,
+      width: dto.width,
+      height: dto.height,
+      rotation: dto.rotation,
+      zIndex: dto.zIndex,
+      version: dto.version ?? 1,
+      opacity: 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
+    };
+    return groupShape;
+  }
 
   if (dto.type === "freehand") {
     const legacyStyle = dto.style as { points?: number[] };
@@ -53,12 +74,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       points: rawPoints,
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
     return freehandShape;
   }
@@ -74,12 +96,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
       strokeStyle: strokeStyle ?? "solid",
-      shadow,
+      ...(shadow ? { shadow } : {}),
     };
     return lineShape;
   }
@@ -95,12 +118,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
       arrowHeadEnd: typeof dto.style?.arrowHeadEnd === "boolean" ? dto.style.arrowHeadEnd : true,
       arrowHeadStart: typeof dto.style?.arrowHeadStart === "boolean" ? dto.style.arrowHeadStart : false,
       pointerLength: typeof dto.style?.pointerLength === "number" ? dto.style.pointerLength : 10,
@@ -120,12 +144,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       points: Array.isArray(dto.points) ? dto.points : [0, 0, dto.width, dto.height],
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
       connector: dto.connector
         ? {
             sourceShapeId: dto.connector.sourceShapeId ?? null,
@@ -161,6 +186,7 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       text: textContent,
       fontSize: dto.style?.fontSize ?? 24,
@@ -179,7 +205,7 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#1f2937",
       padding: typeof dto.style?.padding === "number" ? dto.style.padding : 4,
       lineHeight: typeof dto.style?.lineHeight === "number" ? dto.style.lineHeight : 1.2,
-      shadow,
+      ...(shadow ? { shadow } : {}),
     };
     return textShape;
   }
@@ -195,12 +221,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style.opacity ?? 1,
       text: dto.style.text ?? "",
       fontSize: dto.style.fontSize ?? 20,
       backgroundColor: dto.style.backgroundColor ?? "#fef08a",
       textColor: dto.style.textColor ?? "#1f2937",
-      shadow,
+      ...(shadow ? { shadow } : {}),
     };
     return stickyShape;
   }
@@ -216,12 +243,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
     return circleShape;
   }
@@ -237,12 +265,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
     return ellipseShape;
   }
@@ -258,12 +287,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
     return triangleShape;
   }
@@ -280,6 +310,7 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       sides,
       shapeConfig: {
@@ -288,8 +319,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
     return polygonShape;
   }
@@ -311,6 +342,7 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       shapeConfig: {
         points,
@@ -319,8 +351,8 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
     return starShape;
   }
@@ -335,12 +367,13 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
     rotation: dto.rotation,
     zIndex: dto.zIndex,
     version: dto.version ?? 1,
+    ...(dto.parentId ? { parentId: dto.parentId } : {}),
     opacity: dto.style?.opacity ?? 1,
     fill: dto.style?.fill ?? "#ffffff",
     stroke: dto.style?.stroke ?? "#1f2937",
     strokeWidth: dto.style?.strokeWidth ?? 2,
-    strokeStyle,
-    shadow,
+    ...(strokeStyle ? { strokeStyle } : {}),
+    ...(shadow ? { shadow } : {}),
   };
   return rectShape;
 }
@@ -352,8 +385,10 @@ export function mapShapeResponseToShape(dto: ShapeResponseDto): Shape {
 export function mapShapeResponseToRectangleShape(
   dto: ShapeResponseDto
 ): RectangleShape {
-  const shadow = mapShadowDto(dto.style?.shadow);
-  const strokeStyle = dto.style && "strokeStyle" in dto.style ? dto.style.strokeStyle : undefined;
+  const shadow: ShapeShadow | undefined = mapShadowDto(dto.style?.shadow as ShapeShadowDto | undefined);
+  const strokeStyle: StrokeStyle | undefined = (dto.style && "strokeStyle" in dto.style
+    ? dto.style.strokeStyle
+    : undefined) as StrokeStyle | undefined;
 
   if (dto.type === "rectangle") {
     return {
@@ -366,12 +401,13 @@ export function mapShapeResponseToRectangleShape(
       rotation: dto.rotation,
       zIndex: dto.zIndex,
       version: dto.version ?? 1,
+      ...(dto.parentId ? { parentId: dto.parentId } : {}),
       opacity: dto.style?.opacity ?? 1,
       fill: dto.style?.fill ?? "#ffffff",
       stroke: dto.style?.stroke ?? "#1f2937",
       strokeWidth: dto.style?.strokeWidth ?? 2,
-      strokeStyle,
-      shadow,
+      ...(strokeStyle ? { strokeStyle } : {}),
+      ...(shadow ? { shadow } : {}),
     };
   }
 
@@ -389,7 +425,7 @@ export function mapShapeResponseToRectangleShape(
     fill: "#ffffff",
     stroke: "#1f2937",
     strokeWidth: 2,
-    strokeStyle,
-    shadow,
+    ...(strokeStyle ? { strokeStyle } : {}),
+    ...(shadow ? { shadow } : {}),
   };
 }

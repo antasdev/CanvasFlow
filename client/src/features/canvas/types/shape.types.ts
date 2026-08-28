@@ -12,6 +12,7 @@ export type ShapeType =
   | "text"
   | "sticky_note"
   | "freehand"
+  | "group"
   | "eraser";
 
 export type AnchorPosition = "top" | "right" | "bottom" | "left" | "center";
@@ -46,6 +47,7 @@ export type BaseShape = {
   rotation: number;
   opacity: number;
   zIndex: number;
+  parentId?: string | null;
   version?: number;
   strokeStyle?: StrokeStyle;
   shadow?: ShapeShadow;
@@ -173,6 +175,10 @@ export type FreehandShape = BaseShape & {
   strokeStyle?: StrokeStyle;
 };
 
+export type GroupShape = BaseShape & {
+  type: "group";
+};
+
 export type Shape =
   | RectangleShape
   | TextShape
@@ -185,7 +191,8 @@ export type Shape =
   | LineShape
   | ArrowShape
   | ConnectorShape
-  | FreehandShape;
+  | FreehandShape
+  | GroupShape;
 
 export type ShapeStyle = {
   fill?: string;

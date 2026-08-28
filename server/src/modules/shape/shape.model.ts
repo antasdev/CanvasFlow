@@ -165,6 +165,13 @@ const shapeSchema = new Schema<Shape>(
       required: true,
     },
 
+    parentId: {
+      type: Schema.Types.ObjectId,
+      ref: "Shape",
+      required: false,
+      default: null,
+    },
+
     version: {
       type: Number,
       required: true,
@@ -183,6 +190,11 @@ const shapeSchema = new Schema<Shape>(
 shapeSchema.index({
   canvasId: 1,
   zIndex: 1,
+});
+
+shapeSchema.index({
+  canvasId: 1,
+  parentId: 1,
 });
 
 export const ShapeModel = model<Shape>(

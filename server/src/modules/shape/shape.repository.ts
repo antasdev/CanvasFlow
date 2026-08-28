@@ -125,6 +125,76 @@ export class ShapeRepository {
       canvasId: { $in: canvasIds },
     });
   }
+
+  async findShapesByIds(
+    ids: Types.ObjectId[],
+    session?: ClientSession
+  ): Promise<ShapeDocument[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    return ShapeModel.find({ _id: { $in: ids } }, null, { session });
+  }
+
+  async findByParentId(
+    parentId: Types.ObjectId,
+    session?: ClientSession
+  ): Promise<ShapeDocument[]> {
+    return ShapeModel.find({ parentId }, null, { session }).sort({ zIndex: 1 });
+  }
+
+  async findDescendantIds(
+    rootGroupId: Types.ObjectId,
+    session?: ClientSession
+  ): Promise<Types.ObjectId[]> {
+    const descendants: Types.ObjectId[] = [];
+    let currentLevelIds: Types.ObjectId[] = [rootGroupId];
+
+    while (currentLevelIds.length > 0) {
+      const children: ShapeDocument[] = await ShapeModel.find(
+        { parentId: { $in: currentLevelIds } },
+        { _id: 1 },
+        { session }
+      );
+      const nextLevelIds = children.map((c) => c._id as Types.ObjectId);
+      if (nextLevelIds.length === 0) {
+        break;
+      }
+      descendants.push(...nextLevelIds);
+      currentLevelIds = nextLevelIds;
+    }
+
+    return descendants;
+  }
+
+  async deleteManyByIds(
+    ids: Types.ObjectId[],
+    session?: ClientSession
+  ): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+    await ShapeModel.deleteMany({ _id: { $in: ids } }, { session });
+  }
+
+  async nullifyConnectorsReferencingShapes(
+    shapeIds: Types.ObjectId[],
+    session?: ClientSession
+  ): Promise<void> {
+    if (shapeIds.length === 0) {
+      return;
+    }
+    await ShapeModel.updateMany(
+      { "connector.sourceShapeId": { $in: shapeIds } },
+      { $set: { "connector.sourceShapeId": null, "connector.sourceAnchor": null } },
+      { session }
+    );
+    await ShapeModel.updateMany(
+      { "connector.targetShapeId": { $in: shapeIds } },
+      { $set: { "connector.targetShapeId": null, "connector.targetAnchor": null } },
+      { session }
+    );
+  }
 }
 
 export const shapeRepository =

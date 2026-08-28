@@ -4,7 +4,12 @@ import {
   PenTool,
   Sun,
   Sliders,
+  Group as GroupIcon,
+  Ungroup as UngroupIcon,
 } from "lucide-react";
+import { toast } from "sonner";
+import { socketClientService } from "@/services/socket";
+import { useCanvasStore } from "../store";
 import type { Shape, ShapeStyle } from "../types";
 import { getMultiShapeCapabilities } from "../utils/shape-style-capabilities.utils";
 import {
@@ -20,6 +25,7 @@ export type ShapeStyleToolbarProps = {
   selectedShapes: Shape[];
   pan: { x: number; y: number };
   zoom: number;
+  canvasId?: string;
   canEditCanvas?: boolean;
   onUpdateStyle: (
     shapeIds: string[],
@@ -36,10 +42,14 @@ export default function ShapeStyleToolbar({
   selectedShapes,
   pan,
   zoom,
+  canvasId,
   canEditCanvas = true,
   onUpdateStyle,
   onCommitStyle,
 }: ShapeStyleToolbarProps): React.JSX.Element | null {
+  const groupShapes = useCanvasStore((state) => state.groupShapes);
+  const ungroupShapes = useCanvasStore((state) => state.ungroupShapes);
+
   const [isShadowPopoverOpen, setIsShadowPopoverOpen] = useState(false);
   const [isOpacityPopoverOpen, setIsOpacityPopoverOpen] = useState(false);
   const shadowPopoverRef = useRef<HTMLDivElement | null>(null);
@@ -70,8 +80,50 @@ export default function ShapeStyleToolbar({
 
   // Capability matrix across all selected shapes
   const capabilities = getMultiShapeCapabilities(selectedShapes);
+  const shapeIds = selectedShapes.map((s) => s.id);
+  const firstParentId = selectedShapes[0]?.parentId ?? null;
+  const canGroup =
+    canEditCanvas &&
+    selectedShapes.length >= 2 &&
+    selectedShapes.every((s) => (s.parentId ?? null) === firstParentId);
+
+  const canUngroup =
+    canEditCanvas &&
+    selectedShapes.length === 1 &&
+    selectedShapes[0].type === "group";
+
+  const handleGroup = async (): Promise<void> => {
+    if (!canGroup) return;
+    const expectedVersions: Record<string, number> = {};
+    for (const s of selectedShapes) {
+      if (s.version) expectedVersions[s.id] = s.version;
+    }
+    const group = groupShapes(shapeIds);
+    if (group && canvasId) {
+      try {
+        await socketClientService.groupShapes(canvasId, shapeIds, expectedVersions);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to group shapes.");
+      }
+    }
+  };
+
+  const handleUngroup = async (): Promise<void> => {
+    if (!canUngroup) return;
+    const groupToUngroup = selectedShapes[0];
+    ungroupShapes(groupToUngroup.id);
+    if (canvasId) {
+      try {
+        await socketClientService.ungroupShape(canvasId, groupToUngroup.id, groupToUngroup.version);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to ungroup shape.");
+      }
+    }
+  };
 
   if (
+    !canGroup &&
+    !canUngroup &&
     !capabilities.canFill &&
     !capabilities.canStroke &&
     !capabilities.canStrokeWidth &&
@@ -81,8 +133,6 @@ export default function ShapeStyleToolbar({
   ) {
     return null;
   }
-
-  const shapeIds = selectedShapes.map((s) => s.id);
 
   // Position toolbar above the selection's bounding box
   const minX = Math.min(...selectedShapes.map((s) => s.x));
@@ -355,6 +405,34 @@ export default function ShapeStyleToolbar({
                 </div>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Group / Ungroup Actions */}
+      {canEditCanvas && (canGroup || canUngroup) && (
+        <div className="flex items-center gap-1 border-l border-gray-200 pl-1">
+          {canGroup && (
+            <button
+              type="button"
+              title="Group Shapes (Ctrl+G)"
+              onClick={handleGroup}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <GroupIcon className="h-3.5 w-3.5" />
+              <span>Group</span>
+            </button>
+          )}
+          {canUngroup && (
+            <button
+              type="button"
+              title="Ungroup (Ctrl+Shift+G)"
+              onClick={handleUngroup}
+              className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <UngroupIcon className="h-3.5 w-3.5" />
+              <span>Ungroup</span>
+            </button>
           )}
         </div>
       )}

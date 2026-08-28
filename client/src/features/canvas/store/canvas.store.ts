@@ -6,6 +6,7 @@ import {
 } from "../constants";
 import type { Shape, TextShape, ShapeStyle } from "../types";
 import { isShapeCompatibleWithProperty } from "../utils/shape-style-capabilities.utils";
+import { computeGroupBoundingBox, localToWorld } from "../utils/group-geometry.utils";
 import type {
   RemoteCursor,
   RemoteSelection,
@@ -162,6 +163,20 @@ type CanvasStore = {
 
   replaceShapesFromRecovery: (shapes: Shape[]) => void;
 
+  editingGroupId: string | null;
+
+  enterGroup: (groupId: string) => void;
+
+  exitGroup: () => void;
+
+  groupShapes: (shapeIds: string[], newGroupId?: string) => Shape | null;
+
+  ungroupShapes: (groupId: string) => void;
+
+  applyRemoteShapeGrouped: (group: Shape, children: Shape[]) => void;
+
+  applyRemoteShapeUngrouped: (groupId: string, children: Shape[]) => void;
+
   undo: () => void;
 
   redo: () => void;
@@ -200,6 +215,21 @@ function applyStyleToShape(shape: Shape, style: Partial<ShapeStyle>): Shape {
   return updated as Shape;
 }
 
+function getAllDescendantIds(rootId: string, shapes: Shape[]): Set<string> {
+  const result = new Set<string>([rootId]);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const s of shapes) {
+      if (s.parentId && result.has(s.parentId) && !result.has(s.id)) {
+        result.add(s.id);
+        added = true;
+      }
+    }
+  }
+  return result;
+}
+
 export const useCanvasStore = create<CanvasStore>(
   (set, get) => ({
     activeTool: CANVAS_TOOLS.SELECT,
@@ -207,6 +237,8 @@ export const useCanvasStore = create<CanvasStore>(
     shapes: [],
 
     selectedShapeIds: [],
+
+    editingGroupId: null,
 
     remoteCursors: {},
 
@@ -465,6 +497,7 @@ export const useCanvasStore = create<CanvasStore>(
       set({
         shapes: [],
         selectedShapeIds: [],
+        editingGroupId: null,
         remoteCursors: {},
         remoteSelections: {},
         remoteShapeLocks: {},
@@ -475,20 +508,40 @@ export const useCanvasStore = create<CanvasStore>(
     },
 
     deleteShape: (shapeId: string): void => {
-      set((state) => ({
-        past: [
-          ...state.past,
-          state.shapes,
-        ],
-        future: [],
-        shapes: state.shapes.filter(
-          (shape) => shape.id !== shapeId,
-        ),
-        selectedShapeIds:
-          state.selectedShapeIds.filter(
-            (id) => id !== shapeId,
-          ),
-      }));
+      set((state) => {
+        const deletedIds = getAllDescendantIds(shapeId, state.shapes);
+        return {
+          past: [
+            ...state.past,
+            state.shapes,
+          ],
+          future: [],
+          shapes: state.shapes
+            .filter((shape) => !deletedIds.has(shape.id))
+            .map((shape) => {
+              if (shape.type === "connector" && shape.connector) {
+                const updatedConnector = { ...shape.connector };
+                let modified = false;
+                if (updatedConnector.sourceShapeId && deletedIds.has(updatedConnector.sourceShapeId)) {
+                  updatedConnector.sourceShapeId = null;
+                  updatedConnector.sourceAnchor = null;
+                  modified = true;
+                }
+                if (updatedConnector.targetShapeId && deletedIds.has(updatedConnector.targetShapeId)) {
+                  updatedConnector.targetShapeId = null;
+                  updatedConnector.targetAnchor = null;
+                  modified = true;
+                }
+                if (modified) {
+                  return { ...shape, connector: updatedConnector };
+                }
+              }
+              return shape;
+            }),
+          selectedShapeIds: state.selectedShapeIds.filter((id) => !deletedIds.has(id)),
+          editingGroupId: deletedIds.has(state.editingGroupId ?? "") ? null : state.editingGroupId,
+        };
+      });
     },
 
     selectShape: (shapeId: string): void => {
@@ -583,14 +636,39 @@ export const useCanvasStore = create<CanvasStore>(
 
     applyRemoteShapeDeleted: (shapeId: string): void => {
       set((state) => {
+        const deletedIds = getAllDescendantIds(shapeId, state.shapes);
         const nextTransforms = { ...state.remoteShapeTransforms };
-        delete nextTransforms[shapeId];
         const nextLocks = { ...state.remoteShapeLocks };
-        delete nextLocks[shapeId];
+        for (const id of deletedIds) {
+          delete nextTransforms[id];
+          delete nextLocks[id];
+        }
 
         return {
-          shapes: state.shapes.filter((s) => s.id !== shapeId),
-          selectedShapeIds: state.selectedShapeIds.filter((id) => id !== shapeId),
+          shapes: state.shapes
+            .filter((s) => !deletedIds.has(s.id))
+            .map((shape) => {
+              if (shape.type === "connector" && shape.connector) {
+                const updatedConnector = { ...shape.connector };
+                let modified = false;
+                if (updatedConnector.sourceShapeId && deletedIds.has(updatedConnector.sourceShapeId)) {
+                  updatedConnector.sourceShapeId = null;
+                  updatedConnector.sourceAnchor = null;
+                  modified = true;
+                }
+                if (updatedConnector.targetShapeId && deletedIds.has(updatedConnector.targetShapeId)) {
+                  updatedConnector.targetShapeId = null;
+                  updatedConnector.targetAnchor = null;
+                  modified = true;
+                }
+                if (modified) {
+                  return { ...shape, connector: updatedConnector };
+                }
+              }
+              return shape;
+            }),
+          selectedShapeIds: state.selectedShapeIds.filter((id) => !deletedIds.has(id)),
+          editingGroupId: deletedIds.has(state.editingGroupId ?? "") ? null : state.editingGroupId,
           remoteShapeTransforms: nextTransforms,
           remoteShapeLocks: nextLocks,
         };
@@ -703,6 +781,145 @@ export const useCanvasStore = create<CanvasStore>(
     clearRemoteShapeTransforms: (): void => {
       set({
         remoteShapeTransforms: {},
+      });
+    },
+
+    enterGroup: (groupId: string): void => {
+      set({
+        editingGroupId: groupId,
+      });
+    },
+
+    exitGroup: (): void => {
+      set({
+        editingGroupId: null,
+      });
+    },
+
+    groupShapes: (shapeIds: string[], newGroupId?: string): Shape | null => {
+      const state = get();
+      if (shapeIds.length < 2) {
+        return null;
+      }
+
+      const shapesToGroup = state.shapes.filter((s) => shapeIds.includes(s.id));
+      if (shapesToGroup.length < 2) {
+        return null;
+      }
+
+      // Invariant: all grouped shapes must share the same parentId
+      const firstParentId = shapesToGroup[0].parentId ?? null;
+      const allShareParent = shapesToGroup.every(
+        (s) => (s.parentId ?? null) === firstParentId
+      );
+      if (!allShareParent) {
+        return null;
+      }
+
+      // Compute bounding box
+      const bbox = computeGroupBoundingBox(shapesToGroup);
+      const maxZIndex = Math.max(...shapesToGroup.map((s) => s.zIndex ?? 0), 0);
+
+      const groupId =
+        newGroupId ??
+        (typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `group_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`);
+
+      const groupShape: Shape = {
+        id: groupId,
+        type: "group",
+        x: bbox.x,
+        y: bbox.y,
+        width: bbox.width,
+        height: bbox.height,
+        rotation: 0,
+        opacity: 1,
+        zIndex: maxZIndex + 1,
+        parentId: firstParentId,
+        version: 1,
+      };
+
+      // Convert child world/parent coordinates to local coordinates of the new group
+      const updatedChildrenMap = new Map<string, Shape>();
+      for (const child of shapesToGroup) {
+        updatedChildrenMap.set(child.id, {
+          ...child,
+          x: child.x - bbox.x,
+          y: child.y - bbox.y,
+          parentId: groupId,
+          version: (child.version ?? 1) + 1,
+        });
+      }
+
+      set((curr) => ({
+        past: [...curr.past, curr.shapes],
+        future: [],
+        shapes: [
+          ...curr.shapes.map((s) => updatedChildrenMap.get(s.id) ?? s),
+          groupShape,
+        ],
+        selectedShapeIds: [groupId],
+      }));
+
+      return groupShape;
+    },
+
+    ungroupShapes: (groupId: string): void => {
+      const state = get();
+      const group = state.shapes.find((s) => s.id === groupId && s.type === "group");
+      if (!group) {
+        return;
+      }
+
+      const directChildren = state.shapes.filter((s) => s.parentId === groupId);
+      const updatedChildrenMap = new Map<string, Shape>();
+
+      for (const child of directChildren) {
+        const worldPoint = localToWorld({ x: child.x, y: child.y }, group);
+        updatedChildrenMap.set(child.id, {
+          ...child,
+          x: worldPoint.x,
+          y: worldPoint.y,
+          rotation: ((child.rotation ?? 0) + (group.rotation ?? 0)) % 360,
+          parentId: group.parentId ?? null,
+          version: (child.version ?? 1) + 1,
+        });
+      }
+
+      set((curr) => ({
+        past: [...curr.past, curr.shapes],
+        future: [],
+        shapes: curr.shapes
+          .filter((s) => s.id !== groupId)
+          .map((s) => updatedChildrenMap.get(s.id) ?? s),
+        selectedShapeIds: directChildren.map((c) => c.id),
+        editingGroupId: curr.editingGroupId === groupId ? null : curr.editingGroupId,
+      }));
+    },
+
+    applyRemoteShapeGrouped: (group: Shape, children: Shape[]): void => {
+      set((state) => {
+        const childrenMap = new Map<string, Shape>(children.map((c) => [c.id, c]));
+        const existingWithoutGroup = state.shapes.filter((s) => s.id !== group.id);
+        const nextShapes = existingWithoutGroup.map((s) => childrenMap.get(s.id) ?? s);
+        nextShapes.push(group);
+
+        return {
+          shapes: nextShapes,
+        };
+      });
+    },
+
+    applyRemoteShapeUngrouped: (groupId: string, children: Shape[]): void => {
+      set((state) => {
+        const childrenMap = new Map<string, Shape>(children.map((c) => [c.id, c]));
+        return {
+          shapes: state.shapes
+            .filter((s) => s.id !== groupId)
+            .map((s) => childrenMap.get(s.id) ?? s),
+          editingGroupId: state.editingGroupId === groupId ? null : state.editingGroupId,
+        };
       });
     },
 

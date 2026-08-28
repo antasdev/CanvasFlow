@@ -12,6 +12,7 @@ import FreehandNode from "./FreehandNode";
 import LineNode from "./LineNode";
 import ArrowNode from "./ArrowNode";
 import ConnectorNode from "./ConnectorNode";
+import GroupNode from "./GroupNode";
 
 type ShapeRendererProps = {
   shape: Shape;
@@ -134,6 +135,16 @@ export default function ShapeRenderer({
           boardId={boardId}
           canEditCanvas={canEditCanvas}
           onStartEditing={onStartEditing ?? (() => {})}
+        />
+      );
+
+    case "group":
+      return (
+        <GroupNode
+          shape={shape}
+          boardId={boardId}
+          canEditCanvas={canEditCanvas}
+          onStartEditing={onStartEditing}
         />
       );
 

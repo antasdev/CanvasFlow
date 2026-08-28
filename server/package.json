@@ -15,6 +15,7 @@
     "test:text-editing": "tsx -r tsconfig-paths/register src/socket/tests/socket-text-editing.test.ts",
     "test:advanced-shapes": "tsx -r tsconfig-paths/register src/socket/tests/socket-advanced-shapes.test.ts",
     "test:shape-styling": "tsx -r tsconfig-paths/register src/socket/tests/socket-shape-styling.test.ts",
+    "test:grouping": "tsx -r tsconfig-paths/register src/socket/tests/socket-grouping.test.ts",
     "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],

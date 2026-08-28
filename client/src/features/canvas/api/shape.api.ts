@@ -13,6 +13,7 @@ export type BaseShapeResponseDto = {
   rotation: number;
   zIndex: number;
   createdBy: string;
+  parentId?: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -202,6 +203,11 @@ export type StarShapeResponseDto = BaseShapeResponseDto & {
   };
 };
 
+export type GroupShapeResponseDto = BaseShapeResponseDto & {
+  type: "group";
+  style?: Record<string, unknown>;
+};
+
 export type ShapeResponseDto =
   | RectangleShapeResponseDto
   | CircleShapeResponseDto
@@ -214,7 +220,8 @@ export type ShapeResponseDto =
   | FreehandShapeResponseDto
   | LineShapeResponseDto
   | ArrowShapeResponseDto
-  | ConnectorShapeResponseDto;
+  | ConnectorShapeResponseDto
+  | GroupShapeResponseDto;
 
 export type ShapeStyleRequest = {
   fill?: string;
@@ -255,13 +262,15 @@ export type CreateShapeRequest = {
     | "freehand"
     | "line"
     | "arrow"
-    | "connector";
+    | "connector"
+    | "group";
   x: number;
   y: number;
   width: number;
   height: number;
   rotation?: number;
   text?: string;
+  parentId?: string | null;
   points?: number[];
   connector?: ShapeConnectorDto;
   shapeConfig?: ShapeConfigDto;
