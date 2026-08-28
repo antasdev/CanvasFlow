@@ -2790,3 +2790,214 @@ If grouping did not validate `expectedVersions`:
 1. Alice's group would capture an outdated position for Shape 2, converting stale coordinates into local space.
 2. If Bob deleted Shape 2, Alice's group would point to a non-existent child, creating an orphaned hierarchy.
 With OCC, Alice's payload sends `expectedVersions: { [s1.id]: 1, [s2.id]: 1 }`. When Bob's delete or edit commits first, Alice's group transaction detects `s2.version !== expectedVersion` and fails with `409 CONFLICT`. Alice's client automatically re-hydrates canonical state without data corruption.
+
+---
+
+## 41. Slice 23: Alignment, Distribution & Smart Guides Protocol Specifications
+
+Slice 23 extends CanvasFlow with production-grade geometric alignment, distribution, and smart-guide snapping for collaborative whiteboard canvases.
+
+### 41.1 Socket Event Contracts
+
+| Event Name | Direction | Payload Type | Description |
+| :--- | :--- | :--- | :--- |
+| `shape:align` | Client → Server | `AlignShapesPayload` | Requests geometric alignment of 2+ shapes along a specified axis. |
+| `shape:aligned` | Server → Room | `AlignShapesBroadcastPayload` | Broadcasts canonical updated shapes after authoritative server alignment. |
+| `shape:distribute` | Client → Server | `DistributeShapesPayload` | Requests equidistant distribution of 3+ shapes along horizontal or vertical axis. |
+| `shape:distributed` | Server → Room | `DistributeShapesBroadcastPayload` | Broadcasts canonical updated shapes after authoritative server distribution. |
+
+### 41.2 Payload Schemas
+
+#### 1. `shape:align` (Client → Server)
+```typescript
+interface AlignShapesPayload {
+  canvasId: string;
+  shapeIds: string[]; // Minimum 2 unique shape IDs
+  alignment: "left" | "center-horizontal" | "right" | "top" | "center-vertical" | "bottom";
+  expectedVersions?: Record<string, number>; // OCC versions
+  mutationId?: string; // Client idempotency UUID
+}
+```
+
+#### 2. `shape:aligned` (Server → Room Broadcast)
+```typescript
+interface AlignShapesBroadcastPayload {
+  meta: CollaborationEventMeta;
+  shapes: ShapeResponseDto[]; // Authoritative updated shapes
+}
+```
+
+#### 3. `shape:distribute` (Client → Server)
+```typescript
+interface DistributeShapesPayload {
+  canvasId: string;
+  shapeIds: string[]; // Minimum 3 unique shape IDs
+  axis: "horizontal" | "vertical";
+  expectedVersions?: Record<string, number>; // OCC versions
+  mutationId?: string; // Client idempotency UUID
+}
+```
+
+#### 4. `shape:distributed` (Server → Room Broadcast)
+```typescript
+interface DistributeShapesBroadcastPayload {
+  meta: CollaborationEventMeta;
+  shapes: ShapeResponseDto[]; // Authoritative updated shapes
+}
+```
+
+---
+
+## 42. Data Flow Diagrams
+
+### 42.1 Alignment & Distribution Authoritative Mutation Flow
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│             SLICE 23: AUTHORITATIVE ALIGNMENT & DISTRIBUTION FLOW           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    Collaborator A (Client)                        Server (ShapeService)                 Collaborator B (Peer)
+           │                                                │                                      │
+    [1] User selects 3 shapes                               │                                      │
+        Clicks "Distribute Horizontally"                    │                                      │
+           │                                                │                                      │
+           ├──► [Local Preview]                             │                                      │
+           │    1. Calculate target local coords            │                                      │
+           │    2. Push exactly 1 snapshot to past []       │                                      │
+           │    3. Clear future []                          │                                      │
+           │    4. Apply local optimistic positions         │                                      │
+           │                                                │                                      │
+           ├──► Emit shape:distribute ─────────────────────►│                                      │
+           │    (canvasId, shapeIds, axis, expectedVersions)│                                      │
+           │                                                ├──► [2] Zod Validation (>= 3 shapes,  │
+           │                                                │        no duplicates, valid axis)    │
+           │                                                │                                      │
+           │                                                ├──► [3] RBAC Verification             │
+           │                                                │        (OWNER, ADMIN, EDITOR only)   │
+           │                                                │                                      │
+           │                                                ├──► [4] MongoDB Atomic Session        │
+           │                                                │    - Fetch shapes from MongoDB       │
+           │                                                │    - Check OCC expectedVersions      │
+           │                                                │      (Mismatch => Abort 409)         │
+           │                                                │    - Project to World Space AABBs    │
+           │                                                │    - Compute authoritative targets   │
+           │                                                │    - Invert parent transforms        │
+           │                                                │    - Bulk write with $inc version: 1 │
+           │                                                │    - Create MutationRecord           │
+           │                                                │    - Increment board revision        │
+           │                                                │                                      │
+           │◄── Ack { success: true, shapes } ──────────────┤                                      │
+           │    (Reconcile canonical versions)              │                                      │
+           │                                                ├──► Broadcast shape:distributed ─────►│
+           │                                                │    (sender excluded)                 ├──► [5] Check revision freshness
+           │                                                │                                      │    Apply remote update
+           │                                                │                                      │    (0 undo/redo pollution!)
+```
+
+### 42.2 Ephemeral Smart Guide Lifecycle Flow
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 SLICE 23: EPHEMERAL SMART GUIDE LIFECYCLE                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    Pointer Event                 Candidate Filter & Geometry Engine          Store & Konva View
+          │                                        │                                   │
+    [1] onDragStart                                │                                   │
+          ├──► Collect moving shape & descendants  │                                   │
+          ├──► Precompute static candidate bounds  │                                   │
+          │    (exclude moving shape & hierarchy)  │                                   │
+          ▼                                        ▼                                   │
+    [2] onDragMove                                                                     │
+          ├──► Query tentative local coordinates (x, y)                                │
+          ├──► Project to World-Space AABB (getShapeWorldAABB)                         │
+          ├──► Evaluate Snap Lines:                                                    │
+          │    - Edge: minX, maxX, minY, maxY                                          │
+          │    - Center: centerX, centerY                                              │
+          │    - Equal Spacing: gapLeft == gapRight                                    │
+          ├──► Apply Zoom-Aware Threshold:                                             │
+          │    - snapThreshold = 6 / zoom                                              │
+          │    - releaseThreshold = 9 / zoom (Hysteresis)                              │
+          ├──► Break Ties: Nearest candidate distance                                  │
+          ├──► Apply Snap Deltas:                                                      │
+          │    x' = x + snapDeltaX, y' = y + snapDeltaY                                │
+          ▼                                        ▼                                   ▼
+                                                   ├──► setSmartGuides(guides) ───────► Render <SmartGuideOverlay />
+                                                   │                                   (Dashed lines, listening=false)
+                                                   ├──► event.target.x(x')             │
+                                                   └──► event.target.y(y')             │
+                                                                                       │
+    [3] onDragEnd                                                                      │
+          ├──► clearSmartGuides() ────────────────────────────────────────────────────► Remove guides overlay
+          ├──► Commit final geometry to MongoDB via shape:update                       │
+          └──► Release soft-lock                                                       │
+```
+
+---
+
+## 43. Senior Engineering Architecture FAQ
+
+#### Q1: Why must the server calculate authoritative target positions instead of trusting client targets?
+**Answer:**
+In a collaborative system, trusting client-computed target positions opens vulnerability vectors:
+1. **Malicious or Buggy Clients:** A modified client could send arbitrary target coordinates, corrupting shapes or placing objects off-canvas.
+2. **Stale Local State:** If Client A's view has not received an in-flight move by Client B, Client A's local calculation would use stale positions for surrounding shapes.
+3. **True Source of Truth:** By deriving world-space bounding boxes and inverse parent projections directly from MongoDB documents within an atomic transaction, the server guarantees mathematical correctness and consistency across all connected collaborators.
+
+#### Q2: Why are smart guides frontend-only and ephemeral?
+**Answer:**
+Smart guides represent visual assistance for interactive pointer manipulation:
+1. **Zero Persistence Overhead:** Broadcasting or persisting smart guides would saturate the network with 60 FPS ephemeral guide packets and bloat MongoDB with throwaway records.
+2. **Local Perspective:** Snapping occurs relative to each individual user's active viewport, zoom factor, and interactive drag operations.
+3. **Clean Architecture:** Keeping smart guides purely in frontend Zustand state ensures they never pollute `past` / `future` undo stacks, never increment `Shape.version`, and never alter board `collaborationRevision`.
+
+#### Q3: How does alignment work with rotated shapes?
+**Answer:**
+CanvasFlow computes the Axis-Aligned Bounding Box (AABB) of the rotated geometry:
+1. The 4 corner points $(0, 0), (w, 0), (w, h), (0, h)$ are transformed by the shape's local translation and rotation around its center $(\frac{w}{2}, \frac{h}{2})$.
+2. The corners are mapped through the ancestor transformation matrix into canvas world coordinates.
+3. The minimum and maximum coordinates $[\min(x_i), \min(y_i), \max(x_i), \max(y_i)]$ form the visual world AABB.
+4. Alignment targets match the outer bounding envelope, aligning shapes according to how the user visually perceives them on screen.
+
+#### Q4: How does alignment work when shapes belong to different parent groups?
+**Answer:**
+CanvasFlow performs a 4-step coordinate projection:
+1. **Local to World:** Each selected shape's local coordinates are projected through its ancestor group chain into world space.
+2. **World Bounds Calculation:** Visual alignment targets are determined in world coordinates (e.g. `minWorldX`).
+3. **World Translation Delta:** The necessary world shift $(\Delta X, \Delta Y)$ is computed for each shape.
+4. **Inverse Parent Transform:** The target world point is passed through the shape's parent transform inverse (`convertWorldPositionToLocal`). For an unrotated parent group at $(G_x, G_y)$, local coordinate becomes:
+   $$x_{\text{local}} = x_{\text{world}} - G_x$$
+   $$y_{\text{local}} = y_{\text{world}} - G_y$$
+This guarantees that regardless of container hierarchy or nesting depth, shapes align visually on screen while maintaining valid local coordinates.
+
+#### Q5: Why is OCC validation essential during alignment and distribution?
+**Answer:**
+Alignment and distribution mutate multiple shapes simultaneously. If User A aligns Shapes 1, 2, and 3 while User B deletes Shape 2 or moves Shape 3:
+1. Without OCC, User A's alignment would overwrite User B's movement with stale calculations or resurrect deleted shapes.
+2. With OCC (`expectedVersions: { [s1]: v1, [s2]: v2, [s3]: v3 }`), MongoDB verifies that all participating shapes match the exact versions User A based their calculation upon.
+3. If any shape was concurrently updated, the transaction safely aborts with `409 CONFLICT`, rolling back all changes with zero partial writes.
+
+#### Q6: Why do we use dual-threshold hysteresis for smart guide snapping?
+**Answer:**
+Single-threshold snapping causes visual jitter and control fighting:
+- If threshold is 6px, a pointer moving between 5.9px and 6.1px will rapidly snap and un-snap on every frame.
+- With dual-threshold hysteresis:
+  - **Snap Acquisition:** The shape snaps only when within `6 / zoom` px.
+  - **Snap Retention:** Once locked to a snap line, it remains snapped until the user moves past `9 / zoom` px.
+This produces a smooth, tactile feel that respects user intent and prevents jitter.
+
+#### Q7: Why do remote alignment/distribution events not pollute local undo/redo history?
+**Answer:**
+In collaborative whiteboards, undo must be personal and user-scoped:
+1. If Remote User B aligns shapes, pushing that state into Local User A's `past` stack would cause User A's `Ctrl+Z` to undo User B's alignment rather than User A's last action.
+2. CanvasFlow's Zustand store separates local user intents (`alignShapes`, `distributeShapes`) from remote socket events (`applyRemoteShapesAligned`, `applyRemoteShapesDistributed`).
+3. Remote events update the shapes array directly without pushing snapshots to `past` or `future`.
+
+#### Q8: How does distribution handle negative or insufficient spacing?
+**Answer:**
+When shapes overlap or total shape span exceeds the distance between first and last anchors:
+- `totalGap <= 0` occurs when sum of shape widths exceeds `span`.
+- CanvasFlow detects `totalGap <= 0` and switches gracefully from edge-to-edge gap distribution to **equidistant center-to-center distribution**:
+  $$\text{centerStep} = \frac{\text{lastCenter} - \text{firstCenter}}{N - 1}$$
+- Intermediate shapes are spaced evenly by center points without producing `NaN`, negative gaps, or layout explosions.

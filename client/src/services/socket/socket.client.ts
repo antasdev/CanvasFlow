@@ -21,6 +21,10 @@ import type {
   GroupShapesAckData,
   UngroupShapePayload,
   UngroupShapeAckData,
+  AlignShapesPayload,
+  AlignShapesAckData,
+  DistributeShapesPayload,
+  DistributeShapesAckData,
   CollaborativeInteraction,
   InteractionBroadcastPayload,
   InteractionEndBroadcastPayload,
@@ -470,6 +474,98 @@ export class SocketClientService {
           }
           if (response.mutationId) {
             (err as any).mutationId = response.mutationId;
+          }
+          reject(err);
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape alignment request to authoritative backend over Socket.IO.
+   */
+  public alignShapes(
+    canvasId: string,
+    shapeIds: string[],
+    alignment:
+      | "left"
+      | "center-horizontal"
+      | "right"
+      | "top"
+      | "center-vertical"
+      | "bottom",
+    expectedVersions?: Record<string, number>,
+    mutationId?: string
+  ): Promise<AlignShapesAckData> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: AlignShapesPayload = {
+        canvasId,
+        shapeIds,
+        alignment,
+        expectedVersions,
+        mutationId,
+      };
+
+      socket.emit(SocketEvents.SHAPE_ALIGN, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to align shapes.";
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            Object.assign(err, { mutationId: response.mutationId });
+          }
+          reject(err);
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape distribution request to authoritative backend over Socket.IO.
+   */
+  public distributeShapes(
+    canvasId: string,
+    shapeIds: string[],
+    axis: "horizontal" | "vertical",
+    expectedVersions?: Record<string, number>,
+    mutationId?: string
+  ): Promise<DistributeShapesAckData> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: DistributeShapesPayload = {
+        canvasId,
+        shapeIds,
+        axis,
+        expectedVersions,
+        mutationId,
+      };
+
+      socket.emit(SocketEvents.SHAPE_DISTRIBUTE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to distribute shapes.";
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            Object.assign(err, { mutationId: response.mutationId });
           }
           reject(err);
         }

@@ -29,6 +29,12 @@ export const SocketEvents = {
   SHAPE_UNGROUP: "shape:ungroup",
   SHAPE_UNGROUPED: "shape:ungrouped",
 
+  SHAPE_ALIGN: "shape:align",
+  SHAPE_ALIGNED: "shape:aligned",
+
+  SHAPE_DISTRIBUTE: "shape:distribute",
+  SHAPE_DISTRIBUTED: "shape:distributed",
+
   CURSOR_MOVE: "cursor:move",
   CURSOR_MOVED: "cursor:moved",
 

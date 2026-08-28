@@ -14,3 +14,4 @@ export { default as PresenceAvatars } from "./PresenceAvatars";
 export { default as RemoteCursorLayer } from "./RemoteCursorLayer";
 export { default as TextEditorOverlay } from "./TextEditorOverlay";
 export { default as TextFormattingToolbar } from "./TextFormattingToolbar";
+export { SmartGuideOverlay } from "./SmartGuideOverlay";

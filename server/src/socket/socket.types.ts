@@ -266,6 +266,46 @@ export type UngroupShapeAckData = {
   children: ShapeResponseDto[];
 };
 
+export type AlignShapesPayload = {
+  canvasId: string;
+  shapeIds: string[];
+  alignment:
+    | "left"
+    | "center-horizontal"
+    | "right"
+    | "top"
+    | "center-vertical"
+    | "bottom";
+  expectedVersions?: Record<string, number>;
+  mutationId?: string;
+};
+
+export type AlignShapesBroadcastPayload = {
+  meta: CollaborationEventMeta;
+  shapes: ShapeResponseDto[];
+};
+
+export type AlignShapesAckData = {
+  shapes: ShapeResponseDto[];
+};
+
+export type DistributeShapesPayload = {
+  canvasId: string;
+  shapeIds: string[];
+  axis: "horizontal" | "vertical";
+  expectedVersions?: Record<string, number>;
+  mutationId?: string;
+};
+
+export type DistributeShapesBroadcastPayload = {
+  meta: CollaborationEventMeta;
+  shapes: ShapeResponseDto[];
+};
+
+export type DistributeShapesAckData = {
+  shapes: ShapeResponseDto[];
+};
+
 /**
  * Canvas Synchronization & Presence Payloads
  */
@@ -520,6 +560,16 @@ export interface ClientToServerEvents {
     callback?: (response: SocketAck<UngroupShapeAckData>) => void
   ) => void;
 
+  "shape:align": (
+    payload: AlignShapesPayload,
+    callback?: (response: SocketAck<AlignShapesAckData>) => void
+  ) => void;
+
+  "shape:distribute": (
+    payload: DistributeShapesPayload,
+    callback?: (response: SocketAck<DistributeShapesAckData>) => void
+  ) => void;
+
   "cursor:move": (payload: CursorMovePayload) => void;
 
   "selection:change": (payload: SelectionChangePayload) => void;
@@ -614,6 +664,8 @@ export interface ServerToClientEvents {
   "shape:deleted": (payload: ShapeDeletedPayload | DeleteShapePayload) => void;
   "shape:grouped": (payload: GroupShapesBroadcastPayload) => void;
   "shape:ungrouped": (payload: UngroupShapeBroadcastPayload) => void;
+  "shape:aligned": (payload: AlignShapesBroadcastPayload) => void;
+  "shape:distributed": (payload: DistributeShapesBroadcastPayload) => void;
   "cursor:moved": (payload: CursorMovedPayload) => void;
   "selection:changed": (payload: SelectionChangedPayload) => void;
   "shape:locked": (payload: ShapeLockedPayload) => void;

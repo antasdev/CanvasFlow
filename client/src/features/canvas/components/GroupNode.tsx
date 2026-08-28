@@ -49,6 +49,9 @@ function GroupNodeComponent({
     acquireLock,
     emitTransformFrame,
     endTransform,
+    startDragGuides,
+    updateDragGuides,
+    endDragGuides,
   } = useShapeTransform({ shape, boardId });
 
   // Attach Transformer when selected and not in group edit mode
@@ -135,6 +138,7 @@ function GroupNodeComponent({
           if (!node) return;
 
           dragStartRef.current = { x: node.x(), y: node.y() };
+          startDragGuides();
           if (canEditCanvas && !isLockedByOther) {
             void acquireLock();
           }
@@ -144,9 +148,15 @@ function GroupNodeComponent({
           const node = groupRef.current;
           if (!node) return;
 
+          const rawX = node.x();
+          const rawY = node.y();
+          const { snappedX, snappedY } = updateDragGuides(rawX, rawY);
+          node.x(snappedX);
+          node.y(snappedY);
+
           if (selectedShapeIds.length > 1 && isSelected && dragStartRef.current) {
-            const currentX = node.x();
-            const currentY = node.y();
+            const currentX = snappedX;
+            const currentY = snappedY;
             const deltaX = currentX - dragStartRef.current.x;
             const deltaY = currentY - dragStartRef.current.y;
 
@@ -156,8 +166,8 @@ function GroupNodeComponent({
           }
 
           emitTransformFrame({
-            x: Math.round(node.x()),
-            y: Math.round(node.y()),
+            x: Math.round(snappedX),
+            y: Math.round(snappedY),
             width: shape.width,
             height: shape.height,
             rotation: shape.rotation,
@@ -168,6 +178,7 @@ function GroupNodeComponent({
           const node = groupRef.current;
           if (!node) return;
 
+          endDragGuides();
           dragStartRef.current = null;
           const finalX = Math.round(node.x());
           const finalY = Math.round(node.y());

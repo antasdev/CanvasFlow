@@ -12,6 +12,8 @@ import {
   ShapeConnectorDto,
   GroupShapesDto,
   UngroupShapeDto,
+  AlignShapesDto,
+  DistributeShapesDto,
 } from "./shape.dto";
 
 import { ApiError, ConflictError } from "@/shared/utils";
@@ -70,6 +72,202 @@ function calculateEnclosingBoundingBox(shapes: ShapeDocument[]): {
     minY: Math.round(minY),
     width: Math.max(1, Math.round(maxX - minX)),
     height: Math.max(1, Math.round(maxY - minY)),
+  };
+}
+
+function localToWorldPoint(
+  localPoint: { x: number; y: number },
+  container: { x: number; y: number; rotation?: number }
+): { x: number; y: number } {
+  const rot = container.rotation ?? 0;
+  if (rot === 0) {
+    return {
+      x: localPoint.x + container.x,
+      y: localPoint.y + container.y,
+    };
+  }
+  const rad = (rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: cos * localPoint.x - sin * localPoint.y + container.x,
+    y: sin * localPoint.x + cos * localPoint.y + container.y,
+  };
+}
+
+function worldToLocalPoint(
+  worldPoint: { x: number; y: number },
+  container: { x: number; y: number; rotation?: number }
+): { x: number; y: number } {
+  const rot = container.rotation ?? 0;
+  const dx = worldPoint.x - container.x;
+  const dy = worldPoint.y - container.y;
+  if (rot === 0) {
+    return { x: dx, y: dy };
+  }
+  const rad = (rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: cos * dx + sin * dy,
+    y: -sin * dx + cos * dy,
+  };
+}
+
+function getShapeWorldBounds(
+  shape: ShapeDocument,
+  lookup: Map<string, ShapeDocument>
+): { x: number; y: number; width: number; height: number; rotation: number } {
+  if (!shape.parentId) {
+    return {
+      x: shape.x,
+      y: shape.y,
+      width: shape.width,
+      height: shape.height,
+      rotation: shape.rotation ?? 0,
+    };
+  }
+
+  const ancestors: ShapeDocument[] = [];
+  const visited = new Set<string>([shape._id.toString()]);
+  let currentParentId: Types.ObjectId | null | undefined = shape.parentId;
+
+  while (currentParentId) {
+    const pStr = currentParentId.toString();
+    if (visited.has(pStr)) break;
+    visited.add(pStr);
+    const parent = lookup.get(pStr);
+    if (!parent) break;
+    ancestors.push(parent);
+    currentParentId = parent.parentId;
+  }
+
+  let currentPoint = { x: shape.x, y: shape.y };
+  let accumulatedRotation = shape.rotation ?? 0;
+
+  for (const ancestor of ancestors) {
+    currentPoint = localToWorldPoint(currentPoint, ancestor);
+    accumulatedRotation = (accumulatedRotation + (ancestor.rotation ?? 0)) % 360;
+  }
+
+  return {
+    x: currentPoint.x,
+    y: currentPoint.y,
+    width: shape.width,
+    height: shape.height,
+    rotation: accumulatedRotation,
+  };
+}
+
+function getShapeWorldAABB(
+  shape: ShapeDocument,
+  lookup: Map<string, ShapeDocument>
+): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  width: number;
+  height: number;
+  centerX: number;
+  centerY: number;
+} {
+  const wb = getShapeWorldBounds(shape, lookup);
+  const rot = wb.rotation ?? 0;
+
+  if (rot === 0) {
+    const minX = wb.x;
+    const minY = wb.y;
+    const maxX = wb.x + wb.width;
+    const maxY = wb.y + wb.height;
+    return {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: wb.width,
+      height: wb.height,
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
+    };
+  }
+
+  const cx = wb.x + wb.width / 2;
+  const cy = wb.y + wb.height / 2;
+  const rad = (rot * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  const corners = [
+    { x: wb.x, y: wb.y },
+    { x: wb.x + wb.width, y: wb.y },
+    { x: wb.x + wb.width, y: wb.y + wb.height },
+    { x: wb.x, y: wb.y + wb.height },
+  ];
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const pt of corners) {
+    const dx = pt.x - cx;
+    const dy = pt.y - cy;
+    const rx = cos * dx - sin * dy + cx;
+    const ry = sin * dx + cos * dy + cy;
+    minX = Math.min(minX, rx);
+    minY = Math.min(minY, ry);
+    maxX = Math.max(maxX, rx);
+    maxY = Math.max(maxY, ry);
+  }
+
+  return {
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width: maxX - minX,
+    height: maxY - minY,
+    centerX: (minX + maxX) / 2,
+    centerY: (minY + maxY) / 2,
+  };
+}
+
+function convertWorldPositionToLocal(
+  shape: ShapeDocument,
+  lookup: Map<string, ShapeDocument>,
+  targetWorldPos: { x: number; y: number }
+): { x: number; y: number } {
+  if (!shape.parentId) {
+    return {
+      x: Math.round(targetWorldPos.x),
+      y: Math.round(targetWorldPos.y),
+    };
+  }
+
+  const ancestors: ShapeDocument[] = [];
+  const visited = new Set<string>([shape._id.toString()]);
+  let currentParentId: Types.ObjectId | null | undefined = shape.parentId;
+
+  while (currentParentId) {
+    const pStr = currentParentId.toString();
+    if (visited.has(pStr)) break;
+    visited.add(pStr);
+    const parent = lookup.get(pStr);
+    if (!parent) break;
+    ancestors.push(parent);
+    currentParentId = parent.parentId;
+  }
+
+  let currentPoint = { ...targetWorldPos };
+  for (let i = ancestors.length - 1; i >= 0; i--) {
+    const ancestor = ancestors[i];
+    currentPoint = worldToLocalPoint(currentPoint, ancestor);
+  }
+
+  return {
+    x: Math.round(currentPoint.x),
+    y: Math.round(currentPoint.y),
   };
 }
 
@@ -629,6 +827,357 @@ export class ShapeService {
     return {
       groupId: group._id,
       children: updatedChildren,
+      boardId: canvas.boardId,
+    };
+  }
+
+  async alignShapes(
+    userId: Types.ObjectId,
+    dto: AlignShapesDto,
+    session?: ClientSession
+  ): Promise<{ shapes: ShapeDocument[]; boardId: Types.ObjectId }> {
+    const shapes = await shapeRepository.findShapesByIds(dto.shapeIds, session);
+    if (shapes.length !== dto.shapeIds.length) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        "One or more shapes to align do not exist."
+      );
+    }
+
+    const canvas = await canvasRepository.findById(dto.canvasId);
+    if (!canvas) {
+      throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+    }
+
+    for (const shape of shapes) {
+      if (shape.canvasId.toString() !== dto.canvasId.toString()) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "All shapes must belong to the specified canvas."
+        );
+      }
+    }
+
+    await boardService.authorizeCanvasMutation(canvas.boardId, userId);
+
+    // Validate OCC
+    if (dto.expectedVersions) {
+      for (const shape of shapes) {
+        const expected = dto.expectedVersions[shape._id.toString()];
+        if (expected !== undefined && shape.version !== expected) {
+          throw new ConflictError(
+            "shape",
+            shape._id.toString(),
+            shape.version,
+            "One or more shapes have been modified by another collaborator."
+          );
+        }
+      }
+    }
+
+    // Populate ancestor lookup
+    const lookup = new Map<string, ShapeDocument>();
+    for (const s of shapes) {
+      lookup.set(s._id.toString(), s);
+    }
+    for (const s of shapes) {
+      let curParent = s.parentId;
+      while (curParent) {
+        const pStr = curParent.toString();
+        if (!lookup.has(pStr)) {
+          const pDoc = await shapeRepository.findById(curParent, session);
+          if (pDoc) {
+            lookup.set(pStr, pDoc);
+            curParent = pDoc.parentId;
+          } else {
+            break;
+          }
+        } else {
+          curParent = lookup.get(pStr)!.parentId;
+        }
+      }
+    }
+
+    // Calculate overall world bounds
+    const aabbMap = new Map<string, ReturnType<typeof getShapeWorldAABB>>();
+    let overallMinX = Infinity;
+    let overallMinY = Infinity;
+    let overallMaxX = -Infinity;
+    let overallMaxY = -Infinity;
+
+    for (const s of shapes) {
+      const aabb = getShapeWorldAABB(s, lookup);
+      aabbMap.set(s._id.toString(), aabb);
+      overallMinX = Math.min(overallMinX, aabb.minX);
+      overallMinY = Math.min(overallMinY, aabb.minY);
+      overallMaxX = Math.max(overallMaxX, aabb.maxX);
+      overallMaxY = Math.max(overallMaxY, aabb.maxY);
+    }
+
+    const overallCenterX = (overallMinX + overallMaxX) / 2;
+    const overallCenterY = (overallMinY + overallMaxY) / 2;
+
+    const updatedShapes: ShapeDocument[] = [];
+
+    for (const s of shapes) {
+      const aabb = aabbMap.get(s._id.toString())!;
+      const wb = getShapeWorldBounds(s, lookup);
+
+      let worldDeltaX = 0;
+      let worldDeltaY = 0;
+
+      switch (dto.alignment) {
+        case "left":
+          worldDeltaX = overallMinX - aabb.minX;
+          break;
+        case "center-horizontal":
+          worldDeltaX = overallCenterX - aabb.centerX;
+          break;
+        case "right":
+          worldDeltaX = overallMaxX - aabb.maxX;
+          break;
+        case "top":
+          worldDeltaY = overallMinY - aabb.minY;
+          break;
+        case "center-vertical":
+          worldDeltaY = overallCenterY - aabb.centerY;
+          break;
+        case "bottom":
+          worldDeltaY = overallMaxY - aabb.maxY;
+          break;
+      }
+
+      const targetWorldX = wb.x + worldDeltaX;
+      const targetWorldY = wb.y + worldDeltaY;
+
+      const targetLocal = convertWorldPositionToLocal(s, lookup, {
+        x: targetWorldX,
+        y: targetWorldY,
+      });
+
+      const updated = await ShapeModel.findByIdAndUpdate(
+        s._id,
+        {
+          $set: {
+            x: targetLocal.x,
+            y: targetLocal.y,
+          },
+          $inc: { version: 1 },
+        },
+        { returnDocument: "after", runValidators: true, session }
+      );
+
+      if (updated) {
+        updatedShapes.push(updated);
+      }
+    }
+
+    return {
+      shapes: updatedShapes,
+      boardId: canvas.boardId,
+    };
+  }
+
+  async distributeShapes(
+    userId: Types.ObjectId,
+    dto: DistributeShapesDto,
+    session?: ClientSession
+  ): Promise<{ shapes: ShapeDocument[]; boardId: Types.ObjectId }> {
+    const shapes = await shapeRepository.findShapesByIds(dto.shapeIds, session);
+    if (shapes.length !== dto.shapeIds.length) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        "One or more shapes to distribute do not exist."
+      );
+    }
+
+    const canvas = await canvasRepository.findById(dto.canvasId);
+    if (!canvas) {
+      throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+    }
+
+    for (const shape of shapes) {
+      if (shape.canvasId.toString() !== dto.canvasId.toString()) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          "All shapes must belong to the specified canvas."
+        );
+      }
+    }
+
+    await boardService.authorizeCanvasMutation(canvas.boardId, userId);
+
+    // Validate OCC
+    if (dto.expectedVersions) {
+      for (const shape of shapes) {
+        const expected = dto.expectedVersions[shape._id.toString()];
+        if (expected !== undefined && shape.version !== expected) {
+          throw new ConflictError(
+            "shape",
+            shape._id.toString(),
+            shape.version,
+            "One or more shapes have been modified by another collaborator."
+          );
+        }
+      }
+    }
+
+    // Populate ancestor lookup
+    const lookup = new Map<string, ShapeDocument>();
+    for (const s of shapes) {
+      lookup.set(s._id.toString(), s);
+    }
+    for (const s of shapes) {
+      let curParent = s.parentId;
+      while (curParent) {
+        const pStr = curParent.toString();
+        if (!lookup.has(pStr)) {
+          const pDoc = await shapeRepository.findById(curParent, session);
+          if (pDoc) {
+            lookup.set(pStr, pDoc);
+            curParent = pDoc.parentId;
+          } else {
+            break;
+          }
+        } else {
+          curParent = lookup.get(pStr)!.parentId;
+        }
+      }
+    }
+
+    type ShapeWithAABB = {
+      shape: ShapeDocument;
+      aabb: ReturnType<typeof getShapeWorldAABB>;
+    };
+
+    const items: ShapeWithAABB[] = shapes.map((s) => ({
+      shape: s,
+      aabb: getShapeWorldAABB(s, lookup),
+    }));
+
+    if (dto.axis === "horizontal") {
+      items.sort((a, b) => a.aabb.minX - b.aabb.minX || a.aabb.centerX - b.aabb.centerX);
+    } else {
+      items.sort((a, b) => a.aabb.minY - b.aabb.minY || a.aabb.centerY - b.aabb.centerY);
+    }
+
+    const n = items.length;
+    const first = items[0];
+    const last = items[n - 1];
+
+    const targetLocalMap = new Map<string, { x: number; y: number }>();
+
+    if (dto.axis === "horizontal") {
+      const totalSpan = last.aabb.maxX - first.aabb.minX;
+      const sumShapeWidths = items.reduce((sum, item) => sum + item.aabb.width, 0);
+      const totalGap = totalSpan - sumShapeWidths;
+      const gapCount = n - 1;
+
+      targetLocalMap.set(first.shape._id.toString(), { x: first.shape.x, y: first.shape.y });
+
+      if (totalGap > 0) {
+        const gap = totalGap / gapCount;
+        let currentRight = first.aabb.maxX;
+
+        for (let i = 1; i < n - 1; i++) {
+          const item = items[i];
+          const targetMinX = currentRight + gap;
+          const worldDeltaX = targetMinX - item.aabb.minX;
+          const wb = getShapeWorldBounds(item.shape, lookup);
+          const targetWorldX = wb.x + worldDeltaX;
+          const targetLocal = convertWorldPositionToLocal(item.shape, lookup, {
+            x: targetWorldX,
+            y: wb.y,
+          });
+          targetLocalMap.set(item.shape._id.toString(), targetLocal);
+          currentRight = targetMinX + item.aabb.width;
+        }
+      } else {
+        const centerSpan = last.aabb.centerX - first.aabb.centerX;
+        const centerStep = centerSpan / gapCount;
+
+        for (let i = 1; i < n - 1; i++) {
+          const item = items[i];
+          const targetCenterX = first.aabb.centerX + i * centerStep;
+          const worldDeltaX = targetCenterX - item.aabb.centerX;
+          const wb = getShapeWorldBounds(item.shape, lookup);
+          const targetWorldX = wb.x + worldDeltaX;
+          const targetLocal = convertWorldPositionToLocal(item.shape, lookup, {
+            x: targetWorldX,
+            y: wb.y,
+          });
+          targetLocalMap.set(item.shape._id.toString(), targetLocal);
+        }
+      }
+
+      targetLocalMap.set(last.shape._id.toString(), { x: last.shape.x, y: last.shape.y });
+    } else {
+      const totalSpan = last.aabb.maxY - first.aabb.minY;
+      const sumShapeHeights = items.reduce((sum, item) => sum + item.aabb.height, 0);
+      const totalGap = totalSpan - sumShapeHeights;
+      const gapCount = n - 1;
+
+      targetLocalMap.set(first.shape._id.toString(), { x: first.shape.x, y: first.shape.y });
+
+      if (totalGap > 0) {
+        const gap = totalGap / gapCount;
+        let currentBottom = first.aabb.maxY;
+
+        for (let i = 1; i < n - 1; i++) {
+          const item = items[i];
+          const targetMinY = currentBottom + gap;
+          const worldDeltaY = targetMinY - item.aabb.minY;
+          const wb = getShapeWorldBounds(item.shape, lookup);
+          const targetWorldY = wb.y + worldDeltaY;
+          const targetLocal = convertWorldPositionToLocal(item.shape, lookup, {
+            x: wb.x,
+            y: targetWorldY,
+          });
+          targetLocalMap.set(item.shape._id.toString(), targetLocal);
+          currentBottom = targetMinY + item.aabb.height;
+        }
+      } else {
+        const centerSpan = last.aabb.centerY - first.aabb.centerY;
+        const centerStep = centerSpan / gapCount;
+
+        for (let i = 1; i < n - 1; i++) {
+          const item = items[i];
+          const targetCenterY = first.aabb.centerY + i * centerStep;
+          const worldDeltaY = targetCenterY - item.aabb.centerY;
+          const wb = getShapeWorldBounds(item.shape, lookup);
+          const targetWorldY = wb.y + worldDeltaY;
+          const targetLocal = convertWorldPositionToLocal(item.shape, lookup, {
+            x: wb.x,
+            y: targetWorldY,
+          });
+          targetLocalMap.set(item.shape._id.toString(), targetLocal);
+        }
+      }
+
+      targetLocalMap.set(last.shape._id.toString(), { x: last.shape.x, y: last.shape.y });
+    }
+
+    const updatedShapes: ShapeDocument[] = [];
+    for (const s of shapes) {
+      const local = targetLocalMap.get(s._id.toString()) ?? { x: s.x, y: s.y };
+      const updated = await ShapeModel.findByIdAndUpdate(
+        s._id,
+        {
+          $set: {
+            x: local.x,
+            y: local.y,
+          },
+          $inc: { version: 1 },
+        },
+        { returnDocument: "after", runValidators: true, session }
+      );
+      if (updated) {
+        updatedShapes.push(updated);
+      }
+    }
+
+    return {
+      shapes: updatedShapes,
       boardId: canvas.boardId,
     };
   }

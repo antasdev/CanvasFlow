@@ -356,3 +356,33 @@ export type UngroupShapeDto = {
   groupId: Types.ObjectId;
   expectedVersion?: number;
 };
+
+export type AlignmentAxis =
+  | "left"
+  | "center-horizontal"
+  | "right"
+  | "top"
+  | "center-vertical"
+  | "bottom";
+
+export type DistributionAxis = "horizontal" | "vertical";
+
+/**
+ * Align Shapes DTO (Service/Internal)
+ */
+export type AlignShapesDto = {
+  canvasId: Types.ObjectId;
+  shapeIds: Types.ObjectId[];
+  alignment: AlignmentAxis;
+  expectedVersions?: Record<string, number>;
+};
+
+/**
+ * Distribute Shapes DTO (Service/Internal)
+ */
+export type DistributeShapesDto = {
+  canvasId: Types.ObjectId;
+  shapeIds: Types.ObjectId[];
+  axis: DistributionAxis;
+  expectedVersions?: Record<string, number>;
+};

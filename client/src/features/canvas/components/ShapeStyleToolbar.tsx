@@ -6,10 +6,22 @@ import {
   Sliders,
   Group as GroupIcon,
   Ungroup as UngroupIcon,
+  AlignLeft,
+  AlignCenterHorizontal,
+  AlignRight,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignVerticalDistributeCenter,
 } from "lucide-react";
 import { toast } from "sonner";
 import { socketClientService } from "@/services/socket";
-import { useCanvasStore } from "../store";
+import {
+  useCanvasStore,
+  type AlignmentAxis,
+  type DistributionAxis,
+} from "../store";
 import type { Shape, ShapeStyle } from "../types";
 import { getMultiShapeCapabilities } from "../utils/shape-style-capabilities.utils";
 import {
@@ -49,6 +61,8 @@ export default function ShapeStyleToolbar({
 }: ShapeStyleToolbarProps): React.JSX.Element | null {
   const groupShapes = useCanvasStore((state) => state.groupShapes);
   const ungroupShapes = useCanvasStore((state) => state.ungroupShapes);
+  const alignShapes = useCanvasStore((state) => state.alignShapes);
+  const distributeShapes = useCanvasStore((state) => state.distributeShapes);
 
   const [isShadowPopoverOpen, setIsShadowPopoverOpen] = useState(false);
   const [isOpacityPopoverOpen, setIsOpacityPopoverOpen] = useState(false);
@@ -92,6 +106,9 @@ export default function ShapeStyleToolbar({
     selectedShapes.length === 1 &&
     selectedShapes[0].type === "group";
 
+  const canAlign = canEditCanvas && selectedShapes.length >= 2;
+  const canDistribute = canEditCanvas && selectedShapes.length >= 3;
+
   const handleGroup = async (): Promise<void> => {
     if (!canGroup) return;
     const expectedVersions: Record<string, number> = {};
@@ -121,7 +138,41 @@ export default function ShapeStyleToolbar({
     }
   };
 
+  const handleAlign = async (alignment: AlignmentAxis): Promise<void> => {
+    if (!canAlign) return;
+    const expectedVersions: Record<string, number> = {};
+    for (const s of selectedShapes) {
+      if (s.version) expectedVersions[s.id] = s.version;
+    }
+    alignShapes(shapeIds, alignment);
+    if (canvasId) {
+      try {
+        await socketClientService.alignShapes(canvasId, shapeIds, alignment, expectedVersions);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to align shapes.");
+      }
+    }
+  };
+
+  const handleDistribute = async (axis: DistributionAxis): Promise<void> => {
+    if (!canDistribute) return;
+    const expectedVersions: Record<string, number> = {};
+    for (const s of selectedShapes) {
+      if (s.version) expectedVersions[s.id] = s.version;
+    }
+    distributeShapes(shapeIds, axis);
+    if (canvasId) {
+      try {
+        await socketClientService.distributeShapes(canvasId, shapeIds, axis, expectedVersions);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to distribute shapes.");
+      }
+    }
+  };
+
   if (
+    !canAlign &&
+    !canDistribute &&
     !canGroup &&
     !canUngroup &&
     !capabilities.canFill &&
@@ -434,6 +485,82 @@ export default function ShapeStyleToolbar({
               <span>Ungroup</span>
             </button>
           )}
+        </div>
+      )}
+
+      {/* Alignment Actions */}
+      {canEditCanvas && canAlign && (
+        <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1">
+          <button
+            type="button"
+            title="Align Left"
+            onClick={() => handleAlign("left")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Align Center Horizontally"
+            onClick={() => handleAlign("center-horizontal")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignCenterHorizontal className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Align Right"
+            onClick={() => handleAlign("right")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignRight className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Align Top"
+            onClick={() => handleAlign("top")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignStartVertical className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Align Middle"
+            onClick={() => handleAlign("center-vertical")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignCenterVertical className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Align Bottom"
+            onClick={() => handleAlign("bottom")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignEndVertical className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Distribution Actions */}
+      {canEditCanvas && canDistribute && (
+        <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1">
+          <button
+            type="button"
+            title="Distribute Horizontally"
+            onClick={() => handleDistribute("horizontal")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignHorizontalDistributeCenter className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            title="Distribute Vertically"
+            onClick={() => handleDistribute("vertical")}
+            className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+          >
+            <AlignVerticalDistributeCenter className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>

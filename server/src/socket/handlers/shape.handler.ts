@@ -30,6 +30,10 @@ import {
   GroupShapesAckData,
   UngroupShapePayload,
   UngroupShapeAckData,
+  AlignShapesPayload,
+  AlignShapesAckData,
+  DistributeShapesPayload,
+  DistributeShapesAckData,
 } from "../socket.types";
 
 const objectIdSchema = z
@@ -37,6 +41,39 @@ const objectIdSchema = z
   .regex(/^[0-9a-fA-F]{24}$/, "Invalid ID format.");
 
 const shapeStyleSocketSchema = shapeStyleValidationSchema;
+
+const alignShapeSocketSchema = z.object({
+  canvasId: objectIdSchema,
+  shapeIds: z
+    .array(objectIdSchema)
+    .min(2, "Alignment requires at least 2 shapes.")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Duplicate shape IDs are not allowed in alignment.",
+    }),
+  alignment: z.enum([
+    "left",
+    "center-horizontal",
+    "right",
+    "top",
+    "center-vertical",
+    "bottom",
+  ]),
+  expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
+});
+
+const distributeShapeSocketSchema = z.object({
+  canvasId: objectIdSchema,
+  shapeIds: z
+    .array(objectIdSchema)
+    .min(3, "Distribution requires at least 3 shapes.")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Duplicate shape IDs are not allowed in distribution.",
+    }),
+  axis: z.enum(["horizontal", "vertical"]),
+  expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
+});
 
 const createShapeSocketSchema = z
   .object({
@@ -981,6 +1018,260 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         }
 
         const message = error instanceof Error ? error.message : "Failed to ungroup shape.";
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          mutationId: fallbackMutationId,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:align
+   */
+  socket.on(
+    SocketEvents.SHAPE_ALIGN,
+    async (
+      payload: AlignShapesPayload,
+      callback?: (response: SocketAck<AlignShapesAckData>) => void
+    ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
+      try {
+        const parsed = alignShapeSocketSchema.safeParse(payload);
+        if (!parsed.success) {
+          const message = parsed.error.issues[0]?.message ?? "Invalid shape alignment payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const canvasObjectId = new Types.ObjectId(parsed.data.canvasId);
+
+        const canvas = await canvasRepository.findById(canvasObjectId);
+        if (!canvas) {
+          throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+        }
+
+        const boardId = canvas.boardId;
+        await boardService.authorizeCanvasMutation(boardId, userId);
+
+        const room = getBoardRoom(boardId.toString());
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before aligning shapes."
+          );
+        }
+
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.alignShapes(
+              userId,
+              {
+                canvasId: canvasObjectId,
+                shapeIds: parsed.data.shapeIds.map((id) => new Types.ObjectId(id)),
+                alignment: parsed.data.alignment,
+                expectedVersions: parsed.data.expectedVersions,
+              },
+              session
+            );
+          },
+          parsed.data.mutationId,
+          "shape:align",
+          parsed.data
+        );
+
+        const shapeDtos = result.shapes.map((s) => ShapeMapper.toResponseDto(s));
+
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_ALIGNED, {
+            meta,
+            shapes: shapeDtos,
+          });
+        }
+
+        callback?.({
+          success: true,
+          mutationId: parsed.data.mutationId,
+          data: {
+            shapes: shapeDtos,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof ApiError) {
+          const code =
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Failed to align shapes.";
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          mutationId: fallbackMutationId,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:distribute
+   */
+  socket.on(
+    SocketEvents.SHAPE_DISTRIBUTE,
+    async (
+      payload: DistributeShapesPayload,
+      callback?: (response: SocketAck<DistributeShapesAckData>) => void
+    ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
+      try {
+        const parsed = distributeShapeSocketSchema.safeParse(payload);
+        if (!parsed.success) {
+          const message = parsed.error.issues[0]?.message ?? "Invalid shape distribution payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const canvasObjectId = new Types.ObjectId(parsed.data.canvasId);
+
+        const canvas = await canvasRepository.findById(canvasObjectId);
+        if (!canvas) {
+          throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+        }
+
+        const boardId = canvas.boardId;
+        await boardService.authorizeCanvasMutation(boardId, userId);
+
+        const room = getBoardRoom(boardId.toString());
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before distributing shapes."
+          );
+        }
+
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.distributeShapes(
+              userId,
+              {
+                canvasId: canvasObjectId,
+                shapeIds: parsed.data.shapeIds.map((id) => new Types.ObjectId(id)),
+                axis: parsed.data.axis,
+                expectedVersions: parsed.data.expectedVersions,
+              },
+              session
+            );
+          },
+          parsed.data.mutationId,
+          "shape:distribute",
+          parsed.data
+        );
+
+        const shapeDtos = result.shapes.map((s) => ShapeMapper.toResponseDto(s));
+
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_DISTRIBUTED, {
+            meta,
+            shapes: shapeDtos,
+          });
+        }
+
+        callback?.({
+          success: true,
+          mutationId: parsed.data.mutationId,
+          data: {
+            shapes: shapeDtos,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof ApiError) {
+          const code =
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Failed to distribute shapes.";
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,

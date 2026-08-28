@@ -7,6 +7,13 @@ import {
 import type { Shape, TextShape, ShapeStyle } from "../types";
 import { isShapeCompatibleWithProperty } from "../utils/shape-style-capabilities.utils";
 import { computeGroupBoundingBox, localToWorld } from "../utils/group-geometry.utils";
+import {
+  calculateAlignmentTargets,
+  calculateDistributionTargets,
+  type AlignmentAxis,
+  type DistributionAxis,
+} from "../utils/alignment.utils";
+import type { SmartGuide } from "../utils/smart-guides.utils";
 import type {
   RemoteCursor,
   RemoteSelection,
@@ -19,6 +26,9 @@ export type {
   RemoteSelection,
   RemoteShapeLock,
   RemoteShapeTransform,
+  AlignmentAxis,
+  DistributionAxis,
+  SmartGuide,
 };
 
 type ShapePositionUpdate = {
@@ -177,6 +187,20 @@ type CanvasStore = {
 
   applyRemoteShapeUngrouped: (groupId: string, children: Shape[]) => void;
 
+  smartGuides: SmartGuide[];
+
+  setSmartGuides: (guides: SmartGuide[]) => void;
+
+  clearSmartGuides: () => void;
+
+  alignShapes: (shapeIds: string[], alignment: AlignmentAxis) => Shape[];
+
+  distributeShapes: (shapeIds: string[], axis: DistributionAxis) => Shape[];
+
+  applyRemoteShapesAligned: (shapes: Shape[]) => void;
+
+  applyRemoteShapesDistributed: (shapes: Shape[]) => void;
+
   undo: () => void;
 
   redo: () => void;
@@ -239,6 +263,8 @@ export const useCanvasStore = create<CanvasStore>(
     selectedShapeIds: [],
 
     editingGroupId: null,
+
+    smartGuides: [],
 
     remoteCursors: {},
 
@@ -919,6 +945,100 @@ export const useCanvasStore = create<CanvasStore>(
             .filter((s) => s.id !== groupId)
             .map((s) => childrenMap.get(s.id) ?? s),
           editingGroupId: state.editingGroupId === groupId ? null : state.editingGroupId,
+        };
+      });
+    },
+
+    setSmartGuides: (guides: SmartGuide[]): void => {
+      set({ smartGuides: guides });
+    },
+
+    clearSmartGuides: (): void => {
+      set({ smartGuides: [] });
+    },
+
+    alignShapes: (shapeIds: string[], alignment: AlignmentAxis): Shape[] => {
+      const state = get();
+      const shapesToAlign = state.shapes.filter((s) => shapeIds.includes(s.id));
+      if (shapesToAlign.length < 2) {
+        return [];
+      }
+
+      const deltas = calculateAlignmentTargets(shapesToAlign, state.shapes, alignment);
+      if (deltas.size === 0) {
+        return [];
+      }
+
+      const updatedMap = new Map<string, Shape>();
+      for (const s of shapesToAlign) {
+        const delta = deltas.get(s.id);
+        if (delta) {
+          updatedMap.set(s.id, {
+            ...s,
+            x: delta.targetLocalX,
+            y: delta.targetLocalY,
+            version: (s.version ?? 1) + 1,
+          });
+        }
+      }
+
+      set((curr) => ({
+        past: [...curr.past, curr.shapes],
+        future: [],
+        shapes: curr.shapes.map((s) => updatedMap.get(s.id) ?? s),
+      }));
+
+      return Array.from(updatedMap.values());
+    },
+
+    distributeShapes: (shapeIds: string[], axis: DistributionAxis): Shape[] => {
+      const state = get();
+      const shapesToDistribute = state.shapes.filter((s) => shapeIds.includes(s.id));
+      if (shapesToDistribute.length < 3) {
+        return [];
+      }
+
+      const deltas = calculateDistributionTargets(shapesToDistribute, state.shapes, axis);
+      if (deltas.size === 0) {
+        return [];
+      }
+
+      const updatedMap = new Map<string, Shape>();
+      for (const s of shapesToDistribute) {
+        const delta = deltas.get(s.id);
+        if (delta) {
+          updatedMap.set(s.id, {
+            ...s,
+            x: delta.targetLocalX,
+            y: delta.targetLocalY,
+            version: (s.version ?? 1) + 1,
+          });
+        }
+      }
+
+      set((curr) => ({
+        past: [...curr.past, curr.shapes],
+        future: [],
+        shapes: curr.shapes.map((s) => updatedMap.get(s.id) ?? s),
+      }));
+
+      return Array.from(updatedMap.values());
+    },
+
+    applyRemoteShapesAligned: (shapes: Shape[]): void => {
+      set((state) => {
+        const updatedMap = new Map(shapes.map((s) => [s.id, s]));
+        return {
+          shapes: state.shapes.map((s) => updatedMap.get(s.id) ?? s),
+        };
+      });
+    },
+
+    applyRemoteShapesDistributed: (shapes: Shape[]): void => {
+      set((state) => {
+        const updatedMap = new Map(shapes.map((s) => [s.id, s]));
+        return {
+          shapes: state.shapes.map((s) => updatedMap.get(s.id) ?? s),
         };
       });
     },

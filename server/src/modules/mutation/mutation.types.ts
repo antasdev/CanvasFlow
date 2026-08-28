@@ -6,6 +6,8 @@ export type MutationOperation =
   | "shape:delete"
   | "shape:group"
   | "shape:ungroup"
+  | "shape:align"
+  | "shape:distribute"
   | "comment:create"
   | "comment:update"
   | "comment:resolve"

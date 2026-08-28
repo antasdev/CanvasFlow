@@ -41,6 +41,7 @@ import TextEditorOverlay from "./TextEditorOverlay";
 import TextFormattingToolbar from "./TextFormattingToolbar";
 import ShapeStyleToolbar from "./ShapeStyleToolbar";
 import ShapeRenderer from "./ShapeRenderer";
+import { SmartGuideOverlay } from "./SmartGuideOverlay";
 import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
 import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
 import { getShapeStyle } from "../utils/shape-style.utils";
@@ -1800,6 +1801,9 @@ export default function CanvasEditor({
                                 listening={false}
                             />
                         ) : null}
+
+                        {/* Ephemeral Smart Guides Overlay */}
+                        <SmartGuideOverlay />
                     </Layer>
 
                     {/* Dedicated Collaborator Overlay Layer */}

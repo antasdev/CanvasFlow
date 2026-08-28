@@ -345,3 +345,34 @@ export const ungroupShapeValidationSchema = z.object({
   groupId: objectIdSchema,
   expectedVersion: z.number().int().min(1).optional(),
 });
+
+export const alignShapesValidationSchema = z.object({
+  canvasId: objectIdSchema,
+  shapeIds: z
+    .array(objectIdSchema)
+    .min(2, "Alignment requires at least 2 shapes.")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Duplicate shape IDs are not allowed in alignment.",
+    }),
+  alignment: z.enum([
+    "left",
+    "center-horizontal",
+    "right",
+    "top",
+    "center-vertical",
+    "bottom",
+  ]),
+  expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
+});
+
+export const distributeShapesValidationSchema = z.object({
+  canvasId: objectIdSchema,
+  shapeIds: z
+    .array(objectIdSchema)
+    .min(3, "Distribution requires at least 3 shapes.")
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "Duplicate shape IDs are not allowed in distribution.",
+    }),
+  axis: z.enum(["horizontal", "vertical"]),
+  expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
+});

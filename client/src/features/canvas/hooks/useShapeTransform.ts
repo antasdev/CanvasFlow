@@ -3,6 +3,27 @@ import { toast } from "sonner";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
 import type { Shape } from "../types";
+import {
+  findSmartGuideCandidates,
+  calculateSmartGuides,
+  type SmartGuideCandidate,
+} from "../utils/smart-guides.utils";
+import { getShapeWorldAABB } from "../utils/alignment.utils";
+
+function getAllDescendantIds(rootId: string, shapes: Shape[]): Set<string> {
+  const result = new Set<string>([rootId]);
+  let added = true;
+  while (added) {
+    added = false;
+    for (const s of shapes) {
+      if (s.parentId && result.has(s.parentId) && !result.has(s.id)) {
+        result.add(s.id);
+        added = true;
+      }
+    }
+  }
+  return result;
+}
 
 type UseShapeTransformOptions = {
   shape: Shape;
@@ -23,6 +44,8 @@ export const useShapeTransform = ({
   boardId,
 }: UseShapeTransformOptions) => {
   const activeTool = useCanvasStore((state) => state.activeTool);
+  const shapes = useCanvasStore((state) => state.shapes);
+  const zoom = useCanvasStore((state) => state.zoom);
   const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const remoteShapeLocks = useCanvasStore((state) => state.remoteShapeLocks);
   const remoteShapeTransforms = useCanvasStore(
@@ -39,6 +62,8 @@ export const useShapeTransform = ({
   const moveSelectedShapes = useCanvasStore(
     (state) => state.moveSelectedShapes
   );
+  const setSmartGuides = useCanvasStore((state) => state.setSmartGuides);
+  const clearSmartGuides = useCanvasStore((state) => state.clearSmartGuides);
 
   const isSelected = selectedShapeIds.includes(shape.id);
   const remoteLock = remoteShapeLocks[shape.id];
@@ -48,6 +73,58 @@ export const useShapeTransform = ({
   const pendingFrameRef = useRef<TransformValues | null>(null);
   const rafIdRef = useRef<number | null>(null);
   const isLockedBySelfRef = useRef<boolean>(false);
+
+  // Smart guide candidate and snap retention caches
+  const candidatesRef = useRef<SmartGuideCandidate[]>([]);
+  const activeSnapRef = useRef<{ activeGuideX?: string; activeGuideY?: string }>({});
+
+  const startDragGuides = useCallback((): void => {
+    const descendants = getAllDescendantIds(shape.id, shapes);
+    candidatesRef.current = findSmartGuideCandidates(shape.id, shapes, descendants);
+    activeSnapRef.current = {};
+  }, [shape.id, shapes]);
+
+  const updateDragGuides = useCallback(
+    (tentativeLocalX: number, tentativeLocalY: number): { snappedX: number; snappedY: number } => {
+      if (candidatesRef.current.length === 0) {
+        setSmartGuides([]);
+        return { snappedX: tentativeLocalX, snappedY: tentativeLocalY };
+      }
+
+      const tentativeShape: Shape = {
+        ...shape,
+        x: tentativeLocalX,
+        y: tentativeLocalY,
+      };
+      const movingAABB = getShapeWorldAABB(tentativeShape, shapes);
+
+      const { guides, snapDeltaX, snapDeltaY, matchedGuideX, matchedGuideY } = calculateSmartGuides(
+        movingAABB,
+        candidatesRef.current,
+        zoom,
+        activeSnapRef.current
+      );
+
+      activeSnapRef.current = {
+        activeGuideX: matchedGuideX,
+        activeGuideY: matchedGuideY,
+      };
+
+      setSmartGuides(guides);
+
+      return {
+        snappedX: tentativeLocalX + snapDeltaX,
+        snappedY: tentativeLocalY + snapDeltaY,
+      };
+    },
+    [shape, shapes, zoom, setSmartGuides]
+  );
+
+  const endDragGuides = useCallback((): void => {
+    clearSmartGuides();
+    candidatesRef.current = [];
+    activeSnapRef.current = {};
+  }, [clearSmartGuides]);
 
   // Compute effective display coordinates
   const isTransformActive =
@@ -149,14 +226,17 @@ export const useShapeTransform = ({
       }
       pendingFrameRef.current = null;
 
-      // 2. Commit local state (records exactly ONE undo snapshot)
+      // 2. Clear smart guides
+      endDragGuides();
+
+      // 3. Commit local state (records exactly ONE undo snapshot)
       if (delta && selectedShapeIds.length > 1) {
         moveSelectedShapes(delta.x, delta.y);
       } else {
         updateShapeTransform(shape.id, finalTransform);
       }
 
-      // 3. Persist final transform and cleanup
+      // 4. Persist final transform and cleanup
       if (boardId && isLockedBySelfRef.current) {
         try {
           await socketClientService.updateShape(shape.id, {
@@ -180,7 +260,7 @@ export const useShapeTransform = ({
         }
       }
     },
-    [boardId, shape.id, selectedShapeIds.length, moveSelectedShapes, updateShapeTransform]
+    [boardId, shape.id, selectedShapeIds.length, moveSelectedShapes, updateShapeTransform, endDragGuides]
   );
 
   return {
@@ -194,5 +274,8 @@ export const useShapeTransform = ({
     acquireLock,
     emitTransformFrame,
     endTransform,
+    startDragGuides,
+    updateDragGuides,
+    endDragGuides,
   };
 };

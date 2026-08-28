@@ -38,6 +38,9 @@ export default function RectangleNode({
     acquireLock,
     emitTransformFrame,
     endTransform,
+    startDragGuides,
+    updateDragGuides,
+    endDragGuides,
   } = useShapeTransform({ shape, boardId });
 
   const styleProps = getKonvaStyleProps(shape, isLockedByOther);
@@ -130,6 +133,8 @@ export default function RectangleNode({
             y: event.target.y(),
           };
 
+          startDragGuides();
+
           const lockAcquired = await acquireLock();
           if (!lockAcquired) {
             event.target.stopDrag();
@@ -138,8 +143,15 @@ export default function RectangleNode({
         onDragMove={(event) => {
           event.cancelBubble = true;
 
-          const currentX = event.target.x();
-          const currentY = event.target.y();
+          const rawX = event.target.x();
+          const rawY = event.target.y();
+
+          const { snappedX, snappedY } = updateDragGuides(rawX, rawY);
+          event.target.x(snappedX);
+          event.target.y(snappedY);
+
+          const currentX = snappedX;
+          const currentY = snappedY;
 
           if (selectedShapeIds.length > 1 && dragStartRef.current) {
             const deltaX = currentX - dragStartRef.current.x;
@@ -164,6 +176,7 @@ export default function RectangleNode({
         }}
         onDragEnd={(event) => {
           event.cancelBubble = true;
+          endDragGuides();
 
           const currentX = event.target.x();
           const currentY = event.target.y();

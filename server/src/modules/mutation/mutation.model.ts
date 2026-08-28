@@ -26,6 +26,8 @@ const mutationRecordSchema = new Schema<IMutationRecord>(
         "shape:delete",
         "shape:group",
         "shape:ungroup",
+        "shape:align",
+        "shape:distribute",
         "comment:create",
         "comment:update",
         "comment:resolve",
