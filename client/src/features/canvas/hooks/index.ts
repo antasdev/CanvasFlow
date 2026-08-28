@@ -10,3 +10,4 @@ export * from "./useBoardRecovery";
 export * from "./usePresenceSocket";
 export * from "./useInteractionSocket";
 export * from "./useTextEditing";
+export * from "./useCanvasClipboard";

@@ -386,3 +386,31 @@ export type DistributeShapesDto = {
   axis: DistributionAxis;
   expectedVersions?: Record<string, number>;
 };
+
+/**
+ * Item within Paste Shapes Batch DTO
+ */
+export type PasteShapeItemDto = {
+  tempId: string;
+  type: ShapeType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  text?: string;
+  points?: number[];
+  connector?: ShapeConnectorDto;
+  shapeConfig?: ShapeConfigData;
+  style?: ShapeStyleDto;
+  parentId?: string | null;
+};
+
+/**
+ * Paste Shapes Batch DTO (Service/Internal)
+ */
+export type PasteShapesDto = {
+  canvasId: Types.ObjectId;
+  shapes: PasteShapeItemDto[];
+  destinationParentId?: Types.ObjectId | null;
+};

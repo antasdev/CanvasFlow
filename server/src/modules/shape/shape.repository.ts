@@ -22,6 +22,16 @@ export class ShapeRepository {
     return shape;
   }
 
+  async createMany(
+    data: (CreateShapeData & { _id?: Types.ObjectId })[],
+    session?: ClientSession
+  ): Promise<ShapeDocument[]> {
+    if (data.length === 0) {
+      return [];
+    }
+    return ShapeModel.create(data, { session, ordered: true });
+  }
+
   async findById(
     id: Types.ObjectId,
     session?: ClientSession

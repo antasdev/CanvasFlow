@@ -201,6 +201,17 @@ type CanvasStore = {
 
   applyRemoteShapesDistributed: (shapes: Shape[]) => void;
 
+  pasteClonedShapes: (clonedShapes: Shape[], rootIds: string[]) => void;
+
+  reconcileAuthoritativePastedShapes: (
+    idMap: Record<string, string>,
+    authoritativeShapes: Shape[]
+  ) => void;
+
+  applyRemoteShapesPasted: (shapes: Shape[]) => void;
+
+  rollbackOptimisticPaste: (tempIds: string[]) => void;
+
   undo: () => void;
 
   redo: () => void;
@@ -1039,6 +1050,61 @@ export const useCanvasStore = create<CanvasStore>(
         const updatedMap = new Map(shapes.map((s) => [s.id, s]));
         return {
           shapes: state.shapes.map((s) => updatedMap.get(s.id) ?? s),
+        };
+      });
+    },
+
+    pasteClonedShapes: (clonedShapes: Shape[], rootIds: string[]): void => {
+      set((state) => ({
+        past: [...state.past, state.shapes],
+        future: [],
+        shapes: [...state.shapes, ...clonedShapes],
+        selectedShapeIds: rootIds,
+      }));
+    },
+
+    reconcileAuthoritativePastedShapes: (
+      idMap: Record<string, string>,
+      authoritativeShapes: Shape[]
+    ): void => {
+      set((state) => {
+        const authMap = new Map<string, Shape>(authoritativeShapes.map((s) => [s.id, s]));
+        const updatedShapes = state.shapes.map((s) => {
+          const authoritativeId = idMap[s.id];
+          if (authoritativeId && authMap.has(authoritativeId)) {
+            return authMap.get(authoritativeId)!;
+          }
+          return s;
+        });
+
+        const updatedSelected = state.selectedShapeIds.map((id) => idMap[id] ?? id);
+
+        return {
+          shapes: updatedShapes,
+          selectedShapeIds: updatedSelected,
+        };
+      });
+    },
+
+    applyRemoteShapesPasted: (shapes: Shape[]): void => {
+      set((state) => {
+        const incomingMap = new Map<string, Shape>(shapes.map((s) => [s.id, s]));
+        const filtered = state.shapes.filter((s) => !incomingMap.has(s.id));
+        return {
+          shapes: [...filtered, ...shapes],
+        };
+      });
+    },
+
+    rollbackOptimisticPaste: (tempIds: string[]): void => {
+      set((state) => {
+        const tempSet = new Set(tempIds);
+        const filtered = state.shapes.filter((s) => !tempSet.has(s.id));
+        const prevPast = state.past.slice(0, -1);
+        return {
+          shapes: filtered,
+          past: prevPast,
+          selectedShapeIds: [],
         };
       });
     },

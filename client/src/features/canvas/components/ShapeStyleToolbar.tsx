@@ -14,6 +14,9 @@ import {
   AlignEndVertical,
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
+  Copy,
+  ClipboardPaste,
+  CopyPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { socketClientService } from "@/services/socket";
@@ -48,6 +51,9 @@ export type ShapeStyleToolbarProps = {
     shapeIds: string[],
     style: Partial<ShapeStyle>
   ) => Promise<void> | void;
+  onCopy?: () => void;
+  onPaste?: () => void;
+  onDuplicate?: () => void;
 };
 
 export default function ShapeStyleToolbar({
@@ -58,6 +64,9 @@ export default function ShapeStyleToolbar({
   canEditCanvas = true,
   onUpdateStyle,
   onCommitStyle,
+  onCopy,
+  onPaste,
+  onDuplicate,
 }: ShapeStyleToolbarProps): React.JSX.Element | null {
   const groupShapes = useCanvasStore((state) => state.groupShapes);
   const ungroupShapes = useCanvasStore((state) => state.ungroupShapes);
@@ -561,6 +570,44 @@ export default function ShapeStyleToolbar({
           >
             <AlignVerticalDistributeCenter className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {/* Clipboard Actions */}
+      {canEditCanvas && (onCopy || onDuplicate || onPaste) && (
+        <div className="flex items-center gap-0.5 border-l border-gray-200 pl-1">
+          {onCopy && (
+            <button
+              type="button"
+              title="Copy (Ctrl+C)"
+              onClick={onCopy}
+              disabled={selectedShapes.length === 0}
+              className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Copy className="h-4 w-4" />
+            </button>
+          )}
+          {onPaste && (
+            <button
+              type="button"
+              title="Paste (Ctrl+V)"
+              onClick={onPaste}
+              className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <ClipboardPaste className="h-4 w-4" />
+            </button>
+          )}
+          {onDuplicate && (
+            <button
+              type="button"
+              title="Duplicate (Ctrl+D)"
+              onClick={onDuplicate}
+              disabled={selectedShapes.length === 0}
+              className="flex h-7 w-7 items-center justify-center rounded text-gray-700 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <CopyPlus className="h-4 w-4" />
+            </button>
+          )}
         </div>
       )}
     </div>

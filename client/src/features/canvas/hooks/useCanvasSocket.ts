@@ -9,6 +9,7 @@ import type {
   UngroupShapeBroadcastPayload,
   AlignShapesBroadcastPayload,
   DistributeShapesBroadcastPayload,
+  PasteShapesBroadcastPayload,
   SelectionChangedPayload,
   ShapeCreatedPayload,
   ShapeDeletedPayload,
@@ -59,6 +60,9 @@ export const useCanvasSocket = (
   );
   const applyRemoteShapesDistributed = useCanvasStore(
     (state) => state.applyRemoteShapesDistributed
+  );
+  const applyRemoteShapesPasted = useCanvasStore(
+    (state) => state.applyRemoteShapesPasted
   );
   const setRemoteCursor = useCanvasStore(
     (state) => state.setRemoteCursor
@@ -262,6 +266,24 @@ export const useCanvasSocket = (
       applyRemoteShapesDistributed(shapes);
     };
 
+    // Handle remote shape paste with revision freshness guard
+    const handleShapesPasted = (payload: PasteShapesBroadcastPayload): void => {
+      const meta = payload.meta;
+      if (meta && boardId) {
+        const freshness = useCollaborationStore.getState().checkEventFreshness(boardId, meta.revision);
+        if (freshness.action === "ignore") {
+          return;
+        }
+        if (freshness.action === "gap") {
+          onGapDetected?.();
+          return;
+        }
+      }
+
+      const shapes = payload.shapes.map(mapShapeResponseToShape);
+      applyRemoteShapesPasted(shapes);
+    };
+
     // 6. Handle collaborator cursor movement
     const handleCursorMoved = (payload: CursorMovedPayload): void => {
       if (payload.boardId === boardId) {
@@ -356,6 +378,7 @@ export const useCanvasSocket = (
     socket.on(SocketEvents.SHAPE_UNGROUPED, handleShapeUngrouped);
     socket.on(SocketEvents.SHAPE_ALIGNED, handleShapesAligned);
     socket.on(SocketEvents.SHAPE_DISTRIBUTED, handleShapesDistributed);
+    socket.on(SocketEvents.SHAPE_PASTED, handleShapesPasted);
     socket.on(SocketEvents.CURSOR_MOVED, handleCursorMoved);
     socket.on(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
     socket.on(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
@@ -375,6 +398,7 @@ export const useCanvasSocket = (
       socket.off(SocketEvents.SHAPE_UNGROUPED, handleShapeUngrouped);
       socket.off(SocketEvents.SHAPE_ALIGNED, handleShapesAligned);
       socket.off(SocketEvents.SHAPE_DISTRIBUTED, handleShapesDistributed);
+      socket.off(SocketEvents.SHAPE_PASTED, handleShapesPasted);
       socket.off(SocketEvents.CURSOR_MOVED, handleCursorMoved);
       socket.off(SocketEvents.SELECTION_CHANGED, handleSelectionChanged);
       socket.off(SocketEvents.SHAPE_LOCKED, handleShapeLocked);
@@ -401,6 +425,7 @@ export const useCanvasSocket = (
     applyRemoteShapeUngrouped,
     applyRemoteShapesAligned,
     applyRemoteShapesDistributed,
+    applyRemoteShapesPasted,
     setRemoteCursor,
     removeRemoteCursor,
     clearRemoteCursors,

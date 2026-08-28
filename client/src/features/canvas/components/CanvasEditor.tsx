@@ -16,6 +16,7 @@ import { CANVAS_TOOLS } from "../constants";
 import {
     useCanvasHistory,
     useCanvasSocket,
+    useCanvasClipboard,
     useShapes,
     useBoardRecovery,
     usePresenceSocket,
@@ -321,6 +322,13 @@ export default function CanvasEditor({
 
     const [textCreationContext, setTextCreationContext] =
         useState<{ x: number; y: number } | null>(null);
+
+    const { handleCopy, handlePaste, handleDuplicate } = useCanvasClipboard({
+        boardId,
+        canvasId,
+        canEditCanvas,
+        isEditingText: Boolean(textCreationContext),
+    });
 
     const selectedTextShape = useMemo(() => {
         if (selectedShapeIds.length !== 1) return null;
@@ -1534,6 +1542,9 @@ export default function CanvasEditor({
                             updateMultipleShapesStyle(shapeIds, style, isLivePreview);
                         }}
                         onCommitStyle={handleCommitShapesStyle}
+                        onCopy={handleCopy}
+                        onPaste={handlePaste}
+                        onDuplicate={handleDuplicate}
                     />
             )}
 

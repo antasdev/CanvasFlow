@@ -11,6 +11,7 @@ import {
   shapeConnectorSchema,
   shapeConfigSchema,
   shapeStyleValidationSchema,
+  pasteShapesValidationSchema,
 } from "@/modules/shape";
 import { mutationRepository, generateMutationHash } from "@/modules/mutation";
 import { ApiError, ConflictError } from "@/shared/utils";
@@ -34,6 +35,8 @@ import {
   AlignShapesAckData,
   DistributeShapesPayload,
   DistributeShapesAckData,
+  PasteShapesPayload,
+  PasteShapesAckData,
 } from "../socket.types";
 
 const objectIdSchema = z
@@ -1272,6 +1275,139 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
         }
 
         const message = error instanceof Error ? error.message : "Failed to distribute shapes.";
+        socket.emit(SocketEvents.ERROR, message);
+        callback?.({
+          success: false,
+          mutationId: fallbackMutationId,
+          error: { code: "INTERNAL_ERROR", message },
+        });
+      }
+    }
+  );
+
+  /**
+   * Handle shape:paste
+   */
+  socket.on(
+    SocketEvents.SHAPE_PASTE,
+    async (
+      payload: PasteShapesPayload,
+      callback?: (response: SocketAck<PasteShapesAckData>) => void
+    ) => {
+      const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
+      try {
+        const parsed = pasteShapesValidationSchema.safeParse(payload);
+        if (!parsed.success) {
+          const message = parsed.error.issues[0]?.message ?? "Invalid shape paste payload.";
+          socket.emit(SocketEvents.ERROR, message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code: "BAD_REQUEST", message },
+          });
+          return;
+        }
+
+        const userId = socket.data.user.userId;
+        const canvasObjectId = new Types.ObjectId(parsed.data.canvasId);
+
+        const canvas = await canvasRepository.findById(canvasObjectId);
+        if (!canvas) {
+          throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+        }
+
+        const boardId = canvas.boardId;
+        const room = getBoardRoom(boardId.toString());
+
+        if (!socket.rooms.has(room)) {
+          throw new ApiError(
+            HttpStatus.FORBIDDEN,
+            "You must join the board room before performing operations."
+          );
+        }
+
+        const destinationParentId = parsed.data.destinationParentId
+          ? new Types.ObjectId(parsed.data.destinationParentId)
+          : undefined;
+
+        const { result, meta } = await collaborationVersionService.executeWithRevision(
+          boardId,
+          userId,
+          socket.id,
+          async (session) => {
+            return shapeService.pasteShapes(
+              userId,
+              {
+                canvasId: canvasObjectId,
+                shapes: parsed.data.shapes.map((item) => ({
+                  ...item,
+                  type: item.type as ShapeType,
+                })),
+                destinationParentId,
+              },
+              session
+            );
+          },
+          parsed.data.mutationId,
+          "shape:paste",
+          parsed.data
+        );
+
+        const shapeDtos = result.shapes.map((s) => ShapeMapper.toResponseDto(s));
+
+        if (!meta.isIdempotentReplay) {
+          socket.to(room).emit(SocketEvents.SHAPE_PASTED, {
+            meta,
+            shapes: shapeDtos,
+          });
+        }
+
+        callback?.({
+          success: true,
+          mutationId: parsed.data.mutationId,
+          data: {
+            shapes: shapeDtos,
+            idMap: result.idMap,
+          },
+        });
+      } catch (error) {
+        if (error instanceof ConflictError) {
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "CONFLICT",
+              message: error.message,
+              resourceType: error.resourceType,
+              resourceId: error.resourceId,
+              currentVersion: error.currentVersion,
+            },
+          });
+          return;
+        }
+
+        if (error instanceof ApiError) {
+          const code =
+            error.code ??
+            (error.statusCode === HttpStatus.NOT_FOUND
+              ? "NOT_FOUND"
+              : error.statusCode === HttpStatus.FORBIDDEN
+              ? "FORBIDDEN"
+              : error.statusCode === HttpStatus.CONFLICT
+              ? "CONFLICT"
+              : "BAD_REQUEST");
+
+          socket.emit(SocketEvents.ERROR, error.message);
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: { code, message: error.message },
+          });
+          return;
+        }
+
+        const message = error instanceof Error ? error.message : "Failed to paste shapes.";
         socket.emit(SocketEvents.ERROR, message);
         callback?.({
           success: false,

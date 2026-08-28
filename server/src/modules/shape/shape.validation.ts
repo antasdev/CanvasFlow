@@ -376,3 +376,73 @@ export const distributeShapesValidationSchema = z.object({
   axis: z.enum(["horizontal", "vertical"]),
   expectedVersions: z.record(z.string(), z.number().int().min(1)).optional(),
 });
+
+export const pasteShapeItemSchema = z.object({
+  tempId: z.string().min(1, "tempId is required."),
+  type: z.enum([
+    "rectangle",
+    "RECTANGLE",
+    "circle",
+    "CIRCLE",
+    "ellipse",
+    "ELLIPSE",
+    "triangle",
+    "TRIANGLE",
+    "polygon",
+    "POLYGON",
+    "star",
+    "STAR",
+    "text",
+    "TEXT",
+    "sticky_note",
+    "STICKY_NOTE",
+    "freehand",
+    "FREEHAND",
+    "line",
+    "LINE",
+    "arrow",
+    "ARROW",
+    "connector",
+    "CONNECTOR",
+    "group",
+    "GROUP",
+  ]),
+  x: z.number().finite("x must be a finite number."),
+  y: z.number().finite("y must be a finite number."),
+  width: z.number().positive("width must be greater than 0."),
+  height: z.number().positive("height must be greater than 0."),
+  rotation: z.number().finite().optional().default(0),
+  text: z.string().max(10000, "Text cannot exceed 10000 characters.").optional(),
+  points: shapePointsSchema.optional(),
+  connector: z
+    .object({
+      sourceShapeId: z.string().nullable().optional(),
+      sourceAnchor: anchorPositionSchema.nullable().optional(),
+      targetShapeId: z.string().nullable().optional(),
+      targetAnchor: anchorPositionSchema.nullable().optional(),
+      routing: connectorRoutingSchema.optional().default("straight"),
+    })
+    .optional(),
+  shapeConfig: shapeConfigSchema.optional(),
+  style: shapeStyleValidationSchema.optional(),
+  parentId: z.string().nullable().optional(),
+});
+
+export const pasteShapesValidationSchema = z.object({
+  canvasId: objectIdSchema,
+  mutationId: z.string().uuid("Invalid mutation ID format.").optional(),
+  destinationParentId: objectIdSchema.nullable().optional(),
+  shapes: z
+    .array(pasteShapeItemSchema)
+    .min(1, "Paste requires at least 1 shape.")
+    .max(100, "Paste cannot exceed 100 shapes.")
+    .refine(
+      (shapes) => {
+        const tempIds = shapes.map((s) => s.tempId);
+        return new Set(tempIds).size === tempIds.length;
+      },
+      {
+        message: "Duplicate temporary shape IDs are not allowed in paste batch.",
+      }
+    ),
+});

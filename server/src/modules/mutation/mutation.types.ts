@@ -8,6 +8,7 @@ export type MutationOperation =
   | "shape:ungroup"
   | "shape:align"
   | "shape:distribute"
+  | "shape:paste"
   | "comment:create"
   | "comment:update"
   | "comment:resolve"

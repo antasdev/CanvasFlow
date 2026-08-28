@@ -14,6 +14,7 @@ import {
   UngroupShapeDto,
   AlignShapesDto,
   DistributeShapesDto,
+  PasteShapesDto,
 } from "./shape.dto";
 
 import { ApiError, ConflictError } from "@/shared/utils";
@@ -1202,6 +1203,202 @@ export class ShapeService {
     );
 
     return count === shapeIds.length;
+  }
+
+  async pasteShapes(
+    userId: Types.ObjectId,
+    dto: PasteShapesDto,
+    session?: ClientSession
+  ): Promise<{ shapes: ShapeDocument[]; idMap: Record<string, string>; boardId: Types.ObjectId }> {
+    if (dto.shapes.length === 0) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, "Paste requires at least 1 shape.");
+    }
+    if (dto.shapes.length > 100) {
+      throw new ApiError(HttpStatus.BAD_REQUEST, "Paste cannot exceed 100 shapes.");
+    }
+
+    const canvas = await canvasRepository.findById(dto.canvasId);
+    if (!canvas) {
+      throw new ApiError(HttpStatus.NOT_FOUND, Messages.CANVAS_NOT_FOUND);
+    }
+
+    await boardService.authorizeCanvasMutation(canvas.boardId, userId);
+
+    if (dto.destinationParentId) {
+      const destGroup = await shapeRepository.findById(dto.destinationParentId, session);
+      if (
+        !destGroup ||
+        destGroup.canvasId.toString() !== dto.canvasId.toString() ||
+        destGroup.type !== ShapeType.GROUP
+      ) {
+        throw new ApiError(HttpStatus.BAD_REQUEST, "Destination group does not exist or is invalid.");
+      }
+    }
+
+    // 1. Generate authoritative ObjectIds and build ID mapping
+    const tempIdToObjectIdMap = new Map<string, Types.ObjectId>();
+    const idMap: Record<string, string> = {};
+    const itemMap = new Map<string, (typeof dto.shapes)[0]>();
+
+    for (const item of dto.shapes) {
+      if (tempIdToObjectIdMap.has(item.tempId)) {
+        throw new ApiError(HttpStatus.BAD_REQUEST, "Duplicate temporary shape ID in paste batch.");
+      }
+      const newOid = new Types.ObjectId();
+      tempIdToObjectIdMap.set(item.tempId, newOid);
+      idMap[item.tempId] = newOid.toString();
+      itemMap.set(item.tempId, item);
+    }
+
+    // 2. Validate hierarchy (parents)
+    for (const item of dto.shapes) {
+      if (item.parentId) {
+        if (tempIdToObjectIdMap.has(item.parentId)) {
+          const parentItem = itemMap.get(item.parentId);
+          const upperType = parentItem?.type.toUpperCase();
+          if (upperType !== "GROUP") {
+            throw new ApiError(HttpStatus.BAD_REQUEST, "Parent shape in paste batch is not a group.");
+          }
+        } else if (dto.destinationParentId && item.parentId === dto.destinationParentId.toString()) {
+          // Valid destination group
+        } else {
+          // Check if parentId is an existing group on the canvas
+          let isExistingGroup = false;
+          if (Types.ObjectId.isValid(item.parentId)) {
+            const existingParent = await shapeRepository.findById(new Types.ObjectId(item.parentId), session);
+            if (
+              existingParent &&
+              existingParent.canvasId.toString() === dto.canvasId.toString() &&
+              existingParent.type === ShapeType.GROUP
+            ) {
+              isExistingGroup = true;
+            }
+          }
+          if (!isExistingGroup) {
+            throw new ApiError(HttpStatus.BAD_REQUEST, "Invalid parent reference in paste batch.");
+          }
+        }
+      }
+    }
+
+    // 3. Validate connector endpoints
+    for (const item of dto.shapes) {
+      const upperType = item.type.toUpperCase();
+      if (upperType === "CONNECTOR" && item.connector) {
+        const c = item.connector;
+        if (c.sourceShapeId && c.targetShapeId && c.sourceShapeId === c.targetShapeId) {
+          throw new ApiError(HttpStatus.BAD_REQUEST, "Connector cannot attach source and target to the same shape.");
+        }
+      }
+    }
+
+    // 4. Determine base zIndex
+    const highestShape = await shapeRepository.findHighestZIndex(dto.canvasId);
+    let nextZIndex = highestShape ? highestShape.zIndex + 1 : 1;
+
+    // Helper to map string type to ShapeType enum
+    const toShapeType = (raw: string): ShapeType => {
+      const upper = raw.toUpperCase();
+      switch (upper) {
+        case "CIRCLE": return ShapeType.CIRCLE;
+        case "ELLIPSE": return ShapeType.ELLIPSE;
+        case "TRIANGLE": return ShapeType.TRIANGLE;
+        case "POLYGON": return ShapeType.POLYGON;
+        case "STAR": return ShapeType.STAR;
+        case "TEXT": return ShapeType.TEXT;
+        case "STICKY_NOTE": return ShapeType.STICKY_NOTE;
+        case "FREEHAND": return ShapeType.FREEHAND;
+        case "LINE": return ShapeType.LINE;
+        case "ARROW": return ShapeType.ARROW;
+        case "CONNECTOR": return ShapeType.CONNECTOR;
+        case "GROUP": return ShapeType.GROUP;
+        default: return ShapeType.RECTANGLE;
+      }
+    };
+
+    // 5. Build documents with authoritative ObjectIds
+    const documentsToCreate: (import("./shape.types").CreateShapeData & { _id: Types.ObjectId })[] = [];
+
+    for (const item of dto.shapes) {
+      const shapeOid = tempIdToObjectIdMap.get(item.tempId)!;
+      const shapeType = toShapeType(item.type);
+
+      // Determine parentId
+      let finalParentId: Types.ObjectId | null | undefined = undefined;
+      if (item.parentId) {
+        if (tempIdToObjectIdMap.has(item.parentId)) {
+          finalParentId = tempIdToObjectIdMap.get(item.parentId)!;
+        } else if (Types.ObjectId.isValid(item.parentId)) {
+          finalParentId = new Types.ObjectId(item.parentId);
+        }
+      } else if (dto.destinationParentId) {
+        finalParentId = dto.destinationParentId;
+      }
+
+      // Remap connector endpoints
+      let finalConnector: import("./shape.types").ShapeConnectorData | undefined = undefined;
+      if (item.connector) {
+        let sourceOid: Types.ObjectId | string | null = null;
+        let targetOid: Types.ObjectId | string | null = null;
+
+        if (item.connector.sourceShapeId) {
+          if (tempIdToObjectIdMap.has(item.connector.sourceShapeId)) {
+            sourceOid = tempIdToObjectIdMap.get(item.connector.sourceShapeId)!;
+          } else if (Types.ObjectId.isValid(item.connector.sourceShapeId)) {
+            const ext = await shapeRepository.findById(new Types.ObjectId(item.connector.sourceShapeId), session);
+            if (ext && ext.canvasId.toString() === dto.canvasId.toString() && ext.type !== ShapeType.CONNECTOR) {
+              sourceOid = ext._id;
+            }
+          }
+        }
+
+        if (item.connector.targetShapeId) {
+          if (tempIdToObjectIdMap.has(item.connector.targetShapeId)) {
+            targetOid = tempIdToObjectIdMap.get(item.connector.targetShapeId)!;
+          } else if (Types.ObjectId.isValid(item.connector.targetShapeId)) {
+            const ext = await shapeRepository.findById(new Types.ObjectId(item.connector.targetShapeId), session);
+            if (ext && ext.canvasId.toString() === dto.canvasId.toString() && ext.type !== ShapeType.CONNECTOR) {
+              targetOid = ext._id;
+            }
+          }
+        }
+
+        finalConnector = {
+          ...item.connector,
+          sourceShapeId: sourceOid,
+          targetShapeId: targetOid,
+        };
+      }
+
+      documentsToCreate.push({
+        _id: shapeOid,
+        canvasId: dto.canvasId,
+        type: shapeType,
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        rotation: item.rotation ?? 0,
+        zIndex: nextZIndex++,
+        text: item.text,
+        points: item.points,
+        connector: finalConnector,
+        shapeConfig: item.shapeConfig,
+        style: item.style,
+        parentId: finalParentId,
+        createdBy: userId,
+        version: 1,
+      });
+    }
+
+    // 6. Atomically persist via ShapeRepository
+    const createdShapes = await shapeRepository.createMany(documentsToCreate, session);
+
+    return {
+      shapes: createdShapes,
+      idMap,
+      boardId: canvas.boardId,
+    };
   }
 }
 

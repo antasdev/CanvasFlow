@@ -25,6 +25,9 @@ import type {
   AlignShapesAckData,
   DistributeShapesPayload,
   DistributeShapesAckData,
+  PasteShapeItemPayload,
+  PasteShapesPayload,
+  PasteShapesAckData,
   CollaborativeInteraction,
   InteractionBroadcastPayload,
   InteractionEndBroadcastPayload,
@@ -560,6 +563,47 @@ export class SocketClientService {
             typeof response.error === "string"
               ? response.error
               : response.error?.message ?? "Failed to distribute shapes.";
+          const err = new Error(errorMessage);
+          if (errorObj) {
+            Object.assign(err, errorObj);
+          }
+          if (response.mutationId) {
+            Object.assign(err, { mutationId: response.mutationId });
+          }
+          reject(err);
+        }
+      });
+    });
+  }
+
+  /**
+   * Emits shape paste request to authoritative backend over Socket.IO.
+   */
+  public pasteShapes(
+    canvasId: string,
+    shapes: PasteShapeItemPayload[],
+    destinationParentId?: string | null,
+    mutationId?: string
+  ): Promise<PasteShapesAckData> {
+    return new Promise((resolve, reject) => {
+      const socket = this.socket ?? this.connect();
+
+      const payload: PasteShapesPayload = {
+        canvasId,
+        shapes,
+        destinationParentId,
+        mutationId,
+      };
+
+      socket.emit(SocketEvents.SHAPE_PASTE, payload, (response) => {
+        if (response.success && response.data) {
+          resolve(response.data);
+        } else {
+          const errorObj = typeof response.error === "object" ? response.error : null;
+          const errorMessage =
+            typeof response.error === "string"
+              ? response.error
+              : response.error?.message ?? "Failed to paste shapes.";
           const err = new Error(errorMessage);
           if (errorObj) {
             Object.assign(err, errorObj);

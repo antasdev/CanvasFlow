@@ -35,6 +35,9 @@ export const SocketEvents = {
   SHAPE_DISTRIBUTE: "shape:distribute",
   SHAPE_DISTRIBUTED: "shape:distributed",
 
+  SHAPE_PASTE: "shape:paste",
+  SHAPE_PASTED: "shape:pasted",
+
   CURSOR_MOVE: "cursor:move",
   CURSOR_MOVED: "cursor:moved",
 
