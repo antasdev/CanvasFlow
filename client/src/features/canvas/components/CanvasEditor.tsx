@@ -21,6 +21,7 @@ import {
     useBoardRecovery,
     usePresenceSocket,
     useInteractionSocket,
+    useCanvasSelection,
 } from "../hooks";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore, usePresenceStore } from "../store";
@@ -88,13 +89,6 @@ type VectorDraftState = {
     currentY: number;
     sourceAnchor?: { shapeId: string; anchor: AnchorPosition; point: { x: number; y: number } } | null;
     targetAnchor?: { shapeId: string; anchor: AnchorPosition; point: { x: number; y: number } } | null;
-};
-
-type SelectionBox = {
-    startX: number;
-    startY: number;
-    currentX: number;
-    currentY: number;
 };
 
 const MIN_ZOOM = 0.2;
@@ -289,8 +283,45 @@ export default function CanvasEditor({
         (state) => state.selectAllShapes,
     );
 
-    const [selectionBox, setSelectionBox] =
-        useState<SelectionBox | null>(null);
+    const {
+        marquee,
+        lasso,
+        isSelecting,
+        startSelection,
+        updateSelection,
+        endSelection,
+    } = useCanvasSelection({
+        boardId,
+        canEditCanvas,
+        emitActivity,
+    });
+
+    const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
+    useEffect(() => {
+        const handleSpaceDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            const isTyping =
+                target.tagName === "INPUT" ||
+                target.tagName === "TEXTAREA" ||
+                target.isContentEditable;
+            if (isTyping) return;
+
+            if (e.code === "Space") {
+                setIsSpacePressed(true);
+            }
+        };
+        const handleSpaceUp = (e: KeyboardEvent) => {
+            if (e.code === "Space") {
+                setIsSpacePressed(false);
+            }
+        };
+        window.addEventListener("keydown", handleSpaceDown);
+        window.addEventListener("keyup", handleSpaceUp);
+        return () => {
+            window.removeEventListener("keydown", handleSpaceDown);
+            window.removeEventListener("keyup", handleSpaceUp);
+        };
+    }, []);
 
     const setSelectedShapeIds = useCanvasStore(
         (state) => state.setSelectedShapeIds,
@@ -678,9 +709,11 @@ export default function CanvasEditor({
             event.target === stage;
 
         if (
-            activeTool === CANVAS_TOOLS.SELECT &&
+            (activeTool === CANVAS_TOOLS.SELECT ||
+                activeTool === CANVAS_TOOLS.LASSO) &&
             isEmptyCanvas &&
-            event.evt.shiftKey
+            !isSpacePressed &&
+            event.evt.button !== 1
         ) {
             const pointer = stage.getPointerPosition();
 
@@ -693,14 +726,10 @@ export default function CanvasEditor({
                 zoom,
             });
 
-            setSelectionBox({
-                startX: worldPoint.x,
-                startY: worldPoint.y,
-                currentX: worldPoint.x,
-                currentY: worldPoint.y,
-            });
-
-            return;
+            const started = startSelection(worldPoint, event);
+            if (started) {
+                return;
+            }
         }
 
         if (isEmptyCanvas) {
@@ -917,20 +946,8 @@ export default function CanvasEditor({
             });
         }
 
-        if (selectionBox) {
-            emitActivity("selecting");
-            setSelectionBox((current) => {
-                if (!current) {
-                    return null;
-                }
-
-                return {
-                    ...current,
-                    currentX: worldPoint.x,
-                    currentY: worldPoint.y,
-                };
-            });
-
+        if (isSelecting) {
+            updateSelection(worldPoint);
             return;
         }
 
@@ -1050,48 +1067,8 @@ export default function CanvasEditor({
         /*
          * Finish multi-selection.
          */
-        if (selectionBox) {
-            const selection = selectionBox;
-
-            const selectionLeft = Math.min(
-                selection.startX,
-                selection.currentX,
-            );
-
-            const selectionRight = Math.max(
-                selection.startX,
-                selection.currentX,
-            );
-
-            const selectionTop = Math.min(
-                selection.startY,
-                selection.currentY,
-            );
-
-            const selectionBottom = Math.max(
-                selection.startY,
-                selection.currentY,
-            );
-
-            const selectedIds = shapes
-                .filter((shape) => {
-                    const shapeWidth = shape.width || 100;
-                    const shapeHeight = shape.height || 40;
-                    const shapeRight = shape.x + shapeWidth;
-                    const shapeBottom = shape.y + shapeHeight;
-
-                    return (
-                        shape.x >= selectionLeft &&
-                        shapeRight <= selectionRight &&
-                        shape.y >= selectionTop &&
-                        shapeBottom <= selectionBottom
-                    );
-                })
-                .map((shape) => shape.id);
-
-            setSelectedShapeIds(selectedIds);
-            setSelectionBox(null);
-
+        if (isSelecting) {
+            endSelection();
             return;
         }
 
@@ -1558,10 +1535,14 @@ export default function CanvasEditor({
                     y={pan.y}
                     scaleX={zoom}
                     scaleY={zoom}
-                    draggable={
-                        activeTool === CANVAS_TOOLS.SELECT &&
-                        selectionBox === null
-                    }
+                    draggable={isSpacePressed}
+                    style={{
+                        cursor: isSpacePressed
+                            ? "grab"
+                            : activeTool === CANVAS_TOOLS.LASSO
+                              ? "crosshair"
+                              : "default",
+                    }}
                     onDragEnd={(event) => {
                         setPan(
                             event.target.x(),
@@ -1615,28 +1596,64 @@ export default function CanvasEditor({
                             />
                         ))}
 
-                        {selectionBox ? (
+                        {marquee ? (
                             <Rect
                                 x={Math.min(
-                                    selectionBox.startX,
-                                    selectionBox.currentX,
+                                    marquee.startX,
+                                    marquee.currentX,
                                 )}
                                 y={Math.min(
-                                    selectionBox.startY,
-                                    selectionBox.currentY,
+                                    marquee.startY,
+                                    marquee.currentY,
                                 )}
-                                width={Math.abs(
-                                    selectionBox.currentX -
-                                    selectionBox.startX,
+                                width={Math.max(
+                                    1,
+                                    Math.abs(
+                                        marquee.currentX -
+                                        marquee.startX,
+                                    ),
                                 )}
-                                height={Math.abs(
-                                    selectionBox.currentY -
-                                    selectionBox.startY,
+                                height={Math.max(
+                                    1,
+                                    Math.abs(
+                                        marquee.currentY -
+                                        marquee.startY,
+                                    ),
                                 )}
-                                fill="#3b82f6"
-                                opacity={0.15}
-                                stroke="#3b82f6"
-                                strokeWidth={1}
+                                fill={
+                                    marquee.direction === "left-to-right"
+                                        ? "#3b82f6"
+                                        : "#10b981"
+                                }
+                                opacity={0.12}
+                                stroke={
+                                    marquee.direction === "left-to-right"
+                                        ? "#3b82f6"
+                                        : "#10b981"
+                                }
+                                strokeWidth={
+                                    marquee.direction === "left-to-right"
+                                        ? 1
+                                        : 1.5
+                                }
+                                dash={
+                                    marquee.direction === "left-to-right"
+                                        ? undefined
+                                        : [6, 4]
+                                }
+                                listening={false}
+                            />
+                        ) : null}
+
+                        {lasso && lasso.points.length >= 2 ? (
+                            <Line
+                                points={lasso.points.flatMap((p) => [p.x, p.y])}
+                                closed={true}
+                                fill="#8b5cf6"
+                                opacity={0.1}
+                                stroke="#8b5cf6"
+                                strokeWidth={1.5}
+                                dash={[5, 5]}
                                 listening={false}
                             />
                         ) : null}

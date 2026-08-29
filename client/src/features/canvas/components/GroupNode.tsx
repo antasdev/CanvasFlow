@@ -44,8 +44,7 @@ function GroupNodeComponent({
     isLockedByOther,
     remoteLock,
     displayTransform,
-    selectShape,
-    toggleShapeSelection,
+    handleSelectionClick,
     acquireLock,
     emitTransformFrame,
     endTransform,
@@ -97,14 +96,12 @@ function GroupNodeComponent({
       return;
     }
 
-    const isShift = "shiftKey" in event.evt && event.evt.shiftKey;
-    if (isShift) {
-      toggleShapeSelection(shape.id);
-      return;
-    }
-
-    if (!isSelected) {
-      selectShape(shape.id);
+    const isModifier = Boolean(
+      ("shiftKey" in event.evt && event.evt.shiftKey) ||
+      ("ctrlKey" in event.evt && (event.evt.ctrlKey || event.evt.metaKey))
+    );
+    if (isModifier || !isSelected) {
+      handleSelectionClick(event);
     }
   };
 

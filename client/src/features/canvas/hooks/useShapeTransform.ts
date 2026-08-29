@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef } from "react";
+import type Konva from "konva";
 import { toast } from "sonner";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore } from "../store";
-import type { Shape } from "../types";
+import type { Shape, SelectionMode } from "../types";
 import {
   findSmartGuideCandidates,
   calculateSmartGuides,
   type SmartGuideCandidate,
 } from "../utils/smart-guides.utils";
 import { getShapeWorldAABB } from "../utils/alignment.utils";
+import { resolveSelectionWithModifiers } from "../utils/selection-policy.utils";
 
 function getAllDescendantIds(rootId: string, shapes: Shape[]): Set<string> {
   const result = new Set<string>([rootId]);
@@ -52,6 +54,8 @@ export const useShapeTransform = ({
     (state) => state.remoteShapeTransforms
   );
 
+  const editingGroupId = useCanvasStore((state) => state.editingGroupId);
+  const setSelectedShapeIds = useCanvasStore((state) => state.setSelectedShapeIds);
   const selectShape = useCanvasStore((state) => state.selectShape);
   const toggleShapeSelection = useCanvasStore(
     (state) => state.toggleShapeSelection
@@ -263,6 +267,30 @@ export const useShapeTransform = ({
     [boardId, shape.id, selectedShapeIds.length, moveSelectedShapes, updateShapeTransform, endDragGuides]
   );
 
+  /**
+   * Handles click selection with platform-safe modifiers (Ctrl/Cmd-toggle, Shift-add, click-replace)
+   * and group hierarchy invariant enforcement.
+   */
+  const handleSelectionClick = useCallback(
+    (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>): void => {
+      const evt = event.evt;
+      const isCtrlOrMeta = "ctrlKey" in evt && (evt.ctrlKey || evt.metaKey);
+      const isShift = "shiftKey" in evt && evt.shiftKey;
+      const mode: SelectionMode = isCtrlOrMeta ? "toggle" : isShift ? "add" : "replace";
+
+      const resolved = resolveSelectionWithModifiers({
+        currentSelectedIds: selectedShapeIds,
+        hitIds: [shape.id],
+        mode,
+        shapes,
+        editingGroupId,
+      });
+
+      setSelectedShapeIds(resolved);
+    },
+    [shape.id, shapes, selectedShapeIds, editingGroupId, setSelectedShapeIds]
+  );
+
   return {
     activeTool,
     isSelected,
@@ -271,6 +299,7 @@ export const useShapeTransform = ({
     displayTransform,
     selectShape,
     toggleShapeSelection,
+    handleSelectionClick,
     acquireLock,
     emitTransformFrame,
     endTransform,

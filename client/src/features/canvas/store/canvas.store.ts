@@ -14,6 +14,7 @@ import {
   type DistributionAxis,
 } from "../utils/alignment.utils";
 import type { SmartGuide } from "../utils/smart-guides.utils";
+import { resolveSelectAll } from "../utils/selection-policy.utils";
 import type {
   RemoteCursor,
   RemoteSelection,
@@ -589,8 +590,9 @@ export const useCanvasStore = create<CanvasStore>(
 
     selectAllShapes: (): void => {
       set((state) => ({
-        selectedShapeIds: state.shapes.map(
-          (shape) => shape.id,
+        selectedShapeIds: resolveSelectAll(
+          state.shapes,
+          state.editingGroupId
         ),
       }));
     },

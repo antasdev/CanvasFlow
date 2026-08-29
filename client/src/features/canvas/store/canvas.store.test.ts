@@ -1306,4 +1306,115 @@ describe("canvas store history & remote synchronization", () => {
             expect(useCanvasStore.getState().past).toHaveLength(1);
         });
     });
+
+    describe("Slice 25 — Advanced Selection selectAllShapes", () => {
+        it("selects only root shapes when at canvas root, never child shapes", () => {
+            const rootRect: RectangleShape = {
+                id: "root-rect",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 50,
+                height: 50,
+                rotation: 0,
+                zIndex: 1,
+                opacity: 1,
+                fill: "#fff",
+                stroke: "#000",
+                strokeWidth: 1,
+            };
+
+            const rootGroup = {
+                id: "root-group",
+                type: "group" as const,
+                x: 100,
+                y: 100,
+                width: 100,
+                height: 100,
+                rotation: 0,
+                zIndex: 2,
+                opacity: 1,
+            };
+
+            const childShape: RectangleShape = {
+                id: "child-rect",
+                type: "rectangle",
+                parentId: "root-group",
+                x: 10,
+                y: 10,
+                width: 20,
+                height: 20,
+                rotation: 0,
+                zIndex: 3,
+                opacity: 1,
+                fill: "#fff",
+                stroke: "#000",
+                strokeWidth: 1,
+            };
+
+            useCanvasStore.getState().setShapes([rootRect, rootGroup, childShape]);
+            useCanvasStore.setState({ editingGroupId: null, selectedShapeIds: [] });
+
+            useCanvasStore.getState().selectAllShapes();
+
+            const selected = useCanvasStore.getState().selectedShapeIds;
+            expect(selected.sort()).toEqual(["root-group", "root-rect"].sort());
+            expect(selected).not.toContain("child-rect");
+        });
+
+        it("selects only direct children when editing inside a group", () => {
+            const rootGroup = {
+                id: "group-1",
+                type: "group" as const,
+                x: 0,
+                y: 0,
+                width: 200,
+                height: 200,
+                rotation: 0,
+                zIndex: 1,
+                opacity: 1,
+            };
+
+            const childA: RectangleShape = {
+                id: "child-a",
+                type: "rectangle",
+                parentId: "group-1",
+                x: 10,
+                y: 10,
+                width: 50,
+                height: 50,
+                rotation: 0,
+                zIndex: 2,
+                opacity: 1,
+                fill: "#fff",
+                stroke: "#000",
+                strokeWidth: 1,
+            };
+
+            const childB: RectangleShape = {
+                id: "child-b",
+                type: "rectangle",
+                parentId: "group-1",
+                x: 70,
+                y: 10,
+                width: 50,
+                height: 50,
+                rotation: 0,
+                zIndex: 3,
+                opacity: 1,
+                fill: "#fff",
+                stroke: "#000",
+                strokeWidth: 1,
+            };
+
+            useCanvasStore.getState().setShapes([rootGroup, childA, childB]);
+            useCanvasStore.setState({ editingGroupId: "group-1", selectedShapeIds: [] });
+
+            useCanvasStore.getState().selectAllShapes();
+
+            const selected = useCanvasStore.getState().selectedShapeIds;
+            expect(selected.sort()).toEqual(["child-a", "child-b"].sort());
+            expect(selected).not.toContain("group-1");
+        });
+    });
 });

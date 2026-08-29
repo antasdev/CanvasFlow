@@ -13,7 +13,8 @@ export type ShapeType =
   | "sticky_note"
   | "freehand"
   | "group"
-  | "eraser";
+  | "eraser"
+  | "lasso";
 
 export type AnchorPosition = "top" | "right" | "bottom" | "left" | "center";
 export type ConnectorRouting = "straight" | "orthogonal" | "curved";

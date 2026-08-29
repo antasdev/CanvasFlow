@@ -3177,3 +3177,67 @@ Undo history is strictly local and user-scoped. If Alice's paste pushed into Bob
 #### Q10: How does CanvasFlow prevent keyboard shortcut interference during text editing?
 **Answer:**
 When typing inside an `<input>`, `<textarea>`, or contentEditable element, `Ctrl+C` and `Ctrl+V` must perform native text clipboard actions. CanvasFlow implements an explicit text editing guard (`isTextInputContext` and `isEditingText`) that checks whether the active DOM element is a text input. If true, canvas event listeners immediately return without calling `preventDefault()`, ensuring 100% native browser text editing fidelity.
+
+---
+
+# Section 47: Slice 25 — Advanced Selection & Collaborative Presence Architecture
+
+Slice 25 establishes a clear architectural boundary between **ephemeral visual selection** and **authoritative document mutations**.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 SLICE 25: COLLABORATIVE SELECTION BOUNDARIES                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+    LOCAL USER INTERACTION
+    [ Marquee / Lasso / Click Selection ]
+             │
+             ├──► Local Store (Zustand: selectedShapeIds) ──► Konva Transformer
+             │
+             └──► Fire-and-Forget Presence Socket (changeSelection)
+                        │
+                        ▼
+                SOCKET.IO GATEWAY
+                (Volatile Board Room Broadcast)
+                        │
+                        ▼
+             REMOTE COLLABORATORS
+             (Displays remote selection halos/tags on shapes)
+
+    STRICT COLLABORATIVE ISOLATION INVARIANTS:
+    ❌ NEVER writes to MongoDB
+    ❌ NEVER creates MutationRecords in useMutationStore
+    ❌ NEVER increments collaborationRevision
+    ❌ NEVER modifies local or remote Undo/Redo (past/future) stacks
+```
+
+### 47.1 Ephemeral Presence Event Contracts
+
+#### `presence:selection` (Client $\to$ Gateway $\to$ Room Broadcast)
+Emitted when `selectedShapeIds` changes on the local client. Transmitted over the low-latency volatile presence channel.
+
+```typescript
+// Payload
+{
+  boardId: string;
+  selectedShapeIds: string[];
+}
+```
+
+* **Client Invocation:** `socketClientService.changeSelection(boardId, selectedShapeIds)`
+* **Gateway Relay:** Broadcasts `presence:selection` to the board room `board:{boardId}`, skipping sender socket (`socket.to(room).emit`).
+* **Collaborator Handling:** Updates `usePresenceStore.users[userId].selectedShapeIds`. Remote shape renderers display colored user-tinted outlines around selected nodes.
+
+### 47.2 Production Selection Architecture FAQ (Slice 25)
+
+#### Q1: Why is selection isolated from `collaborationRevision`?
+**Answer:**
+`collaborationRevision` tracks document versioning for Optimistic Concurrency Control (OCC) and server catchup snapshots. Incrementing `collaborationRevision` on every selection change would trigger false OCC version conflicts for other users performing legitimate shape transforms, and flood the server with unnecessary revision tracking.
+
+#### Q2: Why does selection NOT create `MutationRecord` entries?
+**Answer:**
+`MutationRecord` represents an offline-queueable, retryable document mutation intended to be committed to MongoDB. Selection is strictly ephemeral session state. If a user disconnects, their selection is discarded immediately. Storing selection as a mutation would create phantom database writes and cause stale selections to reappear upon reconnection.
+
+#### Q3: How is the Group + Descendant selection invariant enforced in real-time collaboration?
+**Answer:**
+CanvasFlow's `enforceGroupHierarchyInvariant` guarantees that a parent group and its descendants are never simultaneously selected. If a local user drags a group, the group's transform frame moves all children via scene-graph inheritance. If child shapes were simultaneously selected, multi-selection move logic would apply the translation vector twice, desynchronizing the child relative to other collaborators.

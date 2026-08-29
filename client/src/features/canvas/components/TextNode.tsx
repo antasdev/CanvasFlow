@@ -36,7 +36,7 @@ export default function TextNode({
     remoteLock,
     displayTransform,
     selectShape,
-    toggleShapeSelection,
+    handleSelectionClick,
     acquireLock,
     emitTransformFrame,
     endTransform,
@@ -128,13 +128,11 @@ export default function TextNode({
             return;
           }
 
-          if (event.evt.shiftKey) {
-            toggleShapeSelection(shape.id);
-            return;
-          }
-
-          if (!selectedShapeIds.includes(shape.id)) {
-            selectShape(shape.id);
+          const isModifier = Boolean(
+            event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
+          );
+          if (isModifier || !selectedShapeIds.includes(shape.id)) {
+            handleSelectionClick(event);
           }
         }}
         onDragStart={async (event) => {

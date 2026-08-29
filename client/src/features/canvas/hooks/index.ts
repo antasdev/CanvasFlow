@@ -11,3 +11,4 @@ export * from "./usePresenceSocket";
 export * from "./useInteractionSocket";
 export * from "./useTextEditing";
 export * from "./useCanvasClipboard";
+export * from "./useCanvasSelection";
