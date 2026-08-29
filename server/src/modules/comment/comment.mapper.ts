@@ -39,14 +39,31 @@ export class CommentMapper {
     return {
       id: doc._id.toString(),
       boardId: doc.boardId.toString(),
+      canvasId: doc.canvasId.toString(),
       shapeId: doc.shapeId ? doc.shapeId.toString() : null,
       authorId: doc.authorId.toString(),
       author: authorDto,
       parentCommentId: doc.parentCommentId
         ? doc.parentCommentId.toString()
         : null,
+      position: doc.position
+        ? {
+            x: doc.position.x,
+            y: doc.position.y,
+          }
+        : null,
       content: isDeleted ? "" : doc.content,
       isResolved: Boolean(doc.isResolved),
+      resolvedAt: doc.resolvedAt
+        ? doc.resolvedAt instanceof Date
+          ? doc.resolvedAt.toISOString()
+          : new Date(doc.resolvedAt).toISOString()
+        : null,
+      resolvedBy: doc.resolvedBy
+        ? typeof doc.resolvedBy === "object" && "_id" in (doc.resolvedBy as any)
+          ? String((doc.resolvedBy as any)._id)
+          : doc.resolvedBy.toString()
+        : null,
       isEdited: Boolean(doc.isEdited),
       isDeleted,
       version: doc.version ?? 1,

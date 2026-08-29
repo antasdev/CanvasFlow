@@ -16,12 +16,19 @@ export type CommentAuthorDto = {
 export type CommentResponseDto = {
   id: string;
   boardId: string;
+  canvasId: string;
   shapeId: string | null;
   authorId: string;
   author?: CommentAuthorDto;
   parentCommentId: string | null;
+  position: {
+    x: number;
+    y: number;
+  } | null;
   content: string;
   isResolved: boolean;
+  resolvedAt?: string | null;
+  resolvedBy?: string | null;
   isEdited: boolean;
   isDeleted: boolean;
   version: number;
@@ -34,9 +41,22 @@ export type CommentResponseDto = {
  */
 export type CreateCommentDto = {
   boardId: Types.ObjectId;
+  canvasId?: Types.ObjectId;
   shapeId?: Types.ObjectId | null;
   parentCommentId?: Types.ObjectId | null;
+  position?: {
+    x: number;
+    y: number;
+  } | null;
   content: string;
+};
+
+/**
+ * Internal/Service DTO for creating a reply to an existing thread.
+ */
+export type CreateReplyDto = {
+  content: string;
+  expectedVersion?: number;
 };
 
 /**
@@ -56,9 +76,10 @@ export type ResolveCommentDto = {
 };
 
 /**
- * Query filter DTO for fetching board comments.
+ * Query filter DTO for fetching board or canvas comments.
  */
 export type CommentFilterDto = {
+  canvasId?: Types.ObjectId | null;
   shapeId?: Types.ObjectId | null;
   parentCommentId?: Types.ObjectId | null;
   isResolved?: boolean;

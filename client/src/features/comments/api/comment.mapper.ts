@@ -8,6 +8,7 @@ export function mapCommentResponseToComment(dto: CommentResponseDto): Comment {
   return {
     id: dto.id,
     boardId: dto.boardId,
+    canvasId: (dto as any).canvasId ?? "",
     shapeId: dto.shapeId ?? null,
     authorId: dto.authorId,
     author: dto.author
@@ -19,8 +20,16 @@ export function mapCommentResponseToComment(dto: CommentResponseDto): Comment {
         }
       : undefined,
     parentCommentId: dto.parentCommentId ?? null,
+    position: (dto as any).position
+      ? {
+          x: (dto as any).position.x,
+          y: (dto as any).position.y,
+        }
+      : null,
     content: dto.isDeleted ? "" : dto.content,
     isResolved: Boolean(dto.isResolved),
+    resolvedAt: (dto as any).resolvedAt ?? null,
+    resolvedBy: (dto as any).resolvedBy ?? null,
     isEdited: Boolean(dto.isEdited),
     isDeleted: Boolean(dto.isDeleted),
     version: dto.version ?? 1,

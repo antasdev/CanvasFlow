@@ -9,13 +9,20 @@ import {
 import { commentController } from "./comment.controller";
 import {
   createCommentSchema,
+  createReplySchema,
   updateCommentSchema,
   resolveCommentSchema,
   commentParamsSchema,
   boardCommentsParamsSchema,
+  canvasCommentsParamsSchema,
 } from "./comment.validation";
 
-const commentRouter = Router({ mergeParams: true });
+export const commentRouter = Router({ mergeParams: true });
+export const canvasCommentRouter = Router({ mergeParams: true });
+
+/**
+ * Routes mounted at: /api/v1/boards/:boardId/comments
+ */
 
 /**
  * Create Comment on a Board / Shape / Reply
@@ -29,7 +36,18 @@ commentRouter.post(
 );
 
 /**
- * List Comments for a Board (with optional shapeId/resolved query filter)
+ * Create Reply to a Comment Thread
+ * POST /api/v1/boards/:boardId/comments/:commentId/replies
+ */
+commentRouter.post(
+  "/:commentId/replies",
+  authenticate,
+  validate(createReplySchema),
+  asyncHandler(commentController.createReply.bind(commentController))
+);
+
+/**
+ * List Comments for a Board (with optional canvasId/shapeId/resolved query filter)
  * GET /api/v1/boards/:boardId/comments
  */
 commentRouter.get(
@@ -81,6 +99,23 @@ commentRouter.delete(
   authenticate,
   validate(commentParamsSchema),
   asyncHandler(commentController.deleteComment.bind(commentController))
+);
+
+/**
+ * Routes mounted at: /api/v1/boards/:boardId/canvases/:canvasId/comments
+ */
+canvasCommentRouter.post(
+  "/",
+  authenticate,
+  validate(createCommentSchema),
+  asyncHandler(commentController.createComment.bind(commentController))
+);
+
+canvasCommentRouter.get(
+  "/",
+  authenticate,
+  validate(canvasCommentsParamsSchema),
+  asyncHandler(commentController.getCanvasComments.bind(commentController))
 );
 
 export default commentRouter;

@@ -42,6 +42,7 @@ export function useCommentMutations(boardId?: string) {
     const tempComment: Comment = {
       id: tempId,
       boardId,
+      canvasId: input.canvasId ?? "",
       shapeId: input.shapeId ?? null,
       authorId: user?.id ?? "me",
       author: {
