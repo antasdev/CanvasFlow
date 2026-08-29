@@ -12,7 +12,7 @@ import {
     calculatePolygonPoints,
     calculateStarPoints,
 } from "../utils/shape-geometry.utils";
-import { CANVAS_TOOLS } from "../constants";
+import { CANVAS_TOOLS, type CanvasTool } from "../constants";
 import {
     useCanvasHistory,
     useCanvasSocket,
@@ -22,7 +22,10 @@ import {
     usePresenceSocket,
     useInteractionSocket,
     useCanvasSelection,
+    useCanvasViewport,
 } from "../hooks";
+import { CanvasInteractionController } from "../services/canvas-interaction.controller";
+import CanvasZoomControls from "./CanvasZoomControls";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore, usePresenceStore } from "../store";
 import type { TextShape, StickyNoteShape, ShapeStyle } from "../types";
@@ -90,10 +93,6 @@ type VectorDraftState = {
     sourceAnchor?: { shapeId: string; anchor: AnchorPosition; point: { x: number; y: number } } | null;
     targetAnchor?: { shapeId: string; anchor: AnchorPosition; point: { x: number; y: number } } | null;
 };
-
-const MIN_ZOOM = 0.2;
-const MAX_ZOOM = 3;
-const ZOOM_BY = 1.05;
 
 export default function CanvasEditor({
     canvasId,
@@ -255,24 +254,26 @@ export default function CanvasEditor({
         (state) => state.shapes,
     );
 
-    const zoom = useCanvasStore(
-        (state) => state.zoom,
-    );
+    const {
+        zoom,
+        pan,
+        formattedZoom,
+        isPanning,
+        startPan,
+        updatePan,
+        endPan,
+        cancelPan,
+        handleWheel,
+        zoomIn,
+        zoomOut,
+        resetZoom,
+    } = useCanvasViewport({ stageRef });
 
-    const pan = useCanvasStore(
-        (state) => state.pan,
-    );
+    const interactionController = useRef(new CanvasInteractionController()).current;
+    const previousToolRef = useRef<CanvasTool>(activeTool);
 
     const addShape = useCanvasStore(
         (state) => state.addShape,
-    );
-
-    const setZoom = useCanvasStore(
-        (state) => state.setZoom,
-    );
-
-    const setPan = useCanvasStore(
-        (state) => state.setPan,
     );
 
     const deleteShape = useCanvasStore(
@@ -360,6 +361,65 @@ export default function CanvasEditor({
         canEditCanvas,
         isEditingText: Boolean(textCreationContext),
     });
+
+    /*
+     * Tool switching cleanup: safely abort in-flight gestures when tool changes.
+     */
+    useEffect(() => {
+        const cleanup = interactionController.handleToolSwitch(
+            previousToolRef.current,
+            activeTool,
+        );
+        previousToolRef.current = activeTool;
+
+        if (cleanup.shouldCancelDrawing) {
+            setDrawing(null);
+            setVectorDraft(null);
+            setSnapIndicator(null);
+            if (freehandDrawing) {
+                setFreehandDrawing(null);
+                if (boardId && activeDrawingInteractionIdRef.current) {
+                    endInteraction(activeDrawingInteractionIdRef.current).catch(() => {});
+                    activeDrawingInteractionIdRef.current = null;
+                }
+                unstreamedPointsRef.current = [];
+            }
+        }
+        if (cleanup.shouldCancelSelection && isSelecting) {
+            endSelection();
+        }
+        if (cleanup.shouldCancelPan && isPanning) {
+            endPan();
+        }
+        if (cleanup.shouldDiscardText && textCreationContext) {
+            setTextCreationContext(null);
+        }
+    }, [activeTool, isSelecting, isPanning, endSelection, endPan, freehandDrawing, boardId, textCreationContext, interactionController, endInteraction]);
+
+    /*
+     * Window-level release safety: ensure drags do not get stuck when released outside canvas.
+     */
+    useEffect(() => {
+        const handleWindowPointerUp = (): void => {
+            if (isPanning) {
+                endPan();
+                interactionController.endInteraction();
+            }
+        };
+        const handleWindowPointerCancel = (): void => {
+            if (isPanning) {
+                cancelPan();
+                interactionController.endInteraction();
+            }
+        };
+
+        window.addEventListener("pointerup", handleWindowPointerUp);
+        window.addEventListener("pointercancel", handleWindowPointerCancel);
+        return () => {
+            window.removeEventListener("pointerup", handleWindowPointerUp);
+            window.removeEventListener("pointercancel", handleWindowPointerCancel);
+        };
+    }, [isPanning, endPan, cancelPan, interactionController]);
 
     const selectedTextShape = useMemo(() => {
         if (selectedShapeIds.length !== 1) return null;
@@ -543,12 +603,57 @@ export default function CanvasEditor({
             }
 
             if (event.key === "Escape") {
-                if (editingGroupId) {
-                    exitGroup();
-                    return;
+                const action = interactionController.evaluateEscape({
+                    hasActiveDrawing: Boolean(drawing),
+                    hasActiveVector: Boolean(vectorDraft),
+                    hasActiveFreehand: Boolean(freehandDrawing),
+                    isSelecting,
+                    isPanning,
+                    hasTextCreation: Boolean(textCreationContext),
+                    editingGroupId,
+                    selectedCount: selectedShapeIds.length,
+                    activeTool,
+                });
+
+                switch (action) {
+                    case "cancel_drawing":
+                        setDrawing(null);
+                        setVectorDraft(null);
+                        setSnapIndicator(null);
+                        if (freehandDrawing) {
+                            setFreehandDrawing(null);
+                            if (boardId && activeDrawingInteractionIdRef.current) {
+                                endInteraction(activeDrawingInteractionIdRef.current).catch(() => {});
+                                activeDrawingInteractionIdRef.current = null;
+                            }
+                            unstreamedPointsRef.current = [];
+                        }
+                        interactionController.endInteraction();
+                        return;
+                    case "cancel_selection":
+                        endSelection();
+                        interactionController.endInteraction();
+                        return;
+                    case "cancel_pan":
+                        cancelPan();
+                        interactionController.endInteraction();
+                        return;
+                    case "discard_text":
+                        setTextCreationContext(null);
+                        interactionController.endInteraction();
+                        return;
+                    case "exit_group":
+                        exitGroup();
+                        return;
+                    case "clear_selection":
+                        clearSelection();
+                        return;
+                    case "reset_tool":
+                        setActiveTool(CANVAS_TOOLS.SELECT);
+                        return;
+                    default:
+                        return;
                 }
-                clearSelection();
-                return;
             }
 
             if (event.key === "Enter" && selectedShapeIds.length === 1) {
@@ -630,74 +735,25 @@ export default function CanvasEditor({
         shapes,
         canEditCanvas,
         canvasId,
+        drawing,
+        vectorDraft,
+        freehandDrawing,
+        isSelecting,
+        isPanning,
+        textCreationContext,
+        activeTool,
+        boardId,
+        cancelPan,
+        endSelection,
+        interactionController,
+        setActiveTool,
     ]);
-
-    /*
-     * Canvas zoom.
-     */
-    const handleWheel = (
-        event: Konva.KonvaEventObject<WheelEvent>,
-    ): void => {
-        event.evt.preventDefault();
-
-        const stage = stageRef.current;
-
-        if (!stage) {
-            return;
-        }
-
-        const pointer = stage.getPointerPosition();
-
-        if (!pointer) {
-            return;
-        }
-
-        const oldZoom = zoom;
-
-        const direction =
-            event.evt.deltaY > 0 ? -1 : 1;
-
-        const zoomFactor =
-            direction > 0
-                ? ZOOM_BY
-                : 1 / ZOOM_BY;
-
-        const newZoom = Math.min(
-            MAX_ZOOM,
-            Math.max(
-                MIN_ZOOM,
-                oldZoom * zoomFactor,
-            ),
-        );
-
-        /*
-         * Keep the point under the mouse
-         * in the same world position.
-         */
-        const mousePointTo = {
-            x: (pointer.x - pan.x) / oldZoom,
-            y: (pointer.y - pan.y) / oldZoom,
-        };
-
-        const newPan = {
-            x:
-                pointer.x -
-                mousePointTo.x * newZoom,
-
-            y:
-                pointer.y -
-                mousePointTo.y * newZoom,
-        };
-
-        setZoom(newZoom);
-        setPan(newPan.x, newPan.y);
-    };
 
     /*
      * Start drawing a rectangle.
      */
     const handlePointerDown = (
-        event: Konva.KonvaEventObject<MouseEvent>,
+        event: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
     ): void => {
         const stage = stageRef.current;
 
@@ -705,18 +761,49 @@ export default function CanvasEditor({
             return;
         }
 
-        const isEmptyCanvas =
-            event.target === stage;
+        const nativeEvt = event.evt;
+        const isTouch = "touches" in nativeEvt;
+        const clientX = isTouch
+            ? nativeEvt.touches[0]?.clientX ?? 0
+            : (nativeEvt as MouseEvent).clientX;
+        const clientY = isTouch
+            ? nativeEvt.touches[0]?.clientY ?? 0
+            : (nativeEvt as MouseEvent).clientY;
+        const button = isTouch ? 0 : (nativeEvt as MouseEvent).button;
+        const isMiddleMouse = button === 1;
 
-        if (
-            (activeTool === CANVAS_TOOLS.SELECT ||
-                activeTool === CANVAS_TOOLS.LASSO) &&
-            isEmptyCanvas &&
-            !isSpacePressed &&
-            event.evt.button !== 1
-        ) {
+        const isEmptyCanvas = event.target === stage;
+        const isTransformerHandle = Boolean(
+            event.target.getParent()?.className === "Transformer" ||
+            event.target.className === "Transformer"
+        );
+
+        const mode = interactionController.determineInteractionOwner(
+            {
+                button,
+                isSpacePressed,
+                isMiddleMouse,
+                isEmptyCanvas,
+                isTransformerHandle,
+            },
+            activeTool,
+            canEditCanvas,
+        );
+
+        if (mode === "panning") {
+            event.evt.preventDefault();
+            startPan({ x: clientX, y: clientY });
+            interactionController.startInteraction("panning");
+            return;
+        }
+
+        if (mode === "transforming") {
+            interactionController.startInteraction("transforming");
+            return;
+        }
+
+        if (mode === "marquee_selecting" || mode === "lasso_selecting") {
             const pointer = stage.getPointerPosition();
-
             if (!pointer) {
                 return;
             }
@@ -726,8 +813,12 @@ export default function CanvasEditor({
                 zoom,
             });
 
-            const started = startSelection(worldPoint, event);
+            const started = startSelection(
+                worldPoint,
+                event as Konva.KonvaEventObject<MouseEvent>,
+            );
             if (started) {
+                interactionController.startInteraction(mode);
                 return;
             }
         }
@@ -912,12 +1003,27 @@ export default function CanvasEditor({
     };
 
     /*
-     * Update rectangle preview while dragging.
+     * Update gesture / preview while moving pointer.
      */
-    const handlePointerMove = (): void => {
+    const handlePointerMove = (
+        event?: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+    ): void => {
         const stage = stageRef.current;
 
         if (!stage) {
+            return;
+        }
+
+        if (isPanning && event) {
+            const nativeEvt = event.evt;
+            const isTouch = "touches" in nativeEvt;
+            const clientX = isTouch
+                ? nativeEvt.touches[0]?.clientX ?? 0
+                : (nativeEvt as MouseEvent).clientX;
+            const clientY = isTouch
+                ? nativeEvt.touches[0]?.clientY ?? 0
+                : (nativeEvt as MouseEvent).clientY;
+            updatePan({ x: clientX, y: clientY });
             return;
         }
 
@@ -1064,11 +1170,18 @@ export default function CanvasEditor({
      * Finish rectangle drawing.
      */
     const handlePointerUp = (): void => {
+        if (isPanning) {
+            endPan();
+            interactionController.endInteraction();
+            return;
+        }
+
         /*
          * Finish multi-selection.
          */
         if (isSelecting) {
             endSelection();
+            interactionController.endInteraction();
             return;
         }
 
@@ -1082,6 +1195,7 @@ export default function CanvasEditor({
             setFreehandDrawing(null);
             activeDrawingInteractionIdRef.current = null;
             unstreamedPointsRef.current = [];
+            interactionController.endInteraction();
 
             // End ephemeral collaborative interaction
             if (boardId && interactionId) {
@@ -1146,6 +1260,7 @@ export default function CanvasEditor({
             const draft = vectorDraft;
             setVectorDraft(null);
             setSnapIndicator(null);
+            interactionController.endInteraction();
 
             const dx = draft.currentX - draft.startX;
             const dy = draft.currentY - draft.startY;
@@ -1302,6 +1417,7 @@ export default function CanvasEditor({
 
         const currentTool = drawing.tool;
         setDrawing(null);
+        interactionController.endInteraction();
 
         /*
          * Ignore accidental clicks / sub-threshold drags.
@@ -1354,8 +1470,13 @@ export default function CanvasEditor({
                 );
             });
     };
-
-
+    const stageCursor = useMemo(() => {
+        if (isPanning) return "grabbing";
+        if (isSpacePressed || activeTool === CANVAS_TOOLS.HAND) return "grab";
+        if (activeTool === CANVAS_TOOLS.TEXT) return "text";
+        if (activeTool === CANVAS_TOOLS.SELECT) return "default";
+        return "crosshair";
+    }, [isPanning, isSpacePressed, activeTool]);
 
     return (
         <div
@@ -1535,30 +1656,14 @@ export default function CanvasEditor({
                     y={pan.y}
                     scaleX={zoom}
                     scaleY={zoom}
-                    draggable={isSpacePressed}
-                    style={{
-                        cursor: isSpacePressed
-                            ? "grab"
-                            : activeTool === CANVAS_TOOLS.LASSO
-                              ? "crosshair"
-                              : "default",
-                    }}
-                    onDragEnd={(event) => {
-                        setPan(
-                            event.target.x(),
-                            event.target.y(),
-                        );
-                    }}
+                    style={{ cursor: stageCursor }}
                     onWheel={handleWheel}
-                    onMouseDown={
-                        handlePointerDown
-                    }
-                    onMouseMove={
-                        handlePointerMove
-                    }
-                    onMouseUp={
-                        handlePointerUp
-                    }
+                    onMouseDown={handlePointerDown}
+                    onMouseMove={handlePointerMove}
+                    onMouseUp={handlePointerUp}
+                    onTouchStart={handlePointerDown}
+                    onTouchMove={handlePointerMove}
+                    onTouchEnd={handlePointerUp}
                 >
                     <Layer>
                         <CanvasGrid
@@ -1863,6 +1968,17 @@ export default function CanvasEditor({
                     </Layer>
                 </Stage>
             ) : null}
+
+            {/* Floating Bottom-Right Canvas Zoom Controls */}
+            <div className="absolute right-4 bottom-4 z-10">
+                <CanvasZoomControls
+                    zoom={zoom}
+                    formattedZoom={formattedZoom}
+                    onZoomIn={zoomIn}
+                    onZoomOut={zoomOut}
+                    onResetZoom={resetZoom}
+                />
+            </div>
 
             {/* Shape Comment Badges Overlay */}
             {shapes.map((shape) => {

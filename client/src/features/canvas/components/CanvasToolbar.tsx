@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { MessageSquare, Eye, Minus, ArrowRight, GitCommit, Circle, Triangle, Hexagon, Star, Lasso } from "lucide-react";
+import { MessageSquare, Eye, Minus, ArrowRight, GitCommit, Circle, Triangle, Hexagon, Star, Lasso, Hand } from "lucide-react";
 
 import { CANVAS_TOOLS } from "../constants";
 import { useCanvasStore } from "../store";
@@ -44,6 +44,19 @@ export default function CanvasToolbar({
         }`}
       >
         Select
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setActiveTool(CANVAS_TOOLS.HAND)}
+        className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+          activeTool === CANVAS_TOOLS.HAND
+            ? "bg-gray-900 text-white shadow-sm"
+            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+        }`}
+      >
+        <Hand className="h-3.5 w-3.5" />
+        <span>Hand</span>
       </button>
 
       <button
