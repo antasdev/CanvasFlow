@@ -21,10 +21,15 @@ export class CommentRepository {
     id: Types.ObjectId,
     session?: ClientSession
   ): Promise<CommentDocument | null> {
-    return CommentModel.findById(id, null, { session }).populate({
-      path: "authorId",
-      select: "fullName email profile",
-    });
+    return CommentModel.findById(id, null, { session })
+      .populate({
+        path: "authorId",
+        select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
+      });
   }
 
   async findByBoardId(
@@ -34,6 +39,10 @@ export class CommentRepository {
     const query: Record<string, unknown> = {
       boardId,
     };
+
+    if (filter?.canvasId !== undefined) {
+      query.canvasId = filter.canvasId;
+    }
 
     if (filter?.shapeId !== undefined) {
       query.shapeId = filter.shapeId;
@@ -52,7 +61,22 @@ export class CommentRepository {
       .populate({
         path: "authorId",
         select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
       });
+  }
+
+  async findByCanvasId(
+    boardId: Types.ObjectId,
+    canvasId: Types.ObjectId,
+    filter?: CommentFilterDto
+  ): Promise<CommentDocument[]> {
+    return this.findByBoardId(boardId, {
+      ...filter,
+      canvasId,
+    });
   }
 
   async updateWithExpectedVersion(
@@ -76,10 +100,15 @@ export class CommentRepository {
         runValidators: true,
         session,
       }
-    ).populate({
-      path: "authorId",
-      select: "fullName email profile",
-    });
+    )
+      .populate({
+        path: "authorId",
+        select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
+      });
   }
 
   async softDeleteWithExpectedVersion(
@@ -105,10 +134,15 @@ export class CommentRepository {
         runValidators: true,
         session,
       }
-    ).populate({
-      path: "authorId",
-      select: "fullName email profile",
-    });
+    )
+      .populate({
+        path: "authorId",
+        select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
+      });
   }
 
   async updateById(
@@ -127,10 +161,15 @@ export class CommentRepository {
         runValidators: true,
         session,
       }
-    ).populate({
-      path: "authorId",
-      select: "fullName email profile",
-    });
+    )
+      .populate({
+        path: "authorId",
+        select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
+      });
   }
 
   async softDeleteById(
@@ -151,10 +190,15 @@ export class CommentRepository {
         runValidators: true,
         session,
       }
-    ).populate({
-      path: "authorId",
-      select: "fullName email profile",
-    });
+    )
+      .populate({
+        path: "authorId",
+        select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
+      });
   }
 
   /**
@@ -187,7 +231,49 @@ export class CommentRepository {
       .populate({
         path: "authorId",
         select: "fullName email profile",
+      })
+      .populate({
+        path: "resolvedBy",
+        select: "fullName email profile",
       });
+  }
+
+  /**
+   * Aggregates unresolved comment counts grouped by shapeId for given shapes on a canvas.
+   */
+  async countUnresolvedByShape(
+    boardId: Types.ObjectId,
+    canvasId: Types.ObjectId,
+    shapeIds: Types.ObjectId[]
+  ): Promise<Record<string, number>> {
+    if (!shapeIds.length) return {};
+
+    const results = await CommentModel.aggregate<{
+      _id: Types.ObjectId;
+      count: number;
+    }>([
+      {
+        $match: {
+          boardId,
+          canvasId,
+          shapeId: { $in: shapeIds },
+          isResolved: false,
+          deletedAt: null,
+        },
+      },
+      {
+        $group: {
+          _id: "$shapeId",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const countMap: Record<string, number> = {};
+    for (const r of results) {
+      countMap[r._id.toString()] = r.count;
+    }
+    return countMap;
   }
 }
 

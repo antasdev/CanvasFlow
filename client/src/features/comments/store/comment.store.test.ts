@@ -7,6 +7,7 @@ import type { Comment } from "../types";
 const mockComment: Comment = {
   id: "comment_1",
   boardId: "board_1",
+  canvasId: "canvas_1",
   shapeId: null,
   authorId: "user_1",
   author: {
@@ -26,6 +27,7 @@ const mockComment: Comment = {
 const mockReply: Comment = {
   id: "reply_1",
   boardId: "board_1",
+  canvasId: "canvas_1",
   shapeId: null,
   authorId: "user_2",
   author: {

@@ -41,7 +41,12 @@ export const validate =
     }
 
     if (validated.query !== undefined) {
-      req.query = validated.query;
+      Object.defineProperty(req, "query", {
+        value: validated.query,
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     }
 
     next();

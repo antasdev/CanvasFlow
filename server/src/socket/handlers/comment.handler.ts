@@ -75,12 +75,21 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               userId,
               {
                 boardId: boardObjectId,
+                canvasId: parsed.data.canvasId
+                  ? new Types.ObjectId(parsed.data.canvasId)
+                  : undefined,
                 content: parsed.data.content,
                 shapeId: parsed.data.shapeId
                   ? new Types.ObjectId(parsed.data.shapeId)
                   : null,
                 parentCommentId: parsed.data.parentCommentId
                   ? new Types.ObjectId(parsed.data.parentCommentId)
+                  : null,
+                position: parsed.data.position
+                  ? {
+                      x: parsed.data.position.x,
+                      y: parsed.data.position.y,
+                    }
                   : null,
               },
               session

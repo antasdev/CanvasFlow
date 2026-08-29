@@ -463,10 +463,15 @@ export type UserLeftPayload = {
  */
 export type CreateCommentPayload = {
   boardId: string;
+  canvasId?: string;
   mutationId?: string;
   content: string;
   shapeId?: string | null;
   parentCommentId?: string | null;
+  position?: {
+    x: number;
+    y: number;
+  } | null;
 };
 
 export type UpdateCommentPayload = {

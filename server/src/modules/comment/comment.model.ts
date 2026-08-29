@@ -11,6 +11,13 @@ const commentSchema = new Schema<Comment>(
       index: true,
     },
 
+    canvasId: {
+      type: Schema.Types.ObjectId,
+      ref: "Canvas",
+      required: true,
+      index: true,
+    },
+
     shapeId: {
       type: Schema.Types.ObjectId,
       ref: "Shape",
@@ -30,6 +37,15 @@ const commentSchema = new Schema<Comment>(
       default: null,
     },
 
+    position: {
+      type: {
+        x: { type: Number, required: true },
+        y: { type: Number, required: true },
+      },
+      _id: false,
+      default: null,
+    },
+
     content: {
       type: String,
       default: "",
@@ -40,6 +56,17 @@ const commentSchema = new Schema<Comment>(
     isResolved: {
       type: Boolean,
       default: false,
+    },
+
+    resolvedAt: {
+      type: Date,
+      default: null,
+    },
+
+    resolvedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
 
     isEdited: {
@@ -65,14 +92,14 @@ const commentSchema = new Schema<Comment>(
 );
 
 /**
- * Optimized Compound & Single-Field Indexes:
- * 1. { boardId: 1, createdAt: -1 } - Fast reverse-chronological retrieval of all comments for a board.
- * 2. { boardId: 1, shapeId: 1, createdAt: -1 } - Fast filtering of comments attached to specific shapes on a board.
- * 3. { parentCommentId: 1, createdAt: 1 } - Chronological resolution of replies attached to a root thread.
+ * Compound & Single-Field Indexes:
+ * 1. { boardId: 1, canvasId: 1, createdAt: 1 } - Fast chronological retrieval of all comments for a canvas.
+ * 2. { boardId: 1, shapeId: 1, createdAt: 1 } - Fast filtering of comments attached to shapes on a board.
+ * 3. { parentCommentId: 1, createdAt: 1 } - Fast chronological resolution of thread replies.
  * 4. { authorId: 1, createdAt: -1 } - User-specific comment lookups and audit queries.
  */
-commentSchema.index({ boardId: 1, createdAt: -1 });
-commentSchema.index({ boardId: 1, shapeId: 1, createdAt: -1 });
+commentSchema.index({ boardId: 1, canvasId: 1, createdAt: 1 });
+commentSchema.index({ boardId: 1, shapeId: 1, createdAt: 1 });
 commentSchema.index({ parentCommentId: 1, createdAt: 1 });
 commentSchema.index({ authorId: 1, createdAt: -1 });
 
