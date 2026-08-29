@@ -1,10 +1,12 @@
 import { useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft } from "lucide-react";
 
 import CanvasEditor from "../components/CanvasEditor";
 import CanvasToolbar from "../components/CanvasToolbar";
 import PresenceAvatars from "../components/PresenceAvatars";
+import BoardSyncStatus from "../components/BoardSyncStatus";
 import { useBoardCanvases } from "../hooks";
 import { useBoard } from "@/features/board/hooks";
 import { useWorkspace, useWorkspacePermissions } from "@/features/workspace";
@@ -86,13 +88,46 @@ export default function BoardCanvasPage(): React.JSX.Element {
   const activeCanvas = canvases[0];
 
   return (
-    <main className="h-screen w-screen overflow-hidden bg-slate-700 relative">
+    <main className="h-screen w-screen overflow-hidden bg-slate-700 relative select-none">
       <CanvasEditor
         boardId={boardId}
         canvasId={activeCanvas.id}
         canEditCanvas={canEditCanvas}
       />
-      <CanvasToolbar canEditCanvas={canEditCanvas} />
+
+      {/* Top Left: Board Context Header */}
+      <div className="absolute left-4 top-4 z-10 flex items-center gap-2.5 rounded-xl bg-white/95 backdrop-blur-md px-3 py-2 shadow-lg border border-gray-200/80">
+        <Link
+          to={board?.workspaceId ? `/workspaces/${board.workspaceId}` : "/dashboard"}
+          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500"
+          title="Back to Workspace"
+          aria-label="Back to Workspace"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Link>
+
+        <div className="h-4 w-px bg-gray-200" />
+
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold text-gray-900 leading-tight">
+            {board?.name || "Untitled Board"}
+          </span>
+          <span className="text-[10px] text-gray-500 leading-tight">
+            {workspace?.name || "Workspace"}
+          </span>
+        </div>
+
+        <div className="h-4 w-px bg-gray-200" />
+
+        <BoardSyncStatus />
+      </div>
+
+      {/* Center Top: Canvas Tool Dock */}
+      <div className="absolute left-1/2 -translate-x-1/2 top-4 z-10">
+        <CanvasToolbar canEditCanvas={canEditCanvas} />
+      </div>
+
+      {/* Top Right: Collaborators Presence */}
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
         <PresenceAvatars />
       </div>

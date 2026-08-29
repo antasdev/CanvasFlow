@@ -15,3 +15,6 @@ export { default as RemoteCursorLayer } from "./RemoteCursorLayer";
 export { default as TextEditorOverlay } from "./TextEditorOverlay";
 export { default as TextFormattingToolbar } from "./TextFormattingToolbar";
 export { SmartGuideOverlay } from "./SmartGuideOverlay";
+export { default as CanvasZoomControls } from "./CanvasZoomControls";
+export { default as KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
+export { default as BoardSyncStatus } from "./BoardSyncStatus";

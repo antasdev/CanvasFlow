@@ -25,7 +25,9 @@ import {
     useCanvasViewport,
 } from "../hooks";
 import { CanvasInteractionController } from "../services/canvas-interaction.controller";
+import { mutationManager } from "../services/mutation-manager";
 import CanvasZoomControls from "./CanvasZoomControls";
+import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { socketClientService } from "@/services/socket";
 import { useCanvasStore, usePresenceStore } from "../store";
 import type { TextShape, StickyNoteShape, ShapeStyle } from "../types";
@@ -283,6 +285,12 @@ export default function CanvasEditor({
     const selectAllShapes = useCanvasStore(
         (state) => state.selectAllShapes,
     );
+
+    const moveSelectedShapes = useCanvasStore(
+        (state) => state.moveSelectedShapes,
+    );
+
+    const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
 
     const {
         marquee,
@@ -555,9 +563,15 @@ export default function CanvasEditor({
             const isTyping =
                 target.tagName === "INPUT" ||
                 target.tagName === "TEXTAREA" ||
-                target.isContentEditable;
+                target.isContentEditable ||
+                (typeof target.closest === "function" && target.closest('[role="dialog"]') !== null);
 
-            if (isTyping) {
+            if (
+                isTyping ||
+                isShortcutsOpen ||
+                editingShape !== null ||
+                textCreationContext !== null
+            ) {
                 return;
             }
 
@@ -708,6 +722,131 @@ export default function CanvasEditor({
             ) {
                 event.preventDefault();
                 selectAllShapes();
+                return;
+            }
+
+            // Keyboard Shortcuts Modal Toggle: ? or Shift + /
+            if (event.key === "?" || (event.shiftKey && event.key === "/")) {
+                event.preventDefault();
+                setIsShortcutsOpen((prev) => !prev);
+                return;
+            }
+
+            // Keyboard Zoom Shortcuts
+            if ((event.ctrlKey || event.metaKey) && (event.key === "=" || event.key === "+")) {
+                event.preventDefault();
+                zoomIn();
+                return;
+            }
+            if ((event.ctrlKey || event.metaKey) && (event.key === "-" || event.key === "_")) {
+                event.preventDefault();
+                zoomOut();
+                return;
+            }
+            if ((event.ctrlKey || event.metaKey) && event.key === "0") {
+                event.preventDefault();
+                resetZoom();
+                return;
+            }
+
+            // Arrow Key Nudge for Selected Shapes
+            if (
+                ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(
+                    event.key,
+                )
+            ) {
+                if (!canEditCanvas || selectedShapeIds.length === 0) {
+                    return;
+                }
+
+                event.preventDefault();
+                const step = event.shiftKey ? 10 : 1;
+                let deltaX = 0;
+                let deltaY = 0;
+
+                if (event.key === "ArrowLeft") deltaX = -step;
+                else if (event.key === "ArrowRight") deltaX = step;
+                else if (event.key === "ArrowUp") deltaY = -step;
+                else if (event.key === "ArrowDown") deltaY = step;
+
+                // 1. Move shapes locally and record an undo snapshot in history
+                moveSelectedShapes(deltaX, deltaY);
+
+                // 2. Authoritative persistence through existing mutation pipeline with OCC & journal tracking
+                if (boardId) {
+                    const currentShapes = useCanvasStore.getState().shapes;
+                    for (const id of selectedShapeIds) {
+                        if (isTargetLockedByPeer("shape", id)) continue;
+                        const moved = currentShapes.find((s) => s.id === id);
+                        if (moved) {
+                            mutationManager
+                                .executeShapeUpdate(
+                                    boardId,
+                                    moved.id,
+                                    {
+                                        x: moved.x,
+                                        y: moved.y,
+                                    },
+                                    moved.version
+                                )
+                                .catch((err) => {
+                                    toast.error(
+                                        err instanceof Error
+                                            ? err.message
+                                            : "Failed to persist shape movement."
+                                    );
+                                });
+                        }
+                    }
+                }
+                return;
+            }
+
+            // Single-key tool switches (when no modifier key is active)
+            if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+                const key = event.key.toLowerCase();
+                if (key === "v") {
+                    setActiveTool(CANVAS_TOOLS.SELECT);
+                    return;
+                }
+                if (key === "h") {
+                    setActiveTool(CANVAS_TOOLS.HAND);
+                    return;
+                }
+                if (key === "c") {
+                    toggleCommentPanel();
+                    return;
+                }
+                if (canEditCanvas) {
+                    if (key === "r") {
+                        setActiveTool(CANVAS_TOOLS.RECTANGLE);
+                        return;
+                    }
+                    if (key === "o") {
+                        setActiveTool(CANVAS_TOOLS.CIRCLE);
+                        return;
+                    }
+                    if (key === "t") {
+                        setActiveTool(CANVAS_TOOLS.TEXT);
+                        return;
+                    }
+                    if (key === "l") {
+                        setActiveTool(CANVAS_TOOLS.LINE);
+                        return;
+                    }
+                    if (key === "a") {
+                        setActiveTool(CANVAS_TOOLS.ARROW);
+                        return;
+                    }
+                    if (key === "p" || key === "d") {
+                        setActiveTool(CANVAS_TOOLS.FREEHAND);
+                        return;
+                    }
+                    if (key === "s") {
+                        setActiveTool(CANVAS_TOOLS.STICKY_NOTE);
+                        return;
+                    }
+                }
             }
         };
 
@@ -741,12 +880,20 @@ export default function CanvasEditor({
         isSelecting,
         isPanning,
         textCreationContext,
+        editingShape,
+        isShortcutsOpen,
         activeTool,
         boardId,
         cancelPan,
         endSelection,
         interactionController,
         setActiveTool,
+        moveSelectedShapes,
+        zoomIn,
+        zoomOut,
+        resetZoom,
+        isTargetLockedByPeer,
+        toggleCommentPanel,
     ]);
 
     /*
@@ -1669,6 +1816,8 @@ export default function CanvasEditor({
                         <CanvasGrid
                             width={size.width}
                             height={size.height}
+                            pan={pan}
+                            zoom={zoom}
                         />
 
                         {shapes
@@ -1977,6 +2126,7 @@ export default function CanvasEditor({
                     onZoomIn={zoomIn}
                     onZoomOut={zoomOut}
                     onResetZoom={resetZoom}
+                    onToggleHelp={() => setIsShortcutsOpen((prev) => !prev)}
                 />
             </div>
 
@@ -2019,6 +2169,12 @@ export default function CanvasEditor({
 
             {/* Real-time Collaborative Comments Panel */}
             <CommentPanel boardId={boardId} />
+
+            {/* Keyboard Shortcuts Cheatsheet Modal */}
+            <KeyboardShortcutsModal
+                isOpen={isShortcutsOpen}
+                onClose={() => setIsShortcutsOpen(false)}
+            />
         </div>
     );
 }

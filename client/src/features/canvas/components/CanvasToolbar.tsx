@@ -1,19 +1,52 @@
 import React, { useMemo } from "react";
-import { MessageSquare, Eye, Minus, ArrowRight, GitCommit, Circle, Triangle, Hexagon, Star, Lasso, Hand } from "lucide-react";
+import {
+  MousePointer2,
+  Hand,
+  Lasso,
+  Square,
+  Circle,
+  Triangle,
+  Hexagon,
+  Star,
+  Minus,
+  ArrowRight,
+  GitCommit,
+  Type,
+  StickyNote,
+  Pencil,
+  Undo2,
+  Redo2,
+  MessageSquare,
+  Eye,
+} from "lucide-react";
 
-import { CANVAS_TOOLS } from "../constants";
+import { CANVAS_TOOLS, type CanvasTool } from "../constants";
 import { useCanvasStore } from "../store";
 import { useCommentStore } from "@/features/comments";
 
 type CanvasToolbarProps = {
   canEditCanvas?: boolean;
+  className?: string;
+};
+
+type ToolItem = {
+  tool: CanvasTool;
+  label: string;
+  hotkey: string;
+  icon: React.ReactNode;
 };
 
 export default function CanvasToolbar({
   canEditCanvas = true,
+  className = "",
 }: CanvasToolbarProps): React.JSX.Element {
   const activeTool = useCanvasStore((state) => state.activeTool);
   const setActiveTool = useCanvasStore((state) => state.setActiveTool);
+
+  const undo = useCanvasStore((state) => state.undo);
+  const redo = useCanvasStore((state) => state.redo);
+  const canUndo = useCanvasStore((state) => state.canUndo());
+  const canRedo = useCanvasStore((state) => state.canRedo());
 
   const isPanelOpen = useCommentStore((state) => state.isPanelOpen);
   const togglePanel = useCommentStore((state) => state.togglePanel);
@@ -25,231 +58,223 @@ export default function CanvasToolbar({
     ).length;
   }, [comments]);
 
+  const navTools: ToolItem[] = [
+    {
+      tool: CANVAS_TOOLS.SELECT,
+      label: "Select",
+      hotkey: "V",
+      icon: <MousePointer2 className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.HAND,
+      label: "Hand (Pan)",
+      hotkey: "H or Space",
+      icon: <Hand className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.LASSO,
+      label: "Lasso Select",
+      hotkey: "",
+      icon: <Lasso className="h-4 w-4" />,
+    },
+  ];
+
+  const shapeTools: ToolItem[] = [
+    {
+      tool: CANVAS_TOOLS.RECTANGLE,
+      label: "Rectangle",
+      hotkey: "R",
+      icon: <Square className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.CIRCLE,
+      label: "Circle",
+      hotkey: "O",
+      icon: <Circle className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.ELLIPSE,
+      label: "Ellipse",
+      hotkey: "",
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+          <ellipse cx="12" cy="12" rx="10" ry="6" />
+        </svg>
+      ),
+    },
+    {
+      tool: CANVAS_TOOLS.TRIANGLE,
+      label: "Triangle",
+      hotkey: "",
+      icon: <Triangle className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.POLYGON,
+      label: "Polygon",
+      hotkey: "",
+      icon: <Hexagon className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.STAR,
+      label: "Star",
+      hotkey: "",
+      icon: <Star className="h-4 w-4" />,
+    },
+  ];
+
+  const vectorTools: ToolItem[] = [
+    {
+      tool: CANVAS_TOOLS.LINE,
+      label: "Line",
+      hotkey: "L",
+      icon: <Minus className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.ARROW,
+      label: "Arrow",
+      hotkey: "A",
+      icon: <ArrowRight className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.CONNECTOR,
+      label: "Connector",
+      hotkey: "",
+      icon: <GitCommit className="h-4 w-4" />,
+    },
+  ];
+
+  const contentTools: ToolItem[] = [
+    {
+      tool: CANVAS_TOOLS.TEXT,
+      label: "Text",
+      hotkey: "T",
+      icon: <Type className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.STICKY_NOTE,
+      label: "Sticky Note",
+      hotkey: "S",
+      icon: <StickyNote className="h-4 w-4" />,
+    },
+    {
+      tool: CANVAS_TOOLS.FREEHAND,
+      label: "Draw",
+      hotkey: "P",
+      icon: <Pencil className="h-4 w-4" />,
+    },
+  ];
+
+  const renderToolButton = ({ tool, label, hotkey, icon }: ToolItem) => {
+    const isActive = activeTool === tool;
+    const titleText = hotkey ? `${label} (${hotkey})` : label;
+
+    return (
+      <button
+        key={tool}
+        type="button"
+        onClick={() => setActiveTool(tool)}
+        title={titleText}
+        aria-label={titleText}
+        className={`rounded-lg p-2 transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+          isActive
+            ? "bg-gray-900 text-white shadow-sm"
+            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+        }`}
+      >
+        {icon}
+      </button>
+    );
+  };
+
   return (
-    <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-lg bg-white p-2 shadow-md border border-gray-200">
+    <div
+      className={`flex items-center gap-1 rounded-xl bg-white/95 backdrop-blur-md p-1.5 shadow-lg border border-gray-200/80 text-gray-700 select-none ${className}`}
+      role="toolbar"
+      aria-label="Canvas tool dock"
+    >
       {!canEditCanvas && (
-        <div className="flex items-center gap-1.5 rounded bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-700 border border-amber-200 mr-1">
+        <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 border border-amber-200 mr-1">
           <Eye className="h-3.5 w-3.5" />
           <span>View Only</span>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => setActiveTool(CANVAS_TOOLS.SELECT)}
-        className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-          activeTool === CANVAS_TOOLS.SELECT
-            ? "bg-gray-900 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        Select
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setActiveTool(CANVAS_TOOLS.HAND)}
-        className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-          activeTool === CANVAS_TOOLS.HAND
-            ? "bg-gray-900 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        <Hand className="h-3.5 w-3.5" />
-        <span>Hand</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setActiveTool(CANVAS_TOOLS.LASSO)}
-        className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-          activeTool === CANVAS_TOOLS.LASSO
-            ? "bg-gray-900 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-        }`}
-      >
-        <Lasso className="h-3.5 w-3.5" />
-        <span>Lasso</span>
-      </button>
+      {/* Navigation & Selection */}
+      <div className="flex items-center gap-0.5">
+        {navTools.map(renderToolButton)}
+      </div>
 
       {canEditCanvas && (
         <>
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.RECTANGLE)}
-            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.RECTANGLE
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Rectangle
-          </button>
+          <div className="h-5 w-px bg-gray-200 mx-0.5" />
 
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.CIRCLE)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.CIRCLE
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Circle className="h-3.5 w-3.5" />
-            <span>Circle</span>
-          </button>
+          {/* Basic Shapes */}
+          <div className="flex items-center gap-0.5">
+            {shapeTools.map(renderToolButton)}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.ELLIPSE)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.ELLIPSE
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-3.5 w-3.5">
-              <ellipse cx="12" cy="12" rx="10" ry="6" />
-            </svg>
-            <span>Ellipse</span>
-          </button>
+          <div className="h-5 w-px bg-gray-200 mx-0.5" />
 
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.TRIANGLE)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.TRIANGLE
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Triangle className="h-3.5 w-3.5" />
-            <span>Triangle</span>
-          </button>
+          {/* Vector & Connectors */}
+          <div className="flex items-center gap-0.5">
+            {vectorTools.map(renderToolButton)}
+          </div>
 
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.POLYGON)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.POLYGON
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Hexagon className="h-3.5 w-3.5" />
-            <span>Polygon</span>
-          </button>
+          <div className="h-5 w-px bg-gray-200 mx-0.5" />
 
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.STAR)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.STAR
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Star className="h-3.5 w-3.5" />
-            <span>Star</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.LINE)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.LINE
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <Minus className="h-3.5 w-3.5" />
-            <span>Line</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.ARROW)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.ARROW
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <ArrowRight className="h-3.5 w-3.5" />
-            <span>Arrow</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.CONNECTOR)}
-            className={`inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.CONNECTOR
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            <GitCommit className="h-3.5 w-3.5" />
-            <span>Connector</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.TEXT)}
-            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.TEXT
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Text
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.STICKY_NOTE)}
-            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.STICKY_NOTE
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Sticky Note
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTool(CANVAS_TOOLS.FREEHAND)}
-            className={`rounded px-3 py-2 text-sm font-medium transition-colors ${
-              activeTool === CANVAS_TOOLS.FREEHAND
-                ? "bg-gray-900 text-white shadow-sm"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
-          >
-            Draw
-          </button>
+          {/* Content Creation */}
+          <div className="flex items-center gap-0.5">
+            {contentTools.map(renderToolButton)}
+          </div>
         </>
       )}
 
-      <div className="h-6 w-px bg-gray-200 self-center mx-1" />
+      <div className="h-5 w-px bg-gray-200 mx-0.5" />
 
+      {/* Undo & Redo */}
+      {canEditCanvas && (
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo (Ctrl+Z)"
+            className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-30 disabled:hover:bg-transparent transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <Undo2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Y)"
+            aria-label="Redo (Ctrl+Y)"
+            className="rounded-lg p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-30 disabled:hover:bg-transparent transition-all focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <Redo2 className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Collaborative Comments Panel Toggle */}
       <button
         type="button"
         onClick={() => togglePanel()}
-        title="Toggle Comments Panel"
-        className={`relative inline-flex items-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition-colors ${
+        title="Toggle Comments Panel (C)"
+        aria-label="Toggle Comments Panel (C)"
+        className={`relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
           isPanelOpen
             ? "bg-blue-600 text-white shadow-sm"
-            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
         }`}
       >
         <MessageSquare className="h-4 w-4" />
-        <span>Comments</span>
+        <span className="hidden sm:inline">Comments</span>
         {openCommentsCount > 0 && (
           <span
-            className={`rounded-full px-1.5 py-0.2 text-[11px] font-bold ${
-              isPanelOpen
-                ? "bg-white text-blue-700"
-                : "bg-blue-600 text-white"
+            className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+              isPanelOpen ? "bg-white text-blue-700" : "bg-blue-600 text-white"
             }`}
           >
             {openCommentsCount}
