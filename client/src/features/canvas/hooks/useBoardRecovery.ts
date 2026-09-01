@@ -1,17 +1,18 @@
-import { useState, useRef, useCallback, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState, useRef, useCallback, useEffect } from "react";
 
+import { commentApi } from "@/features/comments/api";
+import { COMMENT_QUERY_KEYS } from "@/features/comments/hooks/useComments";
+import { useCommentStore } from "@/features/comments/store";
 import { socketClientService, SocketEvents } from "@/services/socket";
 import type { BoardRecoveryStatePayload } from "@/services/socket";
-import { useCanvasStore, useCollaborationStore } from "../store";
-import { useMutationStore } from "../store/mutation.store";
-import { mutationManager } from "../services/mutation-manager";
-import { interactionManagerService } from "../services/interaction-manager";
+
 import { shapeApi } from "../api/shape.api";
 import { mapShapeResponseToShape } from "../api/shape.mapper";
-import { commentApi } from "@/features/comments/api";
-import { useCommentStore } from "@/features/comments/store";
-import { COMMENT_QUERY_KEYS } from "@/features/comments/hooks/useComments";
+import { interactionManagerService } from "../services/interaction-manager";
+import { mutationManager } from "../services/mutation-manager";
+import { useCanvasStore, useCollaborationStore } from "../store";
+import { useMutationStore } from "../store/mutation.store";
 
 export type RecoveryStatus =
   | "idle"

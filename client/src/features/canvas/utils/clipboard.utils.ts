@@ -8,6 +8,7 @@ import {
   PASTE_OFFSET,
   type CanvasFlowClipboardData,
 } from "../types/clipboard.types";
+
 import { getShapeWorldTransform, worldToLocal } from "./group-geometry.utils";
 
 /**

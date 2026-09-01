@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useCanvasStore } from "./canvas.store";
+
 import type { RectangleShape, GroupShape } from "../types";
+
+import { useCanvasStore } from "./canvas.store";
 
 describe("canvas store grouping & ungrouping", () => {
   const rect1: RectangleShape = {

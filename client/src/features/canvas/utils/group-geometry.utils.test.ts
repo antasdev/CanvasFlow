@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+
+import type { Shape, RectangleShape, GroupShape } from "../types";
+
 import {
   computeGroupBoundingBox,
   worldToLocal,
@@ -7,7 +10,6 @@ import {
   getShapeWorldBounds,
   hasCyclicHierarchy,
 } from "./group-geometry.utils";
-import type { Shape, RectangleShape, GroupShape } from "../types";
 
 describe("group-geometry.utils", () => {
   const rect1: RectangleShape = {

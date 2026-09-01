@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { socketClientService } from "@/services/socket";
+
 import type { TextShape, StickyNoteShape } from "../types";
 
 type InlineTextEditorProps = {

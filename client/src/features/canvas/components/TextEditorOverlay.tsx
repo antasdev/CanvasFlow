@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { TextShape, StickyNoteShape } from "../types";
+
 import { socketClientService } from "@/services/socket";
+
+import type { TextShape, StickyNoteShape } from "../types";
 import {
   DEFAULT_TEXT_STYLE,
   estimateTextDimensions,

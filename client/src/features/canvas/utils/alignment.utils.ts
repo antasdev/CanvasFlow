@@ -1,4 +1,5 @@
 import type { Shape } from "../types";
+
 import {
   getShapeWorldBounds,
   worldToLocal,

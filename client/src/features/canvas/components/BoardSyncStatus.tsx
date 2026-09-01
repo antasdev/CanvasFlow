@@ -1,8 +1,10 @@
-import React, { useEffect, useState, useMemo } from "react";
 import { CheckCircle2, CloudUpload, CloudOff, RefreshCw, AlertCircle } from "lucide-react";
+import React, { useEffect, useState, useMemo } from "react";
+
 import { socketClientService } from "@/services/socket";
-import { useMutationStore } from "../store/mutation.store";
+
 import { useCollaborationStore } from "../store/collaboration.store";
+import { useMutationStore } from "../store/mutation.store";
 
 /**
  * Authoritative cloud sync indicator reflecting real socket connectivity,
@@ -19,8 +21,6 @@ export default function BoardSyncStatus(): React.JSX.Element {
 
     const handleConnect = (): void => setIsConnected(true);
     const handleDisconnect = (): void => setIsConnected(false);
-
-    setIsConnected(socket.connected);
 
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);

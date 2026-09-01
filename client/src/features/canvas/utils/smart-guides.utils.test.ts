@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
+
 import type { RectangleShape, GroupShape } from "../types";
+
+import type { AABB } from "./alignment.utils";
 import {
   calculateSmartGuides,
   findSmartGuideCandidates,
   type SmartGuideCandidate,
 } from "./smart-guides.utils";
-import type { AABB } from "./alignment.utils";
 
 describe("smart-guides.utils", () => {
   it("findSmartGuideCandidates excludes moving shape and its descendants", () => {

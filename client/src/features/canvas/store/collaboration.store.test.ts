@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useCollaborationStore } from "./collaboration.store";
 import { useCanvasStore } from "./canvas.store";
+import { useCollaborationStore } from "./collaboration.store";
 
 describe("Collaboration Store (useCollaborationStore) Unit Tests", () => {
   beforeEach(() => {

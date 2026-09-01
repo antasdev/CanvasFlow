@@ -1,7 +1,8 @@
-import React, { useState } from "react";
 import { MessageSquareReply } from "lucide-react";
+import React, { useState } from "react";
 
 import type { Comment } from "../types";
+
 import CommentItem from "./CommentItem";
 import CommentReplyComposer from "./CommentReplyComposer";
 import CommentResolveButton from "./CommentResolveButton";

@@ -1,9 +1,10 @@
-import React, { useMemo } from "react";
 import { X, MessageSquare, Layers, CheckCircle2 } from "lucide-react";
+import React, { useMemo } from "react";
 
-import { useCommentStore } from "../store";
 import { useCommentMutations } from "../hooks";
+import { useCommentStore } from "../store";
 import type { Comment } from "../types";
+
 import CommentComposer from "./CommentComposer";
 import CommentThread from "./CommentThread";
 

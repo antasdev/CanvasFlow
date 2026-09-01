@@ -8,8 +8,8 @@ import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { ConnectorShape } from "../types";
 import { getShapeWorldAnchorPoint } from "../utils/anchor.utils";
-import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
 import { getKonvaStyleProps } from "../utils/shape-style.utils";
+import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
 
 type ConnectorNodeProps = {
   shape: ConnectorShape;

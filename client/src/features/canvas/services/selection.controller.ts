@@ -1,3 +1,5 @@
+import type { PresenceActivity } from "@/services/socket";
+
 import type {
   Shape,
   SelectionPoint,
@@ -7,6 +9,7 @@ import type {
   MarqueeDirection,
   SelectionMatchMode,
 } from "../types";
+import type { AABB } from "../utils/alignment.utils";
 import {
   marqueeToPolygon,
   getShapeGeometryInWorld,
@@ -17,8 +20,6 @@ import {
   resolveSelectionWithModifiers,
   resolveGroupHit,
 } from "../utils/selection-policy.utils";
-import type { AABB } from "../utils/alignment.utils";
-import type { PresenceActivity } from "@/services/socket";
 
 export type SelectionControllerState = {
   marquee: MarqueeState | null;

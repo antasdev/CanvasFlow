@@ -1,4 +1,3 @@
-import React, { useMemo } from "react";
 import {
   MousePointer2,
   Hand,
@@ -19,10 +18,12 @@ import {
   MessageSquare,
   Eye,
 } from "lucide-react";
+import React, { useMemo } from "react";
+
+import { useCommentStore } from "@/features/comments";
 
 import { CANVAS_TOOLS, type CanvasTool } from "../constants";
 import { useCanvasStore } from "../store";
-import { useCommentStore } from "@/features/comments";
 
 type CanvasToolbarProps = {
   canEditCanvas?: boolean;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CommentResponseDto } from "@/services/socket";
+
 import { mapCommentResponseToComment } from "./comment.mapper";
 
 describe("Comment Mapper (mapCommentResponseToComment)", () => {

@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { useAuthStore } from "@/store";
-import { getCursorColor } from "../utils/cursor.utils";
-import { usePresenceStore } from "../store";
+
 import type { PresenceActivity, PresenceUser } from "@/services/socket";
+import { useAuthStore } from "@/store";
+
+import { usePresenceStore } from "../store";
+import { getCursorColor } from "../utils/cursor.utils";
 
 const ACTIVITY_LABELS: Record<PresenceActivity, string> = {
   idle: "Idle",

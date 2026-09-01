@@ -1,9 +1,12 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { mutationManager, generateMutationId } from "./mutation-manager";
-import { useMutationStore } from "../store/mutation.store";
-import { useCanvasStore } from "../store/canvas.store";
+
 import { socketClientService } from "@/services/socket";
+
+import { useCanvasStore } from "../store/canvas.store";
+import { useMutationStore } from "../store/mutation.store";
 import type { Shape } from "../types/shape.types";
+
+import { mutationManager, generateMutationId } from "./mutation-manager";
 
 vi.mock("@/services/socket", () => ({
   socketClientService: {
@@ -101,9 +104,10 @@ describe("Mutation Manager (Slice 13) Unit & Integration Tests", () => {
   });
 
   it("conflict during shape update marks mutation conflicted", async () => {
-    const conflictError = new Error("Conflict detected");
-    (conflictError as any).code = "CONFLICT";
-    (conflictError as any).currentVersion = 3;
+    const conflictError = Object.assign(new Error("Conflict detected"), {
+      code: "CONFLICT",
+      currentVersion: 3,
+    });
 
     vi.mocked(socketClientService.updateShape).mockRejectedValue(conflictError);
 

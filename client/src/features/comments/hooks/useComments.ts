@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 import { commentApi } from "../api";
 import { useCommentStore } from "../store";

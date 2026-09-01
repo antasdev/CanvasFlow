@@ -1,5 +1,5 @@
-import React, { useEffect } from "react";
 import { X, Keyboard } from "lucide-react";
+import React, { useEffect } from "react";
 
 export type KeyboardShortcutsModalProps = {
   isOpen: boolean;

@@ -3,15 +3,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Arrow, Circle, Ellipse, Group, Layer, Line, Rect, Stage } from "react-konva";
 import { toast } from "sonner";
 
-import { mapShapeResponseToShape, shapeApi, type CreateShapeRequest } from "../api";
 import {
-    normalizeShapeBounds,
-    calculateCircleGeometry,
-    calculateEllipseGeometry,
-    calculateTrianglePoints,
-    calculatePolygonPoints,
-    calculateStarPoints,
-} from "../utils/shape-geometry.utils";
+    useComments,
+    useCommentSocket,
+    useCommentStore,
+    CommentBadge,
+    CommentPanel,
+} from "@/features/comments";
+import { socketClientService } from "@/services/socket";
+
+import { mapShapeResponseToShape, shapeApi, type CreateShapeRequest } from "../api";
 import { CANVAS_TOOLS, type CanvasTool } from "../constants";
 import {
     useCanvasHistory,
@@ -26,39 +27,40 @@ import {
 } from "../hooks";
 import { CanvasInteractionController } from "../services/canvas-interaction.controller";
 import { mutationManager } from "../services/mutation-manager";
-import CanvasZoomControls from "./CanvasZoomControls";
-import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
-import { socketClientService } from "@/services/socket";
 import { useCanvasStore, usePresenceStore } from "../store";
 import type { TextShape, StickyNoteShape, ShapeStyle } from "../types";
+import { findNearestAnchor, type AnchorPosition } from "../utils/anchor.utils";
 import { screenToWorld } from "../utils/canvas.coordinates";
+import {
+    normalizeShapeBounds,
+    calculateCircleGeometry,
+    calculateEllipseGeometry,
+    calculateTrianglePoints,
+    calculatePolygonPoints,
+    calculateStarPoints,
+} from "../utils/shape-geometry.utils";
+import { getShapeStyle } from "../utils/shape-style.utils";
 import {
     simplifyStroke,
     computeBoundingBox,
     normalizePointsToLocal,
 } from "../utils/stroke-simplification";
-import { findNearestAnchor, type AnchorPosition } from "../utils/anchor.utils";
+import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
 
 import CanvasGrid from "./CanvasGrid";
+import CanvasZoomControls from "./CanvasZoomControls";
 import CollaboratorCursor from "./CollaboratorCursor";
 import CollaboratorSelection from "./CollaboratorSelection";
 import CollaboratorShapeLock from "./CollaboratorShapeLock";
+import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
+import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
 import RemoteCursorLayer from "./RemoteCursorLayer";
+import ShapeRenderer from "./ShapeRenderer";
+import ShapeStyleToolbar from "./ShapeStyleToolbar";
+import { SmartGuideOverlay } from "./SmartGuideOverlay";
 import TextEditorOverlay from "./TextEditorOverlay";
 import TextFormattingToolbar from "./TextFormattingToolbar";
-import ShapeStyleToolbar from "./ShapeStyleToolbar";
-import ShapeRenderer from "./ShapeRenderer";
-import { SmartGuideOverlay } from "./SmartGuideOverlay";
-import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
-import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
-import { getShapeStyle } from "../utils/shape-style.utils";
-import {
-    useComments,
-    useCommentSocket,
-    useCommentStore,
-    CommentBadge,
-    CommentPanel,
-} from "@/features/comments";
+
 
 type CanvasEditorProps = {
     canvasId?: string;
@@ -271,7 +273,7 @@ export default function CanvasEditor({
         resetZoom,
     } = useCanvasViewport({ stageRef });
 
-    const interactionController = useRef(new CanvasInteractionController()).current;
+    const interactionController = useMemo(() => new CanvasInteractionController(), []);
     const previousToolRef = useRef<CanvasTool>(activeTool);
 
     const addShape = useCanvasStore(
@@ -381,11 +383,13 @@ export default function CanvasEditor({
         previousToolRef.current = activeTool;
 
         if (cleanup.shouldCancelDrawing) {
-            setDrawing(null);
-            setVectorDraft(null);
-            setSnapIndicator(null);
-            if (freehandDrawing) {
+            queueMicrotask(() => {
+                setDrawing(null);
+                setVectorDraft(null);
+                setSnapIndicator(null);
                 setFreehandDrawing(null);
+            });
+            if (freehandDrawing) {
                 if (boardId && activeDrawingInteractionIdRef.current) {
                     endInteraction(activeDrawingInteractionIdRef.current).catch(() => {});
                     activeDrawingInteractionIdRef.current = null;
@@ -481,13 +485,13 @@ export default function CanvasEditor({
     useEffect(() => {
         if (!canEditCanvas) {
             if (activeTool !== CANVAS_TOOLS.SELECT) {
-                setActiveTool(CANVAS_TOOLS.SELECT);
+                queueMicrotask(() => setActiveTool(CANVAS_TOOLS.SELECT));
             }
             if (freehandDrawing) {
                 if (boardId && activeDrawingInteractionIdRef.current) {
                     endInteraction(activeDrawingInteractionIdRef.current);
                 }
-                setFreehandDrawing(null);
+                queueMicrotask(() => setFreehandDrawing(null));
                 activeDrawingInteractionIdRef.current = null;
                 unstreamedPointsRef.current = [];
             }
@@ -497,7 +501,7 @@ export default function CanvasEditor({
     // Clear stale ephemeral drawing state on board recovery / reconnection
     useEffect(() => {
         if (recoveryStatus === "recovering") {
-            setFreehandDrawing(null);
+            queueMicrotask(() => setFreehandDrawing(null));
             activeDrawingInteractionIdRef.current = null;
             unstreamedPointsRef.current = [];
         }
@@ -894,6 +898,8 @@ export default function CanvasEditor({
         resetZoom,
         isTargetLockedByPeer,
         toggleCommentPanel,
+        endInteraction,
+        setShapes,
     ]);
 
     /*

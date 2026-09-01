@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios from "axios";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 
@@ -10,6 +10,7 @@ import {
   registerSchema,
   type RegisterFormValues,
 } from "@/features/auth/schemas";
+
 import { useRegister } from "../hooks/useRegister";
 
 export default function RegisterForm(): React.JSX.Element {

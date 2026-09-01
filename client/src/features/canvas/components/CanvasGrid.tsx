@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Line } from "react-konva";
+
 import { calculateInfiniteGridLines } from "../utils/grid.utils";
 
 type CanvasGridProps = {
@@ -25,7 +26,7 @@ export default function CanvasGrid({
       zoom,
       gridSize,
     });
-  }, [width, height, pan.x, pan.y, zoom, gridSize]);
+  }, [width, height, pan, zoom, gridSize]);
 
   return (
     <>

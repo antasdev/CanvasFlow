@@ -1,4 +1,5 @@
 import type { Shape, SelectionMode } from "../types";
+
 import { getShapeWorldAABB, type AABB } from "./alignment.utils";
 
 /**

@@ -1,9 +1,12 @@
 import React, { memo } from "react";
 import { Group, Line, Path, Rect, Text } from "react-konva";
-import { usePresenceStore, useInteractionStore, useCanvasStore } from "../store";
-import { useAuthStore } from "@/store";
-import { getCursorColor, getCursorLabel } from "../utils/cursor.utils";
+
 import type { PresenceCursor, PresenceUser, CollaborativeInteraction } from "@/services/socket";
+import { useAuthStore } from "@/store";
+
+import { usePresenceStore, useInteractionStore, useCanvasStore } from "../store";
+import { getCursorColor, getCursorLabel } from "../utils/cursor.utils";
+
 
 const CURSOR_PATH_DATA = "M0 0 L0 16 L4.5 12 L8 19 L10.5 18 L7 11 L13 11 Z";
 

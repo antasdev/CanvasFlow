@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useCanvasStore } from "./canvas.store";
+
 import type { RectangleShape, GroupShape } from "../types";
+
+import { useCanvasStore } from "./canvas.store";
 
 function createRect(id: string, x: number, y: number, parentId: string | null = null): RectangleShape {
   return {

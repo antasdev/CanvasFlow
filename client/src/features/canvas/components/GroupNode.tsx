@@ -7,6 +7,7 @@ import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { GroupShape, TextShape, StickyNoteShape } from "../types";
+
 import ShapeRenderer from "./ShapeRenderer";
 
 type GroupNodeProps = {

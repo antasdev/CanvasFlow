@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
+
 import { socketClientService, type PresenceActivity } from "@/services/socket";
+
 import { useCollaborationStore, usePresenceStore } from "../store";
 
 const HEARTBEAT_INTERVAL_MS = 20000;

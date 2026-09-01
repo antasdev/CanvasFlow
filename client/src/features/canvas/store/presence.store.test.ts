@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { usePresenceStore } from "./presence.store";
+
+import type { PresenceCursor, PresenceUser } from "@/services/socket";
+
 import { useCanvasStore } from "./canvas.store";
 import { useMutationStore } from "./mutation.store";
-import type { PresenceCursor, PresenceUser } from "@/services/socket";
+import { usePresenceStore } from "./presence.store";
+
 
 describe("Presence Store (Slice 15) Unit Tests", () => {
   beforeEach(() => {

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+
 import { socketClientService, SocketEvents } from "@/services/socket";
 import type {
   CanvasSyncPayload,
@@ -22,6 +23,7 @@ import type {
   UserJoinedPayload,
   UserLeftPayload,
 } from "@/services/socket";
+
 import { mapShapeResponseToShape } from "../api";
 import { useCanvasStore, useCollaborationStore } from "../store";
 

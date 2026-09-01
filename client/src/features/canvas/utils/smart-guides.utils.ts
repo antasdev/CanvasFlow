@@ -1,4 +1,5 @@
 import type { Shape } from "../types";
+
 import { getShapeWorldAABB, type AABB } from "./alignment.utils";
 
 export type SmartGuideOrientation = "horizontal" | "vertical";

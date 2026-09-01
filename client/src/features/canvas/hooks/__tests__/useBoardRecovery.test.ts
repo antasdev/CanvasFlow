@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
-import { useCanvasStore } from "../../store";
-import { useCommentStore } from "@/features/comments/store";
-import { socketClientService } from "@/services/socket";
-import { shapeApi } from "../../api/shape.api";
+import type { Comment } from "@/features/comments";
 import { commentApi } from "@/features/comments/api";
+import { useCommentStore } from "@/features/comments/store";
+import { socketClientService, type ShapeResponseDto } from "@/services/socket";
+
+import { shapeApi } from "../../api/shape.api";
 import { mapShapeResponseToShape } from "../../api/shape.mapper";
+import { useCanvasStore } from "../../store";
 
 vi.mock("@/services/socket", () => ({
   socketClientService: {
@@ -119,17 +121,18 @@ describe("Board Recovery Logic & State Integration Tests", () => {
       },
     };
 
-    const mockShapes = [
+    const mockShapes: ShapeResponseDto[] = [
       {
         id: "recovered-shape-1",
         canvasId: "canvas-1",
-        type: "rectangle" as const,
+        type: "rectangle",
         x: 300,
         y: 400,
         width: 150,
         height: 100,
         rotation: 0,
         zIndex: 1,
+        version: 1,
         style: {
           fill: "#10B981",
           stroke: "#047857",
@@ -142,10 +145,11 @@ describe("Board Recovery Logic & State Integration Tests", () => {
       },
     ];
 
-    const mockComments = [
+    const mockComments: Comment[] = [
       {
         id: "comment-1",
         boardId: "board-1",
+        canvasId: "canvas-1",
         shapeId: null,
         authorId: "user-1",
         author: {
@@ -153,18 +157,20 @@ describe("Board Recovery Logic & State Integration Tests", () => {
           fullName: "Alice",
         },
         parentCommentId: null,
+        position: null,
         content: "Authoritative comment recovered",
         isResolved: false,
         isEdited: false,
         isDeleted: false,
+        version: 1,
         createdAt: "2026-08-23T12:00:00.000Z",
         updatedAt: "2026-08-23T12:00:00.000Z",
       },
     ];
 
     vi.mocked(socketClientService.recoverBoard).mockResolvedValue(mockRecoveryState);
-    vi.mocked(shapeApi.getShapes).mockResolvedValue(mockShapes as any);
-    vi.mocked(commentApi.getComments).mockResolvedValue(mockComments as any);
+    vi.mocked(shapeApi.getShapes).mockResolvedValue(mockShapes);
+    vi.mocked(commentApi.getComments).mockResolvedValue(mockComments);
 
     // 4. Execute recovery hydration steps
     const [recoveryState, rawShapes, comments] = await Promise.all([

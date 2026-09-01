@@ -1,5 +1,7 @@
 import { Group, Path, Rect, Text } from "react-konva";
+
 import type { RemoteCursor } from "@/services/socket";
+
 import { getCursorColor, getCursorLabel } from "../utils/cursor.utils";
 
 type CollaboratorCursorProps = {

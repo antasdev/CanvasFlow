@@ -1,6 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { SocketClientService } from "./socket.client";
 import { SocketEvents } from "./socket.events";
+
+type MockCallback = (res: unknown) => void;
+
+interface MockSocket {
+  connected: boolean;
+  emit: (event: string, payload?: unknown, callback?: MockCallback) => void;
+  on?: (event: string, handler: (...args: unknown[]) => void) => void;
+  off?: (event: string, handler?: (...args: unknown[]) => void) => void;
+  auth?: Record<string, unknown>;
+}
+
+function setMockSocket(svc: SocketClientService, socket: MockSocket): void {
+  (svc as unknown as { socket: MockSocket }).socket = socket;
+}
 
 describe("SocketClientService", () => {
   let service: SocketClientService;
@@ -56,14 +71,15 @@ describe("SocketClientService", () => {
   });
 
   it("handles joinBoard success acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.BOARD_JOIN) {
-          callback({
+          const boardPayload = payload as { boardId: string };
+          callback?.({
             success: true,
             data: {
-              boardId: payload.boardId,
+              boardId: boardPayload.boardId,
               canvasId: "canvas-1",
               activeUsers: [{ userId: "user-1", role: "USER" }],
             },
@@ -72,7 +88,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const result = await service.joinBoard("board-123");
     expect(result.boardId).toBe("board-123");
@@ -86,11 +102,11 @@ describe("SocketClientService", () => {
   });
 
   it("handles joinBoard failure acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.BOARD_JOIN) {
-          callback({
+          callback?.({
             success: false,
             error: { code: "FORBIDDEN", message: "Access denied." },
           });
@@ -98,22 +114,22 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.joinBoard("forbidden-board")).rejects.toThrow("Access denied.");
   });
 
   it("handles leaveBoard success acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.BOARD_LEAVE) {
-          callback({ success: true });
+          callback?.({ success: true });
         }
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.leaveBoard("board-123")).resolves.toBeUndefined();
     expect(mockSocket.emit).toHaveBeenCalledWith(
@@ -145,11 +161,11 @@ describe("SocketClientService", () => {
       updatedAt: "2026-08-22T00:00:00.000Z",
     };
 
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.SHAPE_CREATE) {
-          callback({
+          callback?.({
             success: true,
             data: mockResponse,
           });
@@ -157,7 +173,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const result = await service.createShape({
       canvasId: "canvas-1",
@@ -178,11 +194,11 @@ describe("SocketClientService", () => {
   });
 
   it("handles createShape failure acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.SHAPE_CREATE) {
-          callback({
+          callback?.({
             success: false,
             error: { code: "BAD_REQUEST", message: "Invalid dimensions." },
           });
@@ -190,7 +206,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(
       service.createShape({
@@ -226,11 +242,11 @@ describe("SocketClientService", () => {
       updatedAt: "2026-08-22T00:00:00.000Z",
     };
 
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.SHAPE_UPDATE) {
-          callback({
+          callback?.({
             success: true,
             data: mockUpdatedResponse,
           });
@@ -238,7 +254,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const result = await service.updateShape("shape-1", {
       x: 50,
@@ -260,16 +276,16 @@ describe("SocketClientService", () => {
   });
 
   it("handles deleteShape success acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.SHAPE_DELETE) {
-          callback({ success: true });
+          callback?.({ success: true });
         }
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.deleteShape("shape-1")).resolves.toBeUndefined();
     expect(mockSocket.emit).toHaveBeenCalledWith(
@@ -280,12 +296,12 @@ describe("SocketClientService", () => {
   });
 
   it("handles moveCursor emitting cursor:move fire-and-forget", () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
       emit: vi.fn(),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     service.moveCursor("board-123", { x: 150, y: 250 });
 
@@ -300,12 +316,12 @@ describe("SocketClientService", () => {
   });
 
   it("handles changeSelection emitting selection:change fire-and-forget", () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
       emit: vi.fn(),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     service.changeSelection("board-123", ["shape-1", "shape-2"]);
 
@@ -327,14 +343,14 @@ describe("SocketClientService", () => {
       color: "#EF4444",
     };
 
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((_event, _payload, callback) => {
-        callback({ success: true, data: mockLockData });
+      emit: vi.fn((_event: string, _payload: unknown, callback?: MockCallback) => {
+        callback?.({ success: true, data: mockLockData });
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const result = await service.lockShape("board-123", "shape-1");
 
@@ -347,10 +363,10 @@ describe("SocketClientService", () => {
   });
 
   it("handles lockShape rejection on conflict error", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((_event, _payload, callback) => {
-        callback({
+      emit: vi.fn((_event: string, _payload: unknown, callback?: MockCallback) => {
+        callback?.({
           success: false,
           error: {
             code: "SHAPE_LOCKED",
@@ -360,7 +376,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.lockShape("board-123", "shape-1")).rejects.toThrow(
       "Shape is currently being edited by another collaborator."
@@ -368,14 +384,14 @@ describe("SocketClientService", () => {
   });
 
   it("handles unlockShape with acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((_event, _payload, callback) => {
-        callback({ success: true });
+      emit: vi.fn((_event: string, _payload: unknown, callback?: MockCallback) => {
+        callback?.({ success: true });
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.unlockShape("board-123", "shape-1")).resolves.toBeUndefined();
     expect(mockSocket.emit).toHaveBeenCalledWith(
@@ -386,14 +402,14 @@ describe("SocketClientService", () => {
   });
 
   it("handles refreshShapeLock with acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((_event, _payload, callback) => {
-        callback({ success: true });
+      emit: vi.fn((_event: string, _payload: unknown, callback?: MockCallback) => {
+        callback?.({ success: true });
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.refreshShapeLock("board-123", "shape-1")).resolves.toBeUndefined();
     expect(mockSocket.emit).toHaveBeenCalledWith(
@@ -404,12 +420,12 @@ describe("SocketClientService", () => {
   });
 
   it("emits shape:transforming fire-and-forget", () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
       emit: vi.fn(),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const payload = {
       boardId: "board-123",
@@ -429,12 +445,12 @@ describe("SocketClientService", () => {
   });
 
   it("emits shape:transform-end fire-and-forget", () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
       emit: vi.fn(),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     service.endShapeTransform("board-123", "shape-1");
     expect(mockSocket.emit).toHaveBeenCalledWith(
@@ -464,11 +480,11 @@ describe("SocketClientService", () => {
       },
     };
 
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.BOARD_RECOVERY_REQUEST) {
-          callback({
+          callback?.({
             success: true,
             data: mockRecoveryData,
           });
@@ -476,7 +492,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const result = await service.recoverBoard("board-123");
     expect(result.boardId).toBe("board-123");
@@ -491,11 +507,11 @@ describe("SocketClientService", () => {
   });
 
   it("handles recoverBoard failure acknowledgement", async () => {
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
-      emit: vi.fn((event: string, _payload: any, callback: (res: any) => void) => {
+      emit: vi.fn((event: string, _payload: unknown, callback?: MockCallback) => {
         if (event === SocketEvents.BOARD_RECOVERY_REQUEST) {
-          callback({
+          callback?.({
             success: false,
             error: { code: "FORBIDDEN", message: "Forbidden board recovery." },
           });
@@ -503,7 +519,7 @@ describe("SocketClientService", () => {
       }),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     await expect(service.recoverBoard("board-123")).rejects.toThrow(
       "Forbidden board recovery."
@@ -512,13 +528,14 @@ describe("SocketClientService", () => {
 
   it("subscribes and unsubscribes to onRecoveryState broadcasts", () => {
     const mockHandler = vi.fn();
-    const mockSocket: any = {
+    const mockSocket: MockSocket = {
       connected: true,
+      emit: vi.fn(),
       on: vi.fn(),
       off: vi.fn(),
     };
 
-    (service as any).socket = mockSocket;
+    setMockSocket(service, mockSocket);
 
     const unsubscribe = service.onRecoveryState(mockHandler);
     expect(mockSocket.on).toHaveBeenCalledWith(

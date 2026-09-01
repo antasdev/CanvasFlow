@@ -1,4 +1,5 @@
 import { api } from "@/services/api";
+
 import type { StrokeStyle, ShapeShadow } from "../types/shape.types";
 
 const SHAPE_ENDPOINT = "/shapes";

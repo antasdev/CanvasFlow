@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { useCanvasStore } from "./canvas.store";
 import type { TextShape, RectangleShape, LineShape } from "../types";
+
+import { useCanvasStore } from "./canvas.store";
 
 describe("canvas store history & remote synchronization", () => {
     beforeEach(() => {
@@ -1207,15 +1208,15 @@ describe("canvas store history & remote synchronization", () => {
             expect(updatedRect.strokeStyle).toBe("dotted");
 
             // Line should NOT have fill, but should have stroke, strokeWidth, strokeStyle
-            expect((updatedLine as any).fill).toBeUndefined();
+            expect("fill" in updatedLine).toBe(false);
             expect(updatedLine.stroke).toBe("#3b82f6");
             expect(updatedLine.strokeWidth).toBe(8);
             expect(updatedLine.strokeStyle).toBe("dotted");
 
             // Text should have fill (text color), but NOT stroke or strokeWidth or strokeStyle
             expect(updatedText.fill).toBe("#ef4444");
-            expect((updatedText as any).stroke).toBeUndefined();
-            expect((updatedText as any).strokeWidth).toBeUndefined();
+            expect("stroke" in updatedText).toBe(false);
+            expect("strokeWidth" in updatedText).toBe(false);
         });
 
         it("creates exactly ONE atomic undo step when multi-styling multiple shapes", () => {

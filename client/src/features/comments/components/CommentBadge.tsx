@@ -1,5 +1,5 @@
-import React from "react";
 import { MessageSquare } from "lucide-react";
+import React from "react";
 
 type CommentBadgeProps = {
   x: number;

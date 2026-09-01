@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { useAuthStore } from "@/store";
+
 import { authApi } from "../api";
 
 export const useAuthSession = (): void => {

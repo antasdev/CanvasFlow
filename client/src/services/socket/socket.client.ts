@@ -1,6 +1,9 @@
 import { io } from "socket.io-client";
+
 import { appConfig } from "@/config";
+import { useCollaborationStore } from "@/features/canvas/store";
 import { useAuthStore } from "@/store";
+
 import { SocketEvents } from "./socket.events";
 import type {
   BoardJoinAckData,
@@ -49,12 +52,39 @@ import type {
   ShapeResponseDto,
   TransformingShapePayload,
   TypedSocket,
+  SocketAckError,
   UpdateCommentPayload,
   UpdateShapePayload,
   WorkspaceMemberRoleUpdatedPayload,
 } from "./socket.types";
 
-import { useCollaborationStore } from "@/features/canvas/store";
+export interface SocketClientError extends Error {
+  code?: string;
+  mutationId?: string;
+  resourceType?: string;
+  resourceId?: string;
+  currentVersion?: number;
+  [key: string]: unknown;
+}
+
+function formatSocketError(
+  response: { error?: SocketAckError | string; mutationId?: string },
+  defaultMessage: string
+): SocketClientError {
+  const errorObj = typeof response.error === "object" && response.error !== null ? response.error : null;
+  const errorMessage =
+    typeof response.error === "string"
+      ? response.error
+      : response.error?.message ?? defaultMessage;
+  const err = new Error(errorMessage) as SocketClientError;
+  if (errorObj) {
+    Object.assign(err, errorObj);
+  }
+  if (response.mutationId) {
+    err.mutationId = response.mutationId;
+  }
+  return err;
+}
 
 /**
  * Encapsulated service managing Socket.IO client connections,
@@ -283,19 +313,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to create shape.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to create shape."));
         }
       });
     });
@@ -330,19 +348,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to update shape.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to update shape."));
         }
       });
     });
@@ -374,19 +380,7 @@ export class SocketClientService {
         if (response.success) {
           resolve();
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to delete shape.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to delete shape."));
         }
       });
     });
@@ -420,19 +414,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to group shapes.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to group shapes."));
         }
       });
     });
@@ -466,19 +448,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to ungroup shape.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to ungroup shape."));
         }
       });
     });
@@ -687,15 +657,7 @@ export class SocketClientService {
           if (response.success && response.data) {
             resolve(response.data);
           } else {
-            const errorMessage =
-              typeof response.error === "string"
-                ? response.error
-                : response.error?.message ?? "Failed to acquire shape lock.";
-            const err = new Error(errorMessage);
-            if (typeof response.error === "object" && response.error?.code) {
-              (err as any).code = response.error.code;
-            }
-            reject(err);
+            reject(formatSocketError(response, "Failed to acquire shape lock."));
           }
         }
       );
@@ -808,19 +770,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to create comment.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to create comment."));
         }
       });
     });
@@ -839,19 +789,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to update comment.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to update comment."));
         }
       });
     });
@@ -870,19 +808,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to resolve comment.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to resolve comment."));
         }
       });
     });
@@ -901,19 +827,7 @@ export class SocketClientService {
         if (response.success && response.data) {
           resolve(response.data);
         } else {
-          const errorObj = typeof response.error === "object" ? response.error : null;
-          const errorMessage =
-            typeof response.error === "string"
-              ? response.error
-              : response.error?.message ?? "Failed to delete comment.";
-          const err = new Error(errorMessage);
-          if (errorObj) {
-            Object.assign(err, errorObj);
-          }
-          if (response.mutationId) {
-            (err as any).mutationId = response.mutationId;
-          }
-          reject(err);
+          reject(formatSocketError(response, "Failed to delete comment."));
         }
       });
     });

@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
+
 import type { RectangleShape, CircleShape, GroupShape, ConnectorShape } from "../types";
+import { CLIPBOARD_VERSION } from "../types/clipboard.types";
+
 import {
   extractClipboardSceneGraph,
   cloneSceneGraphWithNewIds,
   validateClipboardPayload,
 } from "./clipboard.utils";
-import { CLIPBOARD_VERSION } from "../types/clipboard.types";
 
 function createRect(id: string, x: number, y: number, parentId: string | null = null): RectangleShape {
   return {

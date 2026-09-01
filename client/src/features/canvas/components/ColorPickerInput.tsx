@@ -25,13 +25,15 @@ export default function ColorPickerInput({
 }: ColorPickerInputProps): React.JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
   const [hexInput, setHexInput] = useState(value ?? "#000000");
+  const [prevValue, setPrevValue] = useState(value);
   const popoverRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value);
     if (value) {
       setHexInput(value);
     }
-  }, [value]);
+  }
 
   useEffect(() => {
     if (!isOpen) return;

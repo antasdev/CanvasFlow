@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { CanvasInteractionController } from "./canvas-interaction.controller";
+
 import { CANVAS_TOOLS } from "../constants";
+
+import { CanvasInteractionController } from "./canvas-interaction.controller";
 
 describe("CanvasInteractionController", () => {
   let controller: CanvasInteractionController;

@@ -1,6 +1,8 @@
 import { Fragment } from "react";
 import { Group, Rect, Text } from "react-konva";
+
 import type { RemoteSelection } from "@/services/socket";
+
 import type { Shape } from "../types";
 import { getCursorColor, getCursorLabel } from "../utils/cursor.utils";
 

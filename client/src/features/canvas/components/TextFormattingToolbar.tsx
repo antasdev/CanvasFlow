@@ -1,4 +1,3 @@
-import React from "react";
 import {
   Bold,
   Italic,
@@ -7,8 +6,11 @@ import {
   AlignCenter,
   AlignRight,
 } from "lucide-react";
+import React from "react";
 import { toast } from "sonner";
+
 import { socketClientService } from "@/services/socket";
+
 import type { TextShape, TextFontStyle, TextDecoration, TextAlign } from "../types";
 import {
   AVAILABLE_FONT_FAMILIES,

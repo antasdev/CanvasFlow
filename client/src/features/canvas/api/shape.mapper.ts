@@ -16,6 +16,7 @@ import type {
   ShapeShadow,
   StrokeStyle,
 } from "../types";
+
 import type { ShapeResponseDto, ShapeShadowDto } from "./shape.api";
 
 function mapShadowDto(shadow?: ShapeShadowDto): ShapeShadow | undefined {

@@ -5,6 +5,9 @@ import type {
   MarqueeState,
   ShapeGeometryDefinition,
 } from "../types";
+
+import type { AABB } from "./alignment.utils";
+import { getShapeWorldBounds } from "./group-geometry.utils";
 import {
   calculateCircleGeometry,
   calculateEllipseGeometry,
@@ -12,8 +15,6 @@ import {
   calculatePolygonPoints,
   calculateStarPoints,
 } from "./shape-geometry.utils";
-import { getShapeWorldBounds } from "./group-geometry.utils";
-import type { AABB } from "./alignment.utils";
 
 const EPSILON = 1e-6;
 

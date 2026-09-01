@@ -1,4 +1,5 @@
 import type { Shape, AnchorPosition } from "../types";
+
 import { getShapeWorldBounds } from "./group-geometry.utils";
 
 export type { AnchorPosition };

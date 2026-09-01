@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useInteractionStore } from "./interaction.store";
-import { useCanvasStore } from "./canvas.store";
-import { useMutationStore } from "./mutation.store";
+
 import type { CollaborativeInteraction } from "@/services/socket";
+
+import { useCanvasStore } from "./canvas.store";
+import { useInteractionStore } from "./interaction.store";
+import { useMutationStore } from "./mutation.store";
+
 
 describe("Interaction Store (Slice 16) Unit Tests", () => {
   beforeEach(() => {

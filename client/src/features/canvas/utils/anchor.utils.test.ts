@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+
+import type { Shape, RectangleShape, LineShape } from "../types";
+
 import {
   rotatePoint,
   getShapeCenter,
@@ -7,7 +10,6 @@ import {
   isConnectableShape,
   findNearestAnchor,
 } from "./anchor.utils";
-import type { Shape, RectangleShape, LineShape } from "../types";
 
 describe("anchor.utils", () => {
   const rectShape: RectangleShape = {

@@ -1,8 +1,9 @@
-import React, { useState } from "react";
 import { Edit2, Trash2, MoreVertical } from "lucide-react";
+import React, { useState } from "react";
 
-import { useAuthStore } from "@/store";
 import { getCursorColor } from "@/features/canvas/utils/cursor.utils";
+import { useAuthStore } from "@/store";
+
 import type { Comment } from "../types";
 
 type CommentItemProps = {

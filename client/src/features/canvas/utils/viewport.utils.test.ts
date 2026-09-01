@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+
+import { screenToWorld } from "./canvas.coordinates";
 import {
   clampZoom,
   calculatePointerZoom,
@@ -6,7 +8,6 @@ import {
   calculatePanDelta,
   formatZoomPercentage,
 } from "./viewport.utils";
-import { screenToWorld } from "./canvas.coordinates";
 
 describe("viewport.utils", () => {
   describe("clampZoom", () => {

@@ -1,17 +1,19 @@
-import { useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
+import { useEffect } from "react";
+import { useParams, Link } from "react-router-dom";
 
-import CanvasEditor from "../components/CanvasEditor";
-import CanvasToolbar from "../components/CanvasToolbar";
-import PresenceAvatars from "../components/PresenceAvatars";
-import BoardSyncStatus from "../components/BoardSyncStatus";
-import { useBoardCanvases } from "../hooks";
 import { useBoard } from "@/features/board/hooks";
 import { useWorkspace, useWorkspacePermissions } from "@/features/workspace";
 import { workspaceQueryKeys } from "@/features/workspace/constants";
 import { socketClientService } from "@/services/socket";
+
+import BoardSyncStatus from "../components/BoardSyncStatus";
+import CanvasEditor from "../components/CanvasEditor";
+import CanvasToolbar from "../components/CanvasToolbar";
+import PresenceAvatars from "../components/PresenceAvatars";
+import { useBoardCanvases } from "../hooks";
+
 
 export default function BoardCanvasPage(): React.JSX.Element {
   const { boardId } = useParams<{

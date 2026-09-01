@@ -10,6 +10,8 @@ import { ShapeType } from "@/modules/shape/shape.types";
 import { UserModel } from "@/modules/user/user.model";
 import { UserRole } from "@/modules/user/user.types";
 import { WorkspaceModel } from "@/modules/workspace/workspace.model";
+import { WorkspaceMemberModel } from "@/modules/workspace/workspaceMember.model";
+import { WorkspaceRole } from "@/modules/workspace/workspace.types";
 import { shapeLockManager } from "../locks/shape-lock.manager";
 import { SocketEvents } from "../socket.events";
 import { SocketServer } from "../socket.server";
@@ -34,6 +36,7 @@ async function runTests(): Promise<void> {
   // Clean test collections
   await UserModel.deleteMany({ email: /@slice8-test\.com$/ });
   await WorkspaceModel.deleteMany({ name: /Slice 8 Workspace/ });
+  await WorkspaceMemberModel.deleteMany({});
   await BoardModel.deleteMany({ name: /Slice 8 Board/ });
   await CanvasModel.deleteMany({});
   await ShapeModel.deleteMany({});
@@ -90,6 +93,12 @@ async function runTests(): Promise<void> {
     name: "Slice 8 Workspace 1",
     ownerId: user1._id,
     visibility: "PUBLIC",
+  });
+
+  await WorkspaceMemberModel.create({
+    workspaceId: ws1._id,
+    userId: user2._id,
+    role: WorkspaceRole.EDITOR,
   });
 
   const ws2 = await WorkspaceModel.create({

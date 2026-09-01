@@ -1,18 +1,18 @@
 import type { Shape, TextShape, StickyNoteShape } from "../types";
 
-import RectangleNode from "./RectangleNode";
-import CircleNode from "./CircleNode";
-import EllipseNode from "./EllipseNode";
-import TriangleNode from "./TriangleNode";
-import PolygonNode from "./PolygonNode";
-import StarNode from "./StarNode";
-import TextNode from "./TextNode";
-import StickyNoteNode from "./StickyNoteNode";
-import FreehandNode from "./FreehandNode";
-import LineNode from "./LineNode";
 import ArrowNode from "./ArrowNode";
+import CircleNode from "./CircleNode";
 import ConnectorNode from "./ConnectorNode";
+import EllipseNode from "./EllipseNode";
+import FreehandNode from "./FreehandNode";
 import GroupNode from "./GroupNode";
+import LineNode from "./LineNode";
+import PolygonNode from "./PolygonNode";
+import RectangleNode from "./RectangleNode";
+import StarNode from "./StarNode";
+import StickyNoteNode from "./StickyNoteNode";
+import TextNode from "./TextNode";
+import TriangleNode from "./TriangleNode";
 
 type ShapeRendererProps = {
   shape: Shape;

@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+
+import type { RectangleShape, LineShape, TextShape, StickyNoteShape } from "../types/shape.types";
+
 import {
   getKonvaDash,
   getKonvaStyleProps,
@@ -6,7 +9,6 @@ import {
   getShapeStyle,
   DEFAULT_SHADOW,
 } from "./shape-style.utils";
-import type { RectangleShape, LineShape, TextShape, StickyNoteShape } from "../types/shape.types";
 
 describe("Shape Style Utilities", () => {
   it("resolves Konva dash patterns properly", () => {

@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuthStore } from "@/store";
+
 import { ROUTES } from "./route.constants";
 
 export default function PublicRoute(): React.JSX.Element {

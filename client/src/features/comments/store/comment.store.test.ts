@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useCanvasStore } from "@/features/canvas/store/canvas.store";
-import { useCommentStore } from "./comment.store";
+
 import type { Comment } from "../types";
+
+import { useCommentStore } from "./comment.store";
 
 const mockComment: Comment = {
   id: "comment_1",

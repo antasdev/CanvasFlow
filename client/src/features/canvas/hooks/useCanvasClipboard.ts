@@ -1,7 +1,9 @@
 import { useCallback, useEffect } from "react";
 import { toast } from "sonner";
+
 import { socketClientService } from "@/services/socket";
 import type { PasteShapeItemPayload } from "@/services/socket";
+
 import { mapShapeResponseToShape } from "../api";
 import { clipboardService } from "../services/clipboard.service";
 import { useCanvasStore } from "../store";

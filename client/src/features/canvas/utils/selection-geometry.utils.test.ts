@@ -1,4 +1,13 @@
 import { describe, expect, it } from "vitest";
+
+import type {
+  RectangleShape,
+  CircleShape,
+  TriangleShape,
+  LineShape,
+  Shape,
+} from "../types";
+
 import {
   pointInPolygon,
   segmentsIntersect,
@@ -13,13 +22,6 @@ import {
   hitTestPointWithShape,
   marqueeToPolygon,
 } from "./selection-geometry.utils";
-import type {
-  RectangleShape,
-  CircleShape,
-  TriangleShape,
-  LineShape,
-  Shape,
-} from "../types";
 
 describe("selection-geometry.utils", () => {
   describe("pointInPolygon", () => {

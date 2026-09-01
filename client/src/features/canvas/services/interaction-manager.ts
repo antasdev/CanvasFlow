@@ -5,8 +5,9 @@ import type {
   InteractionTarget,
   InteractionType,
 } from "@/services/socket";
-import { useInteractionStore } from "../store/interaction.store";
 import { useAuthStore } from "@/store";
+
+import { useInteractionStore } from "../store/interaction.store";
 
 export interface StartInteractionResponse {
   success: boolean;
@@ -68,22 +69,24 @@ export class FrontendInteractionManager {
     );
 
     if (!result.success || !result.interactionId) {
-      if (result.error?.code === "INTERACTION_CONFLICT") {
+      if (typeof result.error === "object" && result.error?.code === "INTERACTION_CONFLICT") {
+        const err = result.error;
         return {
           success: false,
           conflict: {
             code: "INTERACTION_CONFLICT",
-            resourceType: (result.error.resourceType as any) ?? "shape",
-            resourceId: result.error.resourceId ?? targets[0]?.id ?? "",
-            ownerUserId: result.error.ownerUserId ?? "unknown",
-            interactionType: (result.error.interactionType as any) ?? type,
+            resourceType: err.resourceType === "comment" ? "comment" : "shape",
+            resourceId: err.resourceId ?? targets[0]?.id ?? "",
+            ownerUserId: err.ownerUserId ?? "unknown",
+            interactionType: (err.interactionType as InteractionType) ?? type,
           },
         };
       }
 
+      const errMsg = typeof result.error === "object" ? result.error?.message : result.error;
       return {
         success: false,
-        error: result.error?.message ?? "Failed to start interaction.",
+        error: errMsg ?? "Failed to start interaction.",
       };
     }
 

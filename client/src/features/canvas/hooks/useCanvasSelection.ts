@@ -1,5 +1,9 @@
-import { useCallback, useRef, useState } from "react";
 import type Konva from "konva";
+import { useCallback, useMemo, useState } from "react";
+
+import type { PresenceActivity } from "@/services/socket";
+
+import { SelectionController } from "../services/selection.controller";
 import { useCanvasStore } from "../store";
 import type {
   MarqueeState,
@@ -7,8 +11,23 @@ import type {
   SelectionPoint,
   SelectionMode,
 } from "../types";
-import { SelectionController } from "../services/selection.controller";
-import type { PresenceActivity } from "@/services/socket";
+
+
+export interface UseCanvasSelectionReturn {
+  marquee: MarqueeState | null;
+  lasso: LassoState | null;
+  isSelecting: boolean;
+  startSelection: (
+    worldPoint: SelectionPoint,
+    event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
+  ) => boolean;
+  updateSelection: (worldPoint: SelectionPoint) => void;
+  endSelection: () => void;
+  handleShapeClick: (
+    shapeId: string,
+    event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
+  ) => void;
+}
 
 export type UseCanvasSelectionOptions = {
   boardId?: string;
@@ -16,57 +35,34 @@ export type UseCanvasSelectionOptions = {
   emitActivity?: (activity: PresenceActivity) => void;
 };
 
-export function useCanvasSelection({
-  emitActivity,
-}: UseCanvasSelectionOptions = {}) {
-  const activeTool = useCanvasStore((state) => state.activeTool);
-  const shapes = useCanvasStore((state) => state.shapes);
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
-  const editingGroupId = useCanvasStore((state) => state.editingGroupId);
-  const setSelectedShapeIds = useCanvasStore((state) => state.setSelectedShapeIds);
-  const clearSelection = useCanvasStore((state) => state.clearSelection);
-  const exitGroup = useCanvasStore((state) => state.exitGroup);
-
+export function useCanvasSelection(
+  optionsOrEmitActivity?: UseCanvasSelectionOptions | ((activity: PresenceActivity) => void)
+): UseCanvasSelectionReturn {
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const [lasso, setLasso] = useState<LassoState | null>(null);
   const [isSelecting, setIsSelecting] = useState<boolean>(false);
 
-  // Keep latest values accessible in controller closures
-  const stateRef = useRef({
-    activeTool,
-    shapes,
-    selectedShapeIds,
-    editingGroupId,
-    setSelectedShapeIds,
-    clearSelection,
-    exitGroup,
-    emitActivity,
-  });
+  const emitActivity =
+    typeof optionsOrEmitActivity === "function"
+      ? optionsOrEmitActivity
+      : optionsOrEmitActivity?.emitActivity;
 
-  stateRef.current = {
-    activeTool,
-    shapes,
-    selectedShapeIds,
-    editingGroupId,
-    setSelectedShapeIds,
-    clearSelection,
-    exitGroup,
-    emitActivity,
-  };
-
-  const controllerRef = useRef<SelectionController | null>(null);
-  if (!controllerRef.current) {
-    controllerRef.current = new SelectionController({
-      getActiveTool: () => stateRef.current.activeTool,
-      getShapes: () => stateRef.current.shapes,
-      getSelectedShapeIds: () => stateRef.current.selectedShapeIds,
-      getEditingGroupId: () => stateRef.current.editingGroupId,
-      setSelectedShapeIds: (ids) => stateRef.current.setSelectedShapeIds(ids),
-      clearSelection: () => stateRef.current.clearSelection(),
-      exitGroup: () => stateRef.current.exitGroup(),
-      onActivity: (activity) => stateRef.current.emitActivity?.(activity),
-    });
-  }
+  const controller = useMemo(
+    () =>
+      new SelectionController({
+        getActiveTool: () => useCanvasStore.getState().activeTool,
+        getShapes: () => useCanvasStore.getState().shapes,
+        getSelectedShapeIds: () => useCanvasStore.getState().selectedShapeIds,
+        getEditingGroupId: () => useCanvasStore.getState().editingGroupId,
+        setSelectedShapeIds: (ids) => useCanvasStore.getState().setSelectedShapeIds(ids),
+        clearSelection: () => useCanvasStore.getState().clearSelection(),
+        exitGroup: () => useCanvasStore.getState().exitGroup(),
+        onActivity: (activity) => {
+          emitActivity?.(activity);
+        },
+      }),
+    [emitActivity]
+  );
 
   const getSelectionMode = useCallback(
     (event: Konva.KonvaEventObject<MouseEvent | TouchEvent>): SelectionMode => {
@@ -83,13 +79,10 @@ export function useCanvasSelection({
   );
 
   const syncStateFromController = useCallback(() => {
-    const ctrl = controllerRef.current;
-    if (ctrl) {
-      setMarquee(ctrl.getMarquee());
-      setLasso(ctrl.getLasso());
-      setIsSelecting(ctrl.isSelecting());
-    }
-  }, []);
+    setMarquee(controller.getMarquee());
+    setLasso(controller.getLasso());
+    setIsSelecting(controller.isSelecting());
+  }, [controller]);
 
   const startSelection = useCallback(
     (
@@ -97,25 +90,25 @@ export function useCanvasSelection({
       event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
     ): boolean => {
       const mode = getSelectionMode(event);
-      const started = controllerRef.current?.startSelection(worldPoint, mode) ?? false;
+      const started = controller.startSelection(worldPoint, mode);
       syncStateFromController();
       return started;
     },
-    [getSelectionMode, syncStateFromController]
+    [controller, getSelectionMode, syncStateFromController]
   );
 
   const updateSelection = useCallback(
     (worldPoint: SelectionPoint): void => {
-      controllerRef.current?.updateSelection(worldPoint);
+      controller.updateSelection(worldPoint);
       syncStateFromController();
     },
-    [syncStateFromController]
+    [controller, syncStateFromController]
   );
 
   const endSelection = useCallback((): void => {
-    controllerRef.current?.endSelection();
+    controller.endSelection();
     syncStateFromController();
-  }, [syncStateFromController]);
+  }, [controller, syncStateFromController]);
 
   const handleShapeClick = useCallback(
     (
@@ -123,9 +116,9 @@ export function useCanvasSelection({
       event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
     ): void => {
       const mode = getSelectionMode(event);
-      controllerRef.current?.handleShapeClick(shapeId, mode);
+      controller.handleShapeClick(shapeId, mode);
     },
-    [getSelectionMode]
+    [controller, getSelectionMode]
   );
 
   return {

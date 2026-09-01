@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { usePresenceStore, useCollaborationStore } from "../../store";
+
 import type {
   PresenceSnapshotPayload,
   PresenceUserJoinedPayload,
@@ -7,6 +7,8 @@ import type {
   PresenceCursorBroadcastPayload,
   PresenceActivityBroadcastPayload,
 } from "@/services/socket";
+
+import { usePresenceStore, useCollaborationStore } from "../../store";
 
 describe("Presence Socket Logic (Slice 15) Integration Tests", () => {
   beforeEach(() => {

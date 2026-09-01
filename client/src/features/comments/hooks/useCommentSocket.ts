@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 
+import { useCollaborationStore } from "@/features/canvas/store";
 import { socketClientService } from "@/services/socket";
 import type { CommentResponseDto } from "@/services/socket";
-import { useCollaborationStore } from "@/features/canvas/store";
+
 import { mapCommentResponseToComment } from "../api";
 import { useCommentStore } from "../store";
 
@@ -89,7 +90,7 @@ export function useCommentSocket(
 
     const unsubDeleted = socketClientService.onCommentDeleted((payload) => {
       const meta = "meta" in payload ? payload.meta : undefined;
-      const commentId = "commentId" in payload ? payload.commentId : (payload as any).commentId;
+      const commentId = payload.commentId;
 
       if (payload.boardId !== boardId) return;
 

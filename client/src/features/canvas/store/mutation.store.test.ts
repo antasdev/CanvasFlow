@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useMutationStore } from "./mutation.store";
+
 import { useCanvasStore } from "./canvas.store";
+import { useMutationStore } from "./mutation.store";
 import type { PendingMutation } from "./mutation.store";
 
 describe("Mutation Store (Slice 13) Unit Tests", () => {

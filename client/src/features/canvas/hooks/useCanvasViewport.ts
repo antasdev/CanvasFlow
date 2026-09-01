@@ -1,12 +1,13 @@
-import { useCallback, useRef, useState } from "react";
 import type Konva from "konva";
-import { useCanvasStore } from "../store";
+import { useCallback, useRef, useState } from "react";
+
 import {
   DEFAULT_ZOOM,
   ZOOM_STEP,
   MIN_ZOOM,
   MAX_ZOOM,
 } from "../constants";
+import { useCanvasStore } from "../store";
 import type { CanvasPoint } from "../utils/canvas.coordinates";
 import {
   calculatePointerZoom,

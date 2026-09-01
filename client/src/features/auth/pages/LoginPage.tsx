@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 
-import { ROUTES } from "@/app/router/route.constants";
 import AuthLayout from "@/app/layouts/AuthLayout";
+import { ROUTES } from "@/app/router/route.constants";
+
 import AuthCard from "../components/AuthCard";
 import LoginForm from "../components/LoginForm";
 

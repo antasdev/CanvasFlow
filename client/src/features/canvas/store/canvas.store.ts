@@ -1,26 +1,27 @@
 import { create } from "zustand";
 
-import {
-  CANVAS_TOOLS,
-  type CanvasTool,
-} from "../constants";
-import type { Shape, TextShape, ShapeStyle } from "../types";
-import { isShapeCompatibleWithProperty } from "../utils/shape-style-capabilities.utils";
-import { computeGroupBoundingBox, localToWorld } from "../utils/group-geometry.utils";
-import {
-  calculateAlignmentTargets,
-  calculateDistributionTargets,
-  type AlignmentAxis,
-  type DistributionAxis,
-} from "../utils/alignment.utils";
-import type { SmartGuide } from "../utils/smart-guides.utils";
-import { resolveSelectAll } from "../utils/selection-policy.utils";
 import type {
   RemoteCursor,
   RemoteSelection,
   RemoteShapeLock,
   RemoteShapeTransform,
 } from "@/services/socket";
+
+import {
+  CANVAS_TOOLS,
+  type CanvasTool,
+} from "../constants";
+import type { Shape, TextShape, ShapeStyle } from "../types";
+import {
+  calculateAlignmentTargets,
+  calculateDistributionTargets,
+  type AlignmentAxis,
+  type DistributionAxis,
+} from "../utils/alignment.utils";
+import { computeGroupBoundingBox, localToWorld } from "../utils/group-geometry.utils";
+import { resolveSelectAll } from "../utils/selection-policy.utils";
+import { isShapeCompatibleWithProperty } from "../utils/shape-style-capabilities.utils";
+import type { SmartGuide } from "../utils/smart-guides.utils";
 
 export type {
   RemoteCursor,

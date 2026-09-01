@@ -1,14 +1,33 @@
+import type { Comment } from "@/features/comments/types/comment.types";
 import { socketClientService } from "@/services/socket";
 import type { ShapeResponseDto } from "@/services/socket";
+
 import { useCanvasStore } from "../store/canvas.store";
+import type { CollaborationConflict } from "../store/collaboration.store";
 import { useMutationStore } from "../store/mutation.store";
 import type {
   PendingMutation,
   ShapeMutationIntent,
   CommentMutationIntent,
 } from "../store/mutation.store";
-import type { Shape } from "../types/shape.types";
-import type { Comment } from "@/features/comments/types/comment.types";
+import type { Shape, ShapeStyle } from "../types/shape.types";
+
+/**
+ * Helper to safely extract error code and message from unknown socket errors.
+ */
+function extractSocketError(err: unknown): { code?: string; message?: string } {
+  if (typeof err === "object" && err !== null) {
+    const e = err as Record<string, unknown>;
+    return {
+      code: typeof e.code === "string" ? e.code : undefined,
+      message: typeof e.message === "string" ? e.message : undefined,
+    };
+  }
+  if (typeof err === "string") {
+    return { message: err };
+  }
+  return {};
+}
 
 /**
  * Generates a standard RFC 4122 v4 UUID.
@@ -106,7 +125,7 @@ export class MutationManager {
       width: number;
       height: number;
       rotation?: number;
-      style?: any;
+      style?: ShapeStyle;
     },
     temporaryId?: string,
     existingMutationId?: string
@@ -152,16 +171,17 @@ export class MutationManager {
       }
 
       return response;
-    } catch (err: any) {
+    } catch (err: unknown) {
       this.clearTimeout(mutationId);
-      if (err?.code === "CONFLICT") {
-        useMutationStore.getState().markConflicted(mutationId, err);
-      } else if (err?.code === "MUTATION_IN_PROGRESS") {
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
         useMutationStore.getState().markUncertain(mutationId);
-      } else if (err?.code === "IDEMPOTENCY_KEY_REUSED") {
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
         useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
-        useMutationStore.getState().markFailed(mutationId, err?.message ?? "Creation failed");
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Creation failed");
       }
       throw err;
     }
@@ -195,7 +215,7 @@ export class MutationManager {
   public async executeShapeUpdate(
     boardId: string,
     shapeId: string,
-    data: any,
+    data: Record<string, unknown> | Partial<Shape>,
     expectedVersion?: number,
     existingMutationId?: string
   ): Promise<ShapeResponseDto> {
@@ -230,16 +250,17 @@ export class MutationManager {
       this.clearTimeout(mutationId);
       useMutationStore.getState().markConfirmed(mutationId);
       return response;
-    } catch (err: any) {
+    } catch (err: unknown) {
       this.clearTimeout(mutationId);
-      if (err?.code === "CONFLICT") {
-        useMutationStore.getState().markConflicted(mutationId, err);
-      } else if (err?.code === "MUTATION_IN_PROGRESS") {
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
         useMutationStore.getState().markUncertain(mutationId);
-      } else if (err?.code === "IDEMPOTENCY_KEY_REUSED") {
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
         useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
-        useMutationStore.getState().markFailed(mutationId, err?.message ?? "Update failed");
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Update failed");
       }
       throw err;
     }
@@ -277,16 +298,17 @@ export class MutationManager {
       await socketClientService.deleteShape(shapeId, expectedVersion, mutationId);
       this.clearTimeout(mutationId);
       useMutationStore.getState().markConfirmed(mutationId);
-    } catch (err: any) {
+    } catch (err: unknown) {
       this.clearTimeout(mutationId);
-      if (err?.code === "CONFLICT") {
-        useMutationStore.getState().markConflicted(mutationId, err);
-      } else if (err?.code === "MUTATION_IN_PROGRESS") {
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
         useMutationStore.getState().markUncertain(mutationId);
-      } else if (err?.code === "IDEMPOTENCY_KEY_REUSED") {
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
         useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
-        useMutationStore.getState().markFailed(mutationId, err?.message ?? "Delete failed");
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Delete failed");
       }
       throw err;
     }
@@ -469,10 +491,20 @@ export class MutationManager {
       } else if (intent?.payload) {
         // Case B: Safe to retry create
         try {
+          const payload = intent.payload as {
+            type: "rectangle" | "text" | "sticky_note";
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+            rotation?: number;
+            style?: ShapeStyle;
+            canvasId?: string;
+          };
           await this.executeShapeCreate(
             boardId,
-            intent.payload.canvasId,
-            intent.payload,
+            typeof payload.canvasId === "string" ? payload.canvasId : "",
+            payload,
             intent.temporaryId,
             mutation.mutationId
           );
@@ -565,20 +597,22 @@ export class MutationManager {
       } else if (currentVersion === expectedVersion) {
         try {
           if (mutation.operation === "update") {
+            const content = typeof intent?.payload?.content === "string" ? intent.payload.content : "";
             await socketClientService.updateComment({
               boardId,
               commentId: mutation.resourceId,
               mutationId: mutation.mutationId,
               expectedVersion,
-              content: intent?.payload?.content ?? "",
+              content,
             });
           } else {
+            const isResolved = typeof intent?.payload?.isResolved === "boolean" ? intent.payload.isResolved : true;
             await socketClientService.resolveComment({
               boardId,
               commentId: mutation.resourceId,
               mutationId: mutation.mutationId,
               expectedVersion,
-              isResolved: intent?.payload?.isResolved ?? true,
+              isResolved,
             });
           }
           useMutationStore.getState().markConfirmed(mutation.mutationId);
@@ -607,12 +641,17 @@ export class MutationManager {
         return "confirmed";
       } else if (intent?.payload) {
         try {
+          const commentPayload = intent.payload as {
+            content?: string;
+            shapeId?: string | null;
+            parentCommentId?: string | null;
+          };
           await socketClientService.createComment({
             boardId,
             mutationId: mutation.mutationId,
-            content: intent.payload.content,
-            shapeId: intent.payload.shapeId,
-            parentCommentId: intent.payload.parentCommentId,
+            content: typeof commentPayload.content === "string" ? commentPayload.content : "",
+            shapeId: commentPayload.shapeId ?? null,
+            parentCommentId: commentPayload.parentCommentId ?? null,
           });
           useMutationStore.getState().markConfirmed(mutation.mutationId);
           return "retried";
@@ -625,17 +664,18 @@ export class MutationManager {
     return "conflicted";
   }
 
-  private shapeContainsChanges(shape: Shape, changes: Partial<Shape> | Record<string, any>): boolean {
+  private shapeContainsChanges(shape: Shape, changes: Partial<Shape> | Record<string, unknown>): boolean {
+    const shapeRecord = shape as unknown as Record<string, unknown>;
     for (const [key, val] of Object.entries(changes)) {
       if (val === undefined) continue;
-      if (key === "style" && typeof val === "object") {
+      if (key === "style" && typeof val === "object" && val !== null) {
         // Compare style sub-fields if present
         for (const [sKey, sVal] of Object.entries(val)) {
-          if (sVal !== undefined && (shape as any)[sKey] !== sVal) {
+          if (sVal !== undefined && shapeRecord[sKey] !== sVal) {
             return false;
           }
         }
-      } else if ((shape as any)[key] !== val) {
+      } else if (shapeRecord[key] !== val) {
         return false;
       }
     }

@@ -4,6 +4,7 @@ import {
   DEFAULT_ZOOM,
   ZOOM_STEP,
 } from "../constants";
+
 import type { CanvasPoint, CanvasTransform } from "./canvas.coordinates";
 import { screenToWorld } from "./canvas.coordinates";
 

@@ -1,6 +1,7 @@
 import { useMutation } from "@tanstack/react-query";
 
 import { useAuthStore } from "@/store";
+
 import { authApi } from "../api";
 
 export const useRegister = () => {

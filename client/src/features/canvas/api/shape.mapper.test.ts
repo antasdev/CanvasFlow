@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { mapShapeResponseToShape, mapShapeResponseToRectangleShape } from "./shape.mapper";
 import type {
   ShapeResponseDto,
   RectangleShapeResponseDto,
   TextShapeResponseDto,
   StickyNoteShapeResponseDto,
 } from "./shape.api";
+import { mapShapeResponseToShape, mapShapeResponseToRectangleShape } from "./shape.mapper";
 
 describe("Shape Mapper", () => {
   it("maps ShapeResponseDto to RectangleShape correctly", () => {

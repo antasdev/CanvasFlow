@@ -15,10 +15,7 @@ import { useBoards } from "../hooks";
 import type { Board } from "../types";
 
 export const WorkspaceBoardsPage = (): React.JSX.Element => {
-  console.log(
-  "WorkspaceBoardsPage rendered",
-);
-    const navigate = useNavigate();
+  const navigate = useNavigate();
   const { workspaceId } = useParams<{
     workspaceId: string;
   }>();
@@ -50,23 +47,16 @@ export const WorkspaceBoardsPage = (): React.JSX.Element => {
   }
 
   const handleOpenBoard = (boardId: string): void => {
-    console.log("BOARDS:", boards);
-  navigate(buildRoutes.boardDetails(boardId));
-};
+    navigate(buildRoutes.boardDetails(boardId));
+  };
 
   const handleEditBoard = (board: Board): void => {
-  console.log("EDIT BOARD:", board);
-  console.log("EDIT BOARD ID:", board.id);
+    setEditingBoard(board);
+  };
 
-  setEditingBoard(board);
-};
-
-const handleDeleteBoard = (board: Board): void => {
-  console.log("DELETE BOARD:", board);
-  console.log("DELETE BOARD ID:", board.id);
-
-  setDeletingBoard(board);
-};
+  const handleDeleteBoard = (board: Board): void => {
+    setDeletingBoard(board);
+  };
 
   const handleCreateBoard = (): void => {
     setIsCreateDialogOpen(true);

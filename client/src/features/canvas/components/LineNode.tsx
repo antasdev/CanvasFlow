@@ -7,8 +7,8 @@ import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
 import type { LineShape } from "../types";
-import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
 import { getKonvaStyleProps } from "../utils/shape-style.utils";
+import { computeBoundingBox, normalizePointsToLocal } from "../utils/stroke-simplification";
 
 type LineNodeProps = {
   shape: LineShape;

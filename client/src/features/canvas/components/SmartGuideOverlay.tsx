@@ -1,5 +1,6 @@
 import React, { memo } from "react";
 import { Group, Line } from "react-konva";
+
 import { useCanvasStore } from "../store";
 
 /**

@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+
+import type { RectangleShape, GroupShape, StarShape, Shape } from "../types";
+
 import {
   getSelectableShapes,
   resolveGroupHit,
@@ -7,7 +10,6 @@ import {
   resolveSelectAll,
   filterCandidateShapes,
 } from "./selection-policy.utils";
-import type { RectangleShape, GroupShape, StarShape, Shape } from "../types";
 
 describe("selection-policy.utils", () => {
   const rect1: RectangleShape = {

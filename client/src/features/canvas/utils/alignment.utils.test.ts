@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+
 import type { RectangleShape, GroupShape } from "../types";
+
 import {
   calculateAlignmentTargets,
   calculateDistributionTargets,

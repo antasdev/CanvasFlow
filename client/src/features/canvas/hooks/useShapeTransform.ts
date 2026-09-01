@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useRef } from "react";
 import type Konva from "konva";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+
 import { socketClientService } from "@/services/socket";
+
 import { useCanvasStore } from "../store";
 import type { Shape, SelectionMode } from "../types";
+import { getShapeWorldAABB } from "../utils/alignment.utils";
+import { resolveSelectionWithModifiers } from "../utils/selection-policy.utils";
 import {
   findSmartGuideCandidates,
   calculateSmartGuides,
   type SmartGuideCandidate,
 } from "../utils/smart-guides.utils";
-import { getShapeWorldAABB } from "../utils/alignment.utils";
-import { resolveSelectionWithModifiers } from "../utils/selection-policy.utils";
 
 function getAllDescendantIds(rootId: string, shapes: Shape[]): Set<string> {
   const result = new Set<string>([rootId]);
@@ -131,10 +133,7 @@ export const useShapeTransform = ({
   }, [clearSmartGuides]);
 
   // Compute effective display coordinates
-  const isTransformActive =
-    isLockedByOther &&
-    Boolean(remoteTransform) &&
-    Date.now() - (remoteTransform?.lastUpdatedAt ?? 0) < 3000;
+  const isTransformActive = isLockedByOther && Boolean(remoteTransform);
 
   const displayTransform: TransformValues = isTransformActive && remoteTransform
     ? {

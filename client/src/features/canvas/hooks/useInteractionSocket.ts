@@ -1,15 +1,19 @@
 import { useEffect, useCallback } from "react";
+
 import { socketClientService } from "@/services/socket";
 import type {
+  CollaborativeInteraction,
   InteractionBroadcastPayload,
   InteractionEndBroadcastPayload,
   InteractionTarget,
   InteractionType,
 } from "@/services/socket";
-import { useInteractionStore, useCollaborationStore } from "../store";
+import { useAuthStore } from "@/store";
+
 import { interactionManagerService } from "../services/interaction-manager";
 import type { StartInteractionResponse } from "../services/interaction-manager";
-import { useAuthStore } from "@/store";
+import { useInteractionStore, useCollaborationStore } from "../store";
+
 
 export interface UseInteractionSocketReturn {
   startInteraction: (
@@ -77,7 +81,7 @@ export function useInteractionSocket(boardId?: string): UseInteractionSocketRetu
     );
 
     const unsubSnapshot = socketClientService.onInteractionSnapshot(
-      (payload: { boardId: string; interactions: any[] }) => {
+      (payload: { boardId: string; interactions: CollaborativeInteraction[] }) => {
         if (payload.boardId === boardId) {
           useInteractionStore.getState().setSnapshot(payload.interactions);
         }

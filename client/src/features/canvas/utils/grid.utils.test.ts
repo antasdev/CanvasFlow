@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+
 import { calculateInfiniteGridLines } from "./grid.utils";
 
 describe("calculateInfiniteGridLines", () => {

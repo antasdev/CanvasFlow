@@ -1,5 +1,6 @@
-import React from "react";
 import { ZoomIn, ZoomOut, RotateCcw, HelpCircle } from "lucide-react";
+import React from "react";
+
 import { MIN_ZOOM, MAX_ZOOM } from "../constants";
 
 export type CanvasZoomControlsProps = {

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+
 import type { TextShape } from "../types";
 import { isEmptyText } from "../utils/text.utils";
 
@@ -44,6 +45,7 @@ export function useTextEditing({
   const [targetShape, setTargetShape] = useState<TextShape | null>(null);
   const [draftText, setDraftText] = useState("");
   const [originalText, setOriginalText] = useState("");
+  const [isComposing, setIsComposing] = useState(false);
 
   const isComposingRef = useRef(false);
   const isCommittingRef = useRef(false);
@@ -56,6 +58,7 @@ export function useTextEditing({
     setTargetShape(null);
     setDraftText("");
     setOriginalText("");
+    setIsComposing(false);
     isComposingRef.current = false;
     isCommittingRef.current = false;
   }, []);
@@ -68,15 +71,18 @@ export function useTextEditing({
     setTargetShape(shape);
     setDraftText(shape.text || "");
     setOriginalText(shape.text || "");
+    setIsComposing(false);
     isComposingRef.current = false;
     isCommittingRef.current = false;
   }, []);
 
   const handleCompositionStart = useCallback((): void => {
+    setIsComposing(true);
     isComposingRef.current = true;
   }, []);
 
   const handleCompositionEnd = useCallback((): void => {
+    setIsComposing(false);
     isComposingRef.current = false;
   }, []);
 
@@ -168,7 +174,7 @@ export function useTextEditing({
     targetShape,
     draftText,
     originalText,
-    isComposing: isComposingRef.current,
+    isComposing,
     startCreatingText,
     startEditingShape,
     setDraftText,

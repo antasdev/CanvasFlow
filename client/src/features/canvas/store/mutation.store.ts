@@ -1,6 +1,8 @@
 import { create } from "zustand";
-import type { CollaborationConflict } from "./collaboration.store";
+
 import type { Shape } from "../types/shape.types";
+
+import type { CollaborationConflict } from "./collaboration.store";
 
 /**
  * Explicit mutation lifecycle status (Slice 13)
@@ -19,7 +21,7 @@ export type ShapeMutationIntent = {
   operation: "create" | "update" | "delete";
   expectedVersion?: number;
   temporaryId?: string;
-  payload?: any;
+  payload?: Record<string, unknown>;
   changes?: Partial<Shape>;
 };
 
@@ -29,8 +31,8 @@ export type CommentMutationIntent = {
   operation: "create" | "update" | "resolve" | "delete";
   expectedVersion?: number;
   temporaryId?: string;
-  payload?: any;
-  changes?: Record<string, any>;
+  payload?: Record<string, unknown>;
+  changes?: Record<string, unknown>;
 };
 
 export type MutationIntent = ShapeMutationIntent | CommentMutationIntent;

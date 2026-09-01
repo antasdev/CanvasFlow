@@ -1,6 +1,8 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { SelectionController } from "./selection.controller";
+
 import type { RectangleShape, GroupShape, Shape } from "../types";
+
+import { SelectionController } from "./selection.controller";
 
 describe("SelectionController", () => {
   const rect1: RectangleShape = {

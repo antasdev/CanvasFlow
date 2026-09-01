@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
 import { Send } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
 
 type CommentComposerProps = {
   placeholder?: string;

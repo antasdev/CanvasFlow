@@ -1,4 +1,3 @@
-import React, { useState, useRef, useEffect } from "react";
 import {
   Paintbrush,
   PenTool,
@@ -18,8 +17,11 @@ import {
   ClipboardPaste,
   CopyPlus,
 } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
+
 import { socketClientService } from "@/services/socket";
+
 import {
   useCanvasStore,
   type AlignmentAxis,
@@ -34,6 +36,7 @@ import {
   DEFAULT_SHADOW,
   getMixedStyleValue,
 } from "../utils/shape-style.utils";
+
 import ColorPickerInput from "./ColorPickerInput";
 
 export type ShapeStyleToolbarProps = {
@@ -201,11 +204,11 @@ export default function ShapeStyleToolbar({
   const top = Math.max(16, minY * zoom + pan.y - 52);
 
   // Extract uniform or mixed values
-  const fillState = getMixedStyleValue(selectedShapes, (s) => (s as any).fill);
-  const strokeState = getMixedStyleValue(selectedShapes, (s) => (s as any).stroke);
+  const fillState = getMixedStyleValue(selectedShapes, (s) => ("fill" in s ? s.fill : undefined));
+  const strokeState = getMixedStyleValue(selectedShapes, (s) => ("stroke" in s ? s.stroke : undefined));
   const strokeWidthState = getMixedStyleValue(
     selectedShapes,
-    (s) => (s as any).strokeWidth
+    (s) => ("strokeWidth" in s ? s.strokeWidth : undefined)
   );
   const strokeStyleState = getMixedStyleValue(
     selectedShapes,

@@ -1,5 +1,6 @@
-import React from "react";
 import { Loader2, CheckCircle2, AlertCircle, RefreshCw, WifiOff } from "lucide-react";
+import React from "react";
+
 import type { RecoveryStatus } from "../hooks/useBoardRecovery";
 
 interface RecoveryStatusIndicatorProps {

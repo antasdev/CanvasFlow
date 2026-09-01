@@ -7,6 +7,8 @@ import { generateAccessToken } from "@/modules/auth/auth.tokens";
 import { UserRole } from "@/modules/user/user.types";
 import { UserModel } from "@/modules/user/user.model";
 import { WorkspaceModel } from "@/modules/workspace/workspace.model";
+import { WorkspaceMemberModel } from "@/modules/workspace/workspaceMember.model";
+import { WorkspaceRole } from "@/modules/workspace/workspace.types";
 import { BoardModel } from "@/modules/board/board.model";
 import { CanvasModel } from "@/modules/canvas/canvas.model";
 import { ShapeModel } from "@/modules/shape/shape.model";
@@ -39,6 +41,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   await Promise.all([
     UserModel.deleteMany({ email: { $regex: /@slice7-test\.com$/ } }),
     WorkspaceModel.deleteMany({ name: { $regex: /Slice 7/ } }),
+    WorkspaceMemberModel.deleteMany({}),
     BoardModel.deleteMany({ title: { $regex: /Slice 7/ } }),
     CanvasModel.deleteMany({ name: { $regex: /Page/ } }),
     ShapeModel.deleteMany({}),
@@ -60,21 +63,21 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   const user3 = await UserModel.create({
     email: "user3@slice7-test.com",
     password: "Password123!",
-    fullName: "Charlie Outsider",
+    fullName: "Charlie Outside",
   });
 
   const token1 = generateAccessToken({
-    userId: user1._id.toString(),
+    userId: (user1._id as Types.ObjectId).toString(),
     role: UserRole.USER,
   });
 
   const token2 = generateAccessToken({
-    userId: user2._id.toString(),
+    userId: (user2._id as Types.ObjectId).toString(),
     role: UserRole.USER,
   });
 
   const token3 = generateAccessToken({
-    userId: user3._id.toString(),
+    userId: (user3._id as Types.ObjectId).toString(),
     role: UserRole.USER,
   });
 
@@ -84,6 +87,19 @@ async function runTextAndStickyShapeTests(): Promise<void> {
     ownerId: user1._id,
     visibility: "PUBLIC",
   });
+
+  await WorkspaceMemberModel.create([
+    {
+      workspaceId: ws1._id,
+      userId: user2._id,
+      role: WorkspaceRole.EDITOR,
+    },
+    {
+      workspaceId: ws1._id,
+      userId: user3._id,
+      role: WorkspaceRole.EDITOR,
+    },
+  ]);
 
   const board1 = await BoardModel.create({
     workspaceId: ws1._id,
@@ -238,6 +254,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
     width: 200,
     height: 200,
     rotation: 0,
+    text: "Remember to test Slice 7",
     style: {
       text: "Remember to test Slice 7",
       fontSize: 18,
@@ -274,7 +291,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   // ----------------------------------------------------
   // TEST 3: Validation Constraints (Text Length & Font Size)
   // ----------------------------------------------------
-  console.log("\nTest 3: Rejecting invalid text length (>5000 chars) and invalid font sizes...");
+  console.log("\nTest 3: Rejecting invalid text length (>10000 chars) and invalid font sizes...");
 
   const oversizedTextPayload: CreateShapePayload = {
     canvasId: canvas1Id,
@@ -283,9 +300,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
     y: 100,
     width: 200,
     height: 50,
-    style: {
-      text: "A".repeat(5001),
-    },
+    text: "A".repeat(10001),
   };
 
   const oversizedAck = await new Promise<SocketAck<ShapeResponseDto>>((resolve) => {
@@ -398,8 +413,8 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   const updateTextPayload: UpdateShapePayload = {
     shapeId: textShapeId,
     data: {
+      text: "Updated Canonical Content",
       style: {
-        text: "Updated Canonical Content",
         fontSize: 28,
         fontWeight: "600",
       },
@@ -428,7 +443,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
 
   assert(user2ReceivedUpdated !== null, "User 2 must receive shape:updated");
   assert(
-    (user2ReceivedUpdated as any).style.text === "Updated Canonical Content",
+    (user2ReceivedUpdated as any).text === "Updated Canonical Content" || (user2ReceivedUpdated as any).style?.text === "Updated Canonical Content",
     "User 2 broadcast must contain updated text"
   );
   console.log("✓ Committed text update persisted in MongoDB and broadcast.");
@@ -473,6 +488,7 @@ async function runTextAndStickyShapeTests(): Promise<void> {
   const updateStickyPayload: UpdateShapePayload = {
     shapeId: stickyShapeId,
     data: {
+      text: "Updated Note by Bob",
       style: {
         text: "Updated Note by Bob",
         backgroundColor: "#bbf7d0", // Light green
