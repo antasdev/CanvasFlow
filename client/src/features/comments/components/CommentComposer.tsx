@@ -45,9 +45,22 @@ export default function CommentComposer({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel?.();
+      return;
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
       void handleSubmit();
+      return;
+    }
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSubmit();
+      return;
     }
   };
 

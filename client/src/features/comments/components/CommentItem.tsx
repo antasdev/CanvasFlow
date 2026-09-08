@@ -169,9 +169,28 @@ export default function CommentItem({
         ) : isEditing ? (
           <div className="mt-1.5">
             <textarea
+              autoFocus
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setIsEditing(false);
+                  return;
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  void handleSaveEdit();
+                  return;
+                }
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSaveEdit();
+                  return;
+                }
+              }}
               rows={2}
+              maxLength={2000}
               className="w-full rounded border border-blue-400 p-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
             <div className="mt-1.5 flex justify-end gap-1.5">
