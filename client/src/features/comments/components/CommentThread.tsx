@@ -33,6 +33,14 @@ export default function CommentThread({
   const [isReplying, setIsReplying] = useState(false);
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
 
+  // Deterministic reply ordering: createdAt ascending
+  const sortedReplies = React.useMemo(() => {
+    return [...replies].sort(
+      (a, b) =>
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  }, [replies]);
+
   const handleReplySubmit = async (content: string): Promise<boolean> => {
     setIsSubmittingReply(true);
     try {
@@ -91,9 +99,9 @@ export default function CommentThread({
       />
 
       {/* Indented Replies */}
-      {replies.length > 0 && (
+      {sortedReplies.length > 0 && (
         <div className="mt-3 space-y-2.5 border-l-2 border-gray-100 pl-3">
-          {replies.map((reply) => (
+          {sortedReplies.map((reply) => (
             <CommentItem
               key={reply.id}
               comment={reply}

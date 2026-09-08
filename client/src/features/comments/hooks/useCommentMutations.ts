@@ -95,6 +95,22 @@ export function useCommentMutations(boardId?: string) {
   };
 
   /**
+   * Create a reply specifically attached to a parent comment thread.
+   */
+  const createReply = async (
+    parentCommentId: string,
+    content: string
+  ): Promise<Comment | null> => {
+    const parent = useCommentStore.getState().comments[parentCommentId];
+    return createComment({
+      content,
+      parentCommentId,
+      canvasId: parent?.canvasId,
+      shapeId: parent?.shapeId ?? null,
+    });
+  };
+
+  /**
    * Update comment content with optimistic UI and rollback.
    */
   const updateComment = async (
@@ -132,8 +148,19 @@ export function useCommentMutations(boardId?: string) {
       return authoritative;
     } catch (error) {
       updateStoreComment(previousComment);
-      const message =
-        error instanceof Error ? error.message : "Failed to update comment.";
+      const errObj = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : null;
+      const isConflict =
+        errObj?.code === "CONFLICT" ||
+        errObj?.statusCode === 409 ||
+        (error as Error)?.message?.toLowerCase().includes("conflict") ||
+        (error as Error)?.message?.toLowerCase().includes("modified by another");
+
+      const message = isConflict
+        ? "Comment was modified by another collaborator. Please refresh."
+        : error instanceof Error
+        ? error.message
+        : "Failed to update comment.";
+
       toast.error(message);
       return null;
     } finally {
@@ -226,6 +253,7 @@ export function useCommentMutations(boardId?: string) {
   return {
     isSubmitting,
     createComment,
+    createReply,
     updateComment,
     resolveComment,
     deleteComment,
