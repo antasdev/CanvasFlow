@@ -9,6 +9,7 @@ import {
     useCommentStore,
     CommentBadge,
     CommentPanel,
+    CanvasCommentOverlay,
 } from "@/features/comments";
 import { socketClientService } from "@/services/socket";
 
@@ -154,6 +155,9 @@ export default function CanvasEditor({
     const setCommentSelectedShapeId = useCommentStore(
         (state) => state.setSelectedShapeId
     );
+    const draftPosition = useCommentStore((state) => state.draftPosition);
+    const setDraftPosition = useCommentStore((state) => state.setDraftPosition);
+    const clearDraftPosition = useCommentStore((state) => state.clearDraftPosition);
     const selectShape = useCanvasStore((state) => state.selectShape);
 
     const shapeCommentsMap = useMemo(() => {
@@ -622,6 +626,7 @@ export default function CanvasEditor({
 
             if (event.key === "Escape") {
                 const action = interactionController.evaluateEscape({
+                    hasActiveCommentDraft: Boolean(draftPosition),
                     hasActiveDrawing: Boolean(drawing),
                     hasActiveVector: Boolean(vectorDraft),
                     hasActiveFreehand: Boolean(freehandDrawing),
@@ -634,6 +639,10 @@ export default function CanvasEditor({
                 });
 
                 switch (action) {
+                    case "cancel_comment":
+                        clearDraftPosition();
+                        interactionController.endInteraction();
+                        return;
                     case "cancel_drawing":
                         setDrawing(null);
                         setVectorDraft(null);
@@ -818,7 +827,11 @@ export default function CanvasEditor({
                     return;
                 }
                 if (key === "c") {
-                    toggleCommentPanel();
+                    setActiveTool(
+                        activeTool === CANVAS_TOOLS.COMMENT
+                            ? CANVAS_TOOLS.SELECT
+                            : CANVAS_TOOLS.COMMENT
+                    );
                     return;
                 }
                 if (canEditCanvas) {
@@ -952,6 +965,20 @@ export default function CanvasEditor({
 
         if (mode === "transforming") {
             interactionController.startInteraction("transforming");
+            return;
+        }
+
+        if (mode === "commenting" || activeTool === CANVAS_TOOLS.COMMENT) {
+            const pointer = stage.getPointerPosition();
+            if (!pointer) {
+                return;
+            }
+
+            const worldPoint = screenToWorld(pointer, { pan, zoom });
+            setDraftPosition({
+                x: Math.round(worldPoint.x * 100) / 100,
+                y: Math.round(worldPoint.y * 100) / 100,
+            });
             return;
         }
 
@@ -2171,6 +2198,14 @@ export default function CanvasEditor({
                         triggerRecovery(boardId, canvasId);
                     }
                 }}
+            />
+
+            {/* World-Anchored Canvas Comments Overlay */}
+            <CanvasCommentOverlay
+                boardId={boardId}
+                canvasId={canvasId}
+                zoom={zoom}
+                pan={pan}
             />
 
             {/* Real-time Collaborative Comments Panel */}

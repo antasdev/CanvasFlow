@@ -52,6 +52,7 @@ export function useCommentMutations(boardId?: string) {
         email: user?.email,
       },
       parentCommentId: input.parentCommentId ?? null,
+      position: input.position ?? null,
       content: input.content,
       isResolved: false,
       isEdited: false,
@@ -69,9 +70,11 @@ export function useCommentMutations(boardId?: string) {
       if (socketClientService.isConnected()) {
         const dto = await socketClientService.createComment({
           boardId,
+          canvasId: input.canvasId,
           content: input.content,
           shapeId: input.shapeId,
           parentCommentId: input.parentCommentId,
+          position: input.position,
         });
         authoritative = mapCommentResponseToComment(dto);
       } else {

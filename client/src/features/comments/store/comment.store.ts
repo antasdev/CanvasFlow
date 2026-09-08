@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { Comment, CommentFilterType } from "../types";
+import type { Comment, CommentFilterType, CommentPosition } from "../types";
 
 type CommentStore = {
   comments: Record<string, Comment>;
@@ -8,6 +8,7 @@ type CommentStore = {
   selectedShapeId: string | null;
   filter: CommentFilterType;
   isPanelOpen: boolean;
+  draftPosition: CommentPosition | null;
 
   // Actions
   setComments: (comments: Comment[]) => void;
@@ -24,6 +25,8 @@ type CommentStore = {
   setSelectedShapeId: (shapeId: string | null) => void;
   setFilter: (filter: CommentFilterType) => void;
   togglePanel: (open?: boolean) => void;
+  setDraftPosition: (position: CommentPosition | null) => void;
+  clearDraftPosition: () => void;
   clearComments: () => void;
 };
 
@@ -33,6 +36,7 @@ export const useCommentStore = create<CommentStore>((set) => ({
   selectedShapeId: null,
   filter: "all",
   isPanelOpen: false,
+  draftPosition: null,
 
   setComments: (comments: Comment[]): void => {
     const map: Record<string, Comment> = {};
@@ -178,6 +182,14 @@ export const useCommentStore = create<CommentStore>((set) => ({
     }));
   },
 
+  setDraftPosition: (position: CommentPosition | null): void => {
+    set({ draftPosition: position });
+  },
+
+  clearDraftPosition: (): void => {
+    set({ draftPosition: null });
+  },
+
   clearComments: (): void => {
     set({
       comments: {},
@@ -185,6 +197,7 @@ export const useCommentStore = create<CommentStore>((set) => ({
       selectedShapeId: null,
       filter: "all",
       isPanelOpen: false,
+      draftPosition: null,
     });
   },
 }));

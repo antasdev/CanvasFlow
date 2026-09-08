@@ -13,6 +13,7 @@ export type EscapeEvaluationParams = {
   isSelecting?: boolean;
   isPanning?: boolean;
   hasTextCreation?: boolean;
+  hasActiveCommentDraft?: boolean;
   editingGroupId?: string | null;
   selectedCount?: number;
   activeTool?: CanvasTool;
@@ -48,7 +49,12 @@ export class CanvasInteractionController {
       return "transforming";
     }
 
-    // Priority 3: Shape interaction (clicking on an existing shape)
+    // Priority 3: Comment tool placement (whether on empty canvas or over shape)
+    if (activeTool === CANVAS_TOOLS.COMMENT) {
+      return "commenting";
+    }
+
+    // Priority 4: Shape interaction (clicking on an existing shape)
     if (!context.isEmptyCanvas) {
       if (activeTool === CANVAS_TOOLS.SELECT) {
         return "selecting";
@@ -148,6 +154,10 @@ export class CanvasInteractionController {
    * 7. Reset active tool to Select
    */
   public evaluateEscape(params: EscapeEvaluationParams): EscapeAction {
+    if (params.hasActiveCommentDraft) {
+      return "cancel_comment";
+    }
+
     if (
       params.hasActiveDrawing ||
       params.hasActiveVector ||
@@ -209,6 +219,8 @@ export class CanvasInteractionController {
       cursor = "grab";
     } else if (nextTool === CANVAS_TOOLS.TEXT) {
       cursor = "text";
+    } else if (nextTool === CANVAS_TOOLS.COMMENT) {
+      cursor = "crosshair";
     } else if (
       nextTool === CANVAS_TOOLS.LASSO ||
       nextTool === CANVAS_TOOLS.FREEHAND ||

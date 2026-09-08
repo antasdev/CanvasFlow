@@ -61,11 +61,15 @@ export default function CommentThread({
       {/* Top Bar with Thread Status and Resolve Button */}
       <div className="mb-2.5 flex items-center justify-between gap-2 border-b border-gray-100 pb-2">
         <div className="flex items-center gap-1.5 text-xs text-gray-500">
-          {rootComment.shapeId && (
+          {rootComment.shapeId ? (
             <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 border border-blue-200">
               Attached to Shape
             </span>
-          )}
+          ) : rootComment.position ? (
+            <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 border border-emerald-200">
+              Canvas Anchor
+            </span>
+          ) : null}
           {replies.length > 0 && (
             <span className="text-[11px] text-gray-400">
               {replies.length} {replies.length === 1 ? "reply" : "replies"}
