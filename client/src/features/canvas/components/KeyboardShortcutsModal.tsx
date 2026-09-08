@@ -24,7 +24,7 @@ const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { keys: ["A"], description: "Arrow tool" },
       { keys: ["P"], description: "Draw / Freehand tool" },
       { keys: ["S"], description: "Sticky Note tool" },
-      { keys: ["C"], description: "Toggle comments panel" },
+      { keys: ["C"], description: "Comment tool" },
     ],
   },
   {

@@ -5,3 +5,6 @@ export { default as CommentPanel } from "./CommentPanel";
 export { default as CommentReplyComposer } from "./CommentReplyComposer";
 export { default as CommentResolveButton } from "./CommentResolveButton";
 export { default as CommentThread } from "./CommentThread";
+export { default as CommentMarker } from "./CommentMarker";
+export { default as FloatingCommentComposer } from "./FloatingCommentComposer";
+export { default as CanvasCommentOverlay } from "./CanvasCommentOverlay";

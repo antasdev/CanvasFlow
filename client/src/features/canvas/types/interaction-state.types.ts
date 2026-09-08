@@ -10,7 +10,8 @@ export type InteractionMode =
   | "drawing_vector"
   | "drawing_freehand"
   | "transforming"
-  | "text_editing";
+  | "text_editing"
+  | "commenting";
 
 export type PointerContext = {
   button: number;
@@ -26,6 +27,7 @@ export type ViewportState = {
 };
 
 export type EscapeAction =
+  | "cancel_comment"
   | "cancel_drawing"
   | "cancel_selection"
   | "cancel_pan"

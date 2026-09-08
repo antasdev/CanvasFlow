@@ -173,6 +173,12 @@ describe("Comment Store (useCommentStore)", () => {
 
     useCommentStore.getState().setSelectedShapeId("shape_999");
     expect(useCommentStore.getState().selectedShapeId).toBe("shape_999");
+
+    useCommentStore.getState().setDraftPosition({ x: 150, y: 250 });
+    expect(useCommentStore.getState().draftPosition).toEqual({ x: 150, y: 250 });
+
+    useCommentStore.getState().clearDraftPosition();
+    expect(useCommentStore.getState().draftPosition).toBeNull();
   });
 
   it("should NEVER touch canvas history (past/future) or undo/redo", () => {

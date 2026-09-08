@@ -287,7 +287,43 @@ describe("CanvasInteractionController", () => {
       expect(controller.isInteracting()).toBe(false);
     });
 
-    it("yields crosshair cursor for vector tools and text cursor for TEXT tool", () => {
+    it("starts commenting mode when COMMENT tool is active, even over shapes", () => {
+      const modeEmpty = controller.determineInteractionOwner(
+        {
+          button: 0,
+          isSpacePressed: false,
+          isMiddleMouse: false,
+          isEmptyCanvas: true,
+          isTransformerHandle: false,
+        },
+        CANVAS_TOOLS.COMMENT,
+      );
+      expect(modeEmpty).toBe("commenting");
+
+      const modeOverShape = controller.determineInteractionOwner(
+        {
+          button: 0,
+          isSpacePressed: false,
+          isMiddleMouse: false,
+          isEmptyCanvas: false,
+          isTransformerHandle: false,
+        },
+        CANVAS_TOOLS.COMMENT,
+      );
+      expect(modeOverShape).toBe("commenting");
+    });
+
+    it("cancels in-progress comment draft before any drawing or selection", () => {
+      const action = controller.evaluateEscape({
+        hasActiveCommentDraft: true,
+        hasActiveDrawing: true,
+        isSelecting: true,
+        selectedCount: 3,
+      });
+      expect(action).toBe("cancel_comment");
+    });
+
+    it("yields crosshair cursor for vector tools, text cursor for TEXT tool, and crosshair for COMMENT tool", () => {
       const lasso = controller.handleToolSwitch(
         CANVAS_TOOLS.SELECT,
         CANVAS_TOOLS.LASSO,
@@ -299,6 +335,12 @@ describe("CanvasInteractionController", () => {
         CANVAS_TOOLS.TEXT,
       );
       expect(text.newCursor).toBe("text");
+
+      const comment = controller.handleToolSwitch(
+        CANVAS_TOOLS.SELECT,
+        CANVAS_TOOLS.COMMENT,
+      );
+      expect(comment.newCursor).toBe("crosshair");
     });
   });
 });

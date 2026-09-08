@@ -14,6 +14,7 @@ export const CANVAS_TOOLS = {
   CONNECTOR: "connector",
   LASSO: "lasso",
   HAND: "hand",
+  COMMENT: "comment",
 } as const;
 
 export type CanvasTool =

@@ -163,6 +163,12 @@ export default function CanvasToolbar({
       hotkey: "P",
       icon: <Pencil className="h-4 w-4" />,
     },
+    {
+      tool: CANVAS_TOOLS.COMMENT,
+      label: "Comment",
+      hotkey: "C",
+      icon: <MessageSquare className="h-4 w-4" />,
+    },
   ];
 
   const renderToolButton = ({ tool, label, hotkey, icon }: ToolItem) => {
