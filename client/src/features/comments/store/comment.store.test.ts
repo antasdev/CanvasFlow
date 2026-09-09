@@ -20,6 +20,8 @@ const mockComment: Comment = {
   parentCommentId: null,
   content: "Initial comment",
   isResolved: false,
+  resolvedAt: null,
+  resolvedBy: null,
   isEdited: false,
   isDeleted: false,
   createdAt: "2026-08-23T10:00:00.000Z",
@@ -39,6 +41,8 @@ const mockReply: Comment = {
   parentCommentId: "comment_1",
   content: "Reply to comment 1",
   isResolved: false,
+  resolvedAt: null,
+  resolvedBy: null,
   isEdited: false,
   isDeleted: false,
   createdAt: "2026-08-23T10:05:00.000Z",
@@ -114,11 +118,13 @@ describe("Comment Store (useCommentStore)", () => {
     useCommentStore.getState().resolveComment("comment_1", true);
 
     expect(useCommentStore.getState().comments["comment_1"].isResolved).toBe(true);
+    expect(useCommentStore.getState().comments["comment_1"].resolvedAt).toBeDefined();
 
     useCommentStore.getState().resolveComment("comment_1", false);
     expect(useCommentStore.getState().comments["comment_1"].isResolved).toBe(
       false
     );
+    expect(useCommentStore.getState().comments["comment_1"].resolvedAt).toBeNull();
   });
 
   it("should manage optimistic comments and replacements", () => {

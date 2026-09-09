@@ -108,6 +108,8 @@ export const useCommentStore = create<CommentStore>((set) => ({
           [commentId]: {
             ...existing,
             isResolved,
+            resolvedAt: isResolved ? new Date().toISOString() : null,
+            resolvedBy: isResolved ? existing.resolvedBy ?? null : null,
           },
         },
       };

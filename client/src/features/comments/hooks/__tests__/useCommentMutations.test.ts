@@ -15,6 +15,8 @@ describe("useCommentMutations Store Invariants & Optimistic Lifecycle", () => {
     position: { x: 50, y: 75 },
     content: "Initial root thread",
     isResolved: false,
+    resolvedAt: null,
+    resolvedBy: null,
     isEdited: false,
     isDeleted: false,
     createdAt: "2026-09-08T10:00:00.000Z",
@@ -106,16 +108,30 @@ describe("useCommentMutations Store Invariants & Optimistic Lifecycle", () => {
     );
   });
 
-  it("handles resolution toggle and rollback", () => {
+  it("handles resolution toggle, full lifecycle, and rollback", () => {
+    // Open -> Resolved
     useCommentStore.getState().resolveComment("comment-100", true);
-    expect(useCommentStore.getState().comments["comment-100"].isResolved).toBe(
-      true
-    );
+    expect(useCommentStore.getState().comments["comment-100"].isResolved).toBe(true);
+    expect(useCommentStore.getState().comments["comment-100"].resolvedAt).toBeDefined();
 
+    // Resolved -> Reopened (Open)
     useCommentStore.getState().resolveComment("comment-100", false);
-    expect(useCommentStore.getState().comments["comment-100"].isResolved).toBe(
-      false
-    );
+    expect(useCommentStore.getState().comments["comment-100"].isResolved).toBe(false);
+    expect(useCommentStore.getState().comments["comment-100"].resolvedAt).toBeNull();
+  });
+
+  it("handles resolution rollback on OCC 409 conflict and network errors", () => {
+    const previous = useCommentStore.getState().comments["comment-100"];
+    expect(previous.isResolved).toBe(false);
+
+    // Optimistic resolution
+    useCommentStore.getState().resolveComment("comment-100", true);
+    expect(useCommentStore.getState().comments["comment-100"].isResolved).toBe(true);
+
+    // Conflict / network error triggers full previousComment rollback
+    useCommentStore.getState().updateComment(previous);
+    expect(useCommentStore.getState().comments["comment-100"].isResolved).toBe(false);
+    expect(useCommentStore.getState().comments["comment-100"].resolvedAt).toBeNull();
   });
 
   it("handles soft deletion and rollback", () => {

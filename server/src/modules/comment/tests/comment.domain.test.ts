@@ -194,9 +194,9 @@ async function runCommentDomainTests(): Promise<void> {
     console.log("✓ Unresolved comment counts aggregated efficiently by shape.");
 
     // ----------------------------------------------------
-    // TEST 6: Resolving Comment with Metadata
+    // TEST 6: Resolving and Reopening Comment with Metadata
     // ----------------------------------------------------
-    console.log("Test 6: Resolving comment with expectedVersion and resolvedBy...");
+    console.log("Test 6: Resolving and reopening comment with expectedVersion and resolvedBy...");
     const resolved = await commentRepository.updateWithExpectedVersion(
       rootComment._id as Types.ObjectId,
       1,
@@ -211,7 +211,24 @@ async function runCommentDomainTests(): Promise<void> {
     assert(resolved?.isResolved === true, "isResolved updated to true");
     assert(resolved?.version === 2, "version incremented to 2");
     assert(resolved?.resolvedAt instanceof Date, "resolvedAt recorded");
-    console.log("✓ Expected-version update and resolution tracking verified.");
+
+    // Reopen comment
+    const reopened = await commentRepository.updateWithExpectedVersion(
+      rootComment._id as Types.ObjectId,
+      2,
+      {
+        isResolved: false,
+        resolvedAt: null,
+        resolvedBy: null,
+      }
+    );
+
+    assert(reopened !== null, "Reopening comment succeeded");
+    assert(reopened?.isResolved === false, "isResolved updated to false");
+    assert(reopened?.version === 3, "version incremented to 3");
+    assert(reopened?.resolvedAt === null, "resolvedAt nullified on reopen");
+    assert(reopened?.resolvedBy === null, "resolvedBy nullified on reopen");
+    console.log("✓ Expected-version update and resolution lifecycle verified.");
 
     // ----------------------------------------------------
     // TEST 7: Soft Deletion & Content Masking in Mapper
