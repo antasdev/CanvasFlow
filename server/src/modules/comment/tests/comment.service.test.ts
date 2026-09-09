@@ -340,6 +340,27 @@ async function runCommentServiceTests(): Promise<void> {
     });
     assert(editorResolve.comment.isResolved === true, "Editor can resolve comment thread");
     assert(editorResolve.comment.resolvedBy?.equals(editor._id as Types.ObjectId) ?? false, "resolvedBy is editor");
+
+    // 4f: Reopen resolution by author / editor
+    const authorReopen = await commentService.resolveComment(hybridComment.comment._id as Types.ObjectId, admin._id as Types.ObjectId, {
+      isResolved: false,
+    });
+    assert(authorReopen.comment.isResolved === false, "Author can reopen comment thread");
+    assert(authorReopen.comment.resolvedAt === null, "resolvedAt nullified on reopen");
+    assert(authorReopen.comment.resolvedBy === null, "resolvedBy nullified on reopen");
+
+    // 4g: Cannot resolve soft-deleted comments
+    let resolveDeletedFailed = false;
+    try {
+      await commentService.resolveComment(coordComment.comment._id as Types.ObjectId, admin._id as Types.ObjectId, {
+        isResolved: true,
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 400) {
+        resolveDeletedFailed = true;
+      }
+    }
+    assert(resolveDeletedFailed, "Cannot resolve a soft-deleted comment (must return 400)");
     console.log("✓ RBAC permissions verified across all 5 roles and actions.");
 
     // ----------------------------------------------------

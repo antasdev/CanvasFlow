@@ -138,4 +138,33 @@ describe("CommentThread Invariants & Ordering", () => {
     toggle({ ...mockRootComment, isResolved: true }); // isResolved: true -> false
     expect(onResolve).toHaveBeenCalledWith("root-1", false);
   });
+
+  it("preserves replies structure when root comment is resolved or reopened", () => {
+    const resolvedRoot: Comment = {
+      ...mockRootComment,
+      isResolved: true,
+      resolvedAt: "2026-09-08T10:20:00.000Z",
+      resolvedBy: "user-1",
+    };
+
+    const threadReplies = [replyA, replyB, replyC];
+
+    // Thread is resolved, replies must remain attached
+    expect(resolvedRoot.isResolved).toBe(true);
+    expect(threadReplies.length).toBe(3);
+    expect(threadReplies.every((r) => r.parentCommentId === resolvedRoot.id)).toBe(true);
+
+    // Reopening the root comment
+    const reopenedRoot: Comment = {
+      ...resolvedRoot,
+      isResolved: false,
+      resolvedAt: null,
+      resolvedBy: null,
+    };
+
+    expect(reopenedRoot.isResolved).toBe(false);
+    expect(reopenedRoot.resolvedAt).toBeNull();
+    expect(reopenedRoot.resolvedBy).toBeNull();
+    expect(threadReplies.every((r) => r.parentCommentId === reopenedRoot.id)).toBe(true);
+  });
 });

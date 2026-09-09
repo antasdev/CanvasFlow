@@ -134,11 +134,12 @@ export const commentApi = {
   async resolveComment(
     boardId: string,
     commentId: string,
-    isResolved: boolean
+    isResolved: boolean,
+    expectedVersion?: number
   ): Promise<Comment> {
     const response = await api.patch<SingleCommentApiResponse>(
       `/boards/${boardId}/comments/${commentId}/resolve`,
-      { isResolved }
+      { isResolved, expectedVersion }
     );
     return mapCommentResponseToComment(response.data.data);
   },

@@ -271,9 +271,27 @@ async function runCommentApiTests(): Promise<void> {
     console.log("✓ Comment updated with author authorization and OCC version increment.");
 
     // ----------------------------------------------------
-    // TEST 8: PATCH Resolve Thread
+    // TEST 8: PATCH Resolve and Reopen Thread with OCC & Query Filter
     // ----------------------------------------------------
-    console.log("Test 8: Resolving thread by Editor...");
+    console.log("Test 8: Resolving thread by Editor (including OCC and Reopen)...");
+    // 8a: Stale expectedVersion on resolve
+    const staleResolveRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments/${rootCommentId}/resolve`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${editor.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          isResolved: true,
+          expectedVersion: 999,
+        }),
+      }
+    );
+    assert(staleResolveRes.status === 409, "Stale expectedVersion on resolve rejected with 409");
+
+    // 8b: Valid resolve
     const resolveRes = await fetch(
       `${baseUrl}/boards/${board._id}/comments/${rootCommentId}/resolve`,
       {
@@ -293,7 +311,41 @@ async function runCommentApiTests(): Promise<void> {
     const resolveJson = (await resolveRes.json()) as SingleCommentApiResponse;
     assert(resolveJson.data.isResolved === true, "isResolved is true");
     assert(resolveJson.data.resolvedBy === editor.user._id.toString(), "resolvedBy is editor");
-    console.log("✓ Comment thread resolved via PATCH /boards/:boardId/comments/:commentId/resolve.");
+    assert(resolveJson.data.version === 3, "version incremented to 3");
+
+    // 8c: Filter query by resolved status
+    const resolvedFilterRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments?resolved=true`,
+      {
+        headers: { Authorization: `Bearer ${viewer.token}` },
+      }
+    );
+    const resolvedFilterJson = (await resolvedFilterRes.json()) as CommentListApiResponse;
+    assert(resolvedFilterJson.data.every((c) => c.isResolved === true), "All returned comments are resolved");
+
+    // 8d: Reopen thread
+    const reopenRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments/${rootCommentId}/resolve`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${viewer.token}`, // Viewer is author of rootComment
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          isResolved: false,
+          expectedVersion: 3,
+        }),
+      }
+    );
+
+    assert(reopenRes.status === 200, "Reopen succeeded with 200");
+    const reopenJson = (await reopenRes.json()) as SingleCommentApiResponse;
+    assert(reopenJson.data.isResolved === false, "isResolved is false");
+    assert(reopenJson.data.resolvedAt === null, "resolvedAt nullified on reopen");
+    assert(reopenJson.data.resolvedBy === null, "resolvedBy nullified on reopen");
+    assert(reopenJson.data.version === 4, "version incremented to 4");
+    console.log("✓ Comment thread resolved and reopened via PATCH /boards/:boardId/comments/:commentId/resolve.");
 
     // ----------------------------------------------------
     // TEST 9: DELETE Soft Delete Comment

@@ -189,13 +189,15 @@ export function useCommentMutations(boardId?: string) {
           boardId,
           commentId,
           isResolved,
+          expectedVersion: previousComment.version,
         });
         authoritative = mapCommentResponseToComment(dto);
       } else {
         authoritative = await commentApi.resolveComment(
           boardId,
           commentId,
-          isResolved
+          isResolved,
+          previousComment.version
         );
       }
 
@@ -205,9 +207,20 @@ export function useCommentMutations(boardId?: string) {
       );
       return authoritative;
     } catch (error) {
-      resolveStoreComment(commentId, previousComment.isResolved);
-      const message =
-        error instanceof Error ? error.message : "Failed to resolve comment.";
+      updateStoreComment(previousComment);
+      const errObj = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : null;
+      const isConflict =
+        errObj?.code === "CONFLICT" ||
+        errObj?.statusCode === 409 ||
+        (error as Error)?.message?.toLowerCase().includes("conflict") ||
+        (error as Error)?.message?.toLowerCase().includes("modified by another");
+
+      const message = isConflict
+        ? "Comment was modified by another collaborator. Please refresh."
+        : error instanceof Error
+        ? error.message
+        : "Failed to resolve comment.";
+
       toast.error(message);
       return null;
     }

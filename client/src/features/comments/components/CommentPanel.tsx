@@ -36,10 +36,9 @@ export default function CommentPanel({
   } = useCommentMutations(boardId);
 
   // Group comments into root threads and replies
-  const { rootComments, repliesByParentId, totalOpenCount } = useMemo(() => {
+  const { rootComments, repliesByParentId } = useMemo(() => {
     const roots: Comment[] = [];
     const replies: Record<string, Comment[]> = {};
-    let openCount = 0;
 
     const allList = Object.values(comments).sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -48,9 +47,6 @@ export default function CommentPanel({
     for (const c of allList) {
       if (!c.parentCommentId) {
         roots.push(c);
-        if (!c.isResolved && !c.isDeleted) {
-          openCount++;
-        }
       } else {
         if (!replies[c.parentCommentId]) {
           replies[c.parentCommentId] = [];
@@ -62,11 +58,31 @@ export default function CommentPanel({
     return {
       rootComments: roots,
       repliesByParentId: replies,
-      totalOpenCount: openCount,
     };
   }, [comments]);
 
-  // Apply filters
+  // Derive counts scoped to active shape filter (if any)
+  const { allCount, openCount, resolvedCount } = useMemo(() => {
+    let all = 0;
+    let open = 0;
+    let resolved = 0;
+
+    for (const root of rootComments) {
+      if (selectedShapeId && root.shapeId !== selectedShapeId) {
+        continue;
+      }
+      all++;
+      if (root.isResolved) {
+        resolved++;
+      } else {
+        open++;
+      }
+    }
+
+    return { allCount: all, openCount: open, resolvedCount: resolved };
+  }, [rootComments, selectedShapeId]);
+
+  // Apply status and shape filters
   const filteredThreads = useMemo(() => {
     return rootComments.filter((root) => {
       // Shape filter if active
@@ -109,6 +125,7 @@ export default function CommentPanel({
 
   return (
     <aside
+      aria-label="Comments Panel"
       className={`fixed right-0 top-0 z-30 flex h-screen w-80 sm:w-96 flex-col border-l border-gray-200 bg-slate-50 shadow-2xl transition-all duration-200 ${className}`}
     >
       {/* Header */}
@@ -116,56 +133,85 @@ export default function CommentPanel({
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-blue-600" />
           <h2 className="font-semibold text-gray-900 text-sm">Comments</h2>
-          {totalOpenCount > 0 && (
+          {openCount > 0 && (
             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800">
-              {totalOpenCount} open
+              {openCount} open
             </span>
           )}
         </div>
 
         <button
           type="button"
+          aria-label="Close comments panel"
           onClick={() => togglePanel(false)}
-          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+          className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors cursor-pointer"
         >
           <X className="h-5 w-5" />
         </button>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex border-b border-gray-200 bg-white px-3 pt-2">
+      <div
+        role="tablist"
+        aria-label="Comment status filter"
+        className="flex border-b border-gray-200 bg-white px-3 pt-2"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={filter === "all"}
+          aria-label={`All comments (${allCount})`}
           onClick={() => setFilter("all")}
-          className={`flex-1 border-b-2 pb-2 text-xs font-medium transition-colors ${
+          className={`flex-1 border-b-2 pb-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
             filter === "all"
               ? "border-blue-600 text-blue-600 font-semibold"
               : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          All
+          <span>All</span>
+          <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+            filter === "all" ? "bg-blue-100 text-blue-800 font-bold" : "bg-gray-100 text-gray-600"
+          }`}>
+            {allCount}
+          </span>
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={filter === "open"}
+          aria-label={`Open comments (${openCount})`}
           onClick={() => setFilter("open")}
-          className={`flex-1 border-b-2 pb-2 text-xs font-medium transition-colors ${
+          className={`flex-1 border-b-2 pb-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
             filter === "open"
               ? "border-blue-600 text-blue-600 font-semibold"
               : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          Open
+          <span>Open</span>
+          <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+            filter === "open" ? "bg-blue-100 text-blue-800 font-bold" : "bg-gray-100 text-gray-600"
+          }`}>
+            {openCount}
+          </span>
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={filter === "resolved"}
+          aria-label={`Resolved comments (${resolvedCount})`}
           onClick={() => setFilter("resolved")}
-          className={`flex-1 border-b-2 pb-2 text-xs font-medium transition-colors ${
+          className={`flex-1 border-b-2 pb-2 text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-1.5 ${
             filter === "resolved"
               ? "border-blue-600 text-blue-600 font-semibold"
               : "border-transparent text-gray-500 hover:text-gray-700"
           }`}
         >
-          Resolved
+          <span>Resolved</span>
+          <span className={`rounded-full px-1.5 py-0.2 text-[10px] ${
+            filter === "resolved" ? "bg-blue-100 text-blue-800 font-bold" : "bg-gray-100 text-gray-600"
+          }`}>
+            {resolvedCount}
+          </span>
         </button>
       </div>
 
@@ -207,9 +253,21 @@ export default function CommentPanel({
             {filter === "resolved" ? (
               <>
                 <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-2" />
-                <p className="text-sm font-medium text-gray-600">No resolved comments</p>
+                <p className="text-sm font-medium text-gray-600">
+                  {selectedShapeId ? "No resolved comments on this shape" : "No resolved comments"}
+                </p>
                 <p className="text-xs text-gray-400 mt-1">
                   Resolved threads will appear here.
+                </p>
+              </>
+            ) : filter === "open" ? (
+              <>
+                <MessageSquare className="h-8 w-8 text-blue-300 mb-2" />
+                <p className="text-sm font-medium text-gray-600">
+                  {selectedShapeId ? "No open comments on this shape" : "No open comments"}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {allCount > 0 ? "All comments on this board are resolved." : "Start a discussion by adding a comment above."}
                 </p>
               </>
             ) : selectedShapeId ? (
