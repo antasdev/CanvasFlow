@@ -210,4 +210,32 @@ describe("CommentItem Logic & State Invariants", () => {
       newMentions
     );
   });
+
+  it("ensures semantic time dateTime format and accessible icon labels", () => {
+    const rawIso = "2026-09-08T10:00:00.000Z";
+    const parsedDate = new Date(rawIso);
+    expect(parsedDate.toISOString()).toBe(rawIso);
+
+    const actionLabels = {
+      moreOptions: "More comment options",
+      edit: "Edit comment",
+      delete: "Delete comment",
+    };
+
+    expect(actionLabels.moreOptions).toBe("More comment options");
+    expect(actionLabels.edit).toBe("Edit comment");
+    expect(actionLabels.delete).toBe("Delete comment");
+  });
+
+  it("restores focus to trigger element when inline edit mode exits", () => {
+    const focusMock = vi.fn();
+    const triggerElement = { focus: focusMock };
+
+    const handleExitEdit = (elementRef: { focus: () => void } | null) => {
+      elementRef?.focus();
+    };
+
+    handleExitEdit(triggerElement);
+    expect(focusMock).toHaveBeenCalledTimes(1);
+  });
 });

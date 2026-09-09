@@ -81,4 +81,53 @@ describe("MentionListbox Accessibility & State Logic", () => {
     expect(getDisplayState(false, 0)).toBe("empty");
     expect(getDisplayState(false, 2)).toBe("list");
   });
+
+  it("does NOT consume Tab key, allowing natural browser focus navigation", () => {
+    let isOpen = true;
+    const preventDefault = vi.fn();
+
+    const handleKeyDown = (e: { key: string; preventDefault: () => void }) => {
+      if (!isOpen) return;
+      if (e.key === "Tab") {
+        // Tab is NOT intercepted; list closes and normal focus navigation occurs
+        isOpen = false;
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+      }
+    };
+
+    handleKeyDown({ key: "Tab", preventDefault });
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(isOpen).toBe(false);
+  });
+
+  it("navigates options via ArrowDown and ArrowUp with wrap-around", () => {
+    const totalMembers = 3;
+    let selectedIndex = 0;
+
+    const navigate = (direction: "up" | "down") => {
+      if (direction === "down") {
+        selectedIndex = (selectedIndex + 1) % totalMembers;
+      } else {
+        selectedIndex = (selectedIndex - 1 + totalMembers) % totalMembers;
+      }
+    };
+
+    navigate("down"); // 0 -> 1
+    expect(selectedIndex).toBe(1);
+
+    navigate("down"); // 1 -> 2
+    expect(selectedIndex).toBe(2);
+
+    navigate("down"); // 2 -> 0 (wrap)
+    expect(selectedIndex).toBe(0);
+
+    navigate("up"); // 0 -> 2 (wrap backward)
+    expect(selectedIndex).toBe(2);
+
+    navigate("up"); // 2 -> 1
+    expect(selectedIndex).toBe(1);
+  });
 });

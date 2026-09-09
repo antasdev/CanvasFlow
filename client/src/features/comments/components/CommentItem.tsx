@@ -1,5 +1,5 @@
 import { Edit2, Trash2, MoreVertical } from "lucide-react";
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 import { getCursorColor } from "@/features/canvas/utils/cursor.utils";
 import { useAuthStore } from "@/store";
@@ -8,7 +8,7 @@ import { useMentionAutocomplete } from "../hooks/useMentionAutocomplete";
 import type { Comment, CommentMention } from "../types";
 import MentionListbox from "./MentionListbox";
 
-type CommentItemProps = {
+export type CommentItemProps = {
   comment: Comment;
   workspaceId?: string;
   boardId?: string;
@@ -113,6 +113,7 @@ export default function CommentItem({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const autocomplete = useMentionAutocomplete({
     content: editContent,
@@ -133,6 +134,22 @@ export default function CommentItem({
     .slice(0, 2)
     .toUpperCase();
 
+  // Focus management: when entering edit mode, focus textarea; when closing, restore focus to menu button
+  useEffect(() => {
+    if (isEditing) {
+      editTextareaRef.current?.focus();
+    }
+  }, [isEditing]);
+
+  const handleCancelEdit = (): void => {
+    setIsEditing(false);
+    setEditContent(comment.content);
+    // Restore focus
+    setTimeout(() => {
+      menuButtonRef.current?.focus();
+    }, 0);
+  };
+
   const handleSaveEdit = async (): Promise<void> => {
     const trimmed = editContent.trim();
     if (!trimmed || !onUpdate || isSubmitting) return;
@@ -141,6 +158,9 @@ export default function CommentItem({
     try {
       await onUpdate(comment.id, trimmed, autocomplete.mentions);
       setIsEditing(false);
+      setTimeout(() => {
+        menuButtonRef.current?.focus();
+      }, 0);
     } finally {
       setIsSubmitting(false);
     }
@@ -166,7 +186,8 @@ export default function CommentItem({
       {/* Avatar */}
       <div
         style={{ backgroundColor: avatarColor }}
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-sm"
+        aria-hidden="true"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white shadow-xs"
       >
         {authorInitials || "U"}
       </div>
@@ -178,16 +199,20 @@ export default function CommentItem({
             <span className="font-semibold text-gray-900 text-xs">
               {authorName}
             </span>
-            <span className="text-[10px] text-gray-400">
+            <time
+              dateTime={comment.createdAt}
+              className="text-[10px] text-gray-400"
+              title={new Date(comment.createdAt).toLocaleString()}
+            >
               {formatRelativeTime(comment.createdAt)}
-            </span>
+            </time>
             {comment.isEdited && !comment.isDeleted && (
-              <span className="text-[10px] text-gray-400 italic">
+              <span className="text-[10px] text-gray-400 italic" aria-label="Comment has been edited">
                 (edited)
               </span>
             )}
             {comment.isOptimistic && (
-              <span className="text-[10px] text-blue-500 italic">
+              <span className="text-[10px] text-blue-500 italic" aria-label="Comment is sending">
                 (sending...)
               </span>
             )}
@@ -197,11 +222,14 @@ export default function CommentItem({
           {isAuthor && !comment.isDeleted && !isEditing && (
             <div className="relative">
               <button
+                ref={menuButtonRef}
                 type="button"
+                aria-label="More comment options"
+                aria-expanded={isMenuOpen}
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-1 rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
-                <MoreVertical className="h-3.5 w-3.5" />
+                <MoreVertical className="h-3.5 w-3.5" aria-hidden="true" />
               </button>
 
               {isMenuOpen && (
@@ -210,26 +238,34 @@ export default function CommentItem({
                     className="fixed inset-0 z-20"
                     onClick={() => setIsMenuOpen(false)}
                   />
-                  <div className="absolute right-0 top-full z-30 mt-1 w-24 rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5">
+                  <div
+                    role="menu"
+                    aria-label="Comment actions"
+                    className="absolute right-0 top-full z-30 mt-1 w-28 rounded-md bg-white py-1 shadow-lg ring-1 ring-black/5"
+                  >
                     <button
                       type="button"
+                      role="menuitem"
+                      aria-label="Edit comment"
                       onClick={() => {
                         setEditContent(comment.content);
                         autocomplete.setMentions(comment.mentions || []);
                         setIsEditing(true);
                         setIsMenuOpen(false);
                       }}
-                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 focus:bg-gray-50 focus:outline-none cursor-pointer"
                     >
-                      <Edit2 className="h-3 w-3" />
+                      <Edit2 className="h-3 w-3" aria-hidden="true" />
                       <span>Edit</span>
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
+                      aria-label="Delete comment"
                       onClick={() => void handleDelete()}
-                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50"
+                      className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 focus:bg-red-50 focus:outline-none cursor-pointer"
                     >
-                      <Trash2 className="h-3 w-3" />
+                      <Trash2 className="h-3 w-3" aria-hidden="true" />
                       <span>Delete</span>
                     </button>
                   </div>
@@ -241,9 +277,13 @@ export default function CommentItem({
 
         {/* Comment Content / Edit Textarea / Deleted Placeholder */}
         {comment.isDeleted ? (
-          <p className="mt-1 text-xs italic text-gray-400 bg-gray-50 rounded p-1.5 border border-gray-100">
+          <div
+            role="note"
+            aria-label="Deleted comment"
+            className="mt-1 text-xs italic text-gray-400 bg-gray-50 rounded p-1.5 border border-gray-100"
+          >
             This comment was deleted.
-          </p>
+          </div>
         ) : isEditing ? (
           <div className="relative mt-1.5">
             {/* Autocomplete Listbox in editing mode */}
@@ -258,7 +298,6 @@ export default function CommentItem({
 
             <textarea
               ref={editTextareaRef}
-              autoFocus
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={(e) => {
@@ -268,7 +307,7 @@ export default function CommentItem({
 
                 if (e.key === "Escape") {
                   e.preventDefault();
-                  setIsEditing(false);
+                  handleCancelEdit();
                   return;
                 }
                 if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
@@ -284,25 +323,28 @@ export default function CommentItem({
               }}
               rows={2}
               maxLength={2000}
+              aria-label="Edit comment content"
               aria-autocomplete="list"
               aria-expanded={autocomplete.isOpen}
               aria-controls="mention-listbox"
-              className="w-full rounded border border-blue-400 p-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded border border-blue-400 p-2 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
             />
             <div className="mt-1.5 flex justify-end gap-1.5">
               <button
                 type="button"
-                onClick={() => setIsEditing(false)}
+                aria-label="Cancel editing comment"
+                onClick={handleCancelEdit}
                 disabled={isSubmitting}
-                className="rounded px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100 cursor-pointer"
+                className="rounded px-2.5 py-1 text-xs text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-gray-300 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
+                aria-label="Save comment edit"
                 onClick={() => void handleSaveEdit()}
                 disabled={isSubmitting || !editContent.trim()}
-                className="rounded bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
               >
                 {isSubmitting ? "Saving..." : "Save"}
               </button>

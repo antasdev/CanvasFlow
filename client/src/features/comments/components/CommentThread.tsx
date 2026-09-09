@@ -7,7 +7,7 @@ import CommentItem from "./CommentItem";
 import CommentReplyComposer from "./CommentReplyComposer";
 import CommentResolveButton from "./CommentResolveButton";
 
-type CommentThreadProps = {
+export type CommentThreadProps = {
   rootComment: Comment;
   replies: Comment[];
   workspaceId?: string;
@@ -70,15 +70,26 @@ export default function CommentThread({
     }
   };
 
+  const authorName = rootComment.author?.fullName || "Collaborator";
+
   return (
-    <div
+    <article
+      id={`comment-thread-${rootComment.id}`}
+      role="article"
+      aria-label={`Comment thread by ${authorName}${rootComment.isResolved ? " (Resolved)" : ""}`}
+      tabIndex={0}
       onClick={onSelect}
-      className={`rounded-xl border transition-all ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && e.target === e.currentTarget) {
+          onSelect?.();
+        }
+      }}
+      className={`rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
         isSelected
-          ? "border-blue-500 bg-blue-50/30 shadow-md ring-1 ring-blue-500"
+          ? "border-blue-500 bg-blue-50/40 shadow-md ring-1 ring-blue-500"
           : rootComment.isResolved
-          ? "border-gray-200 bg-gray-50/60 opacity-80"
-          : "border-gray-200 bg-white shadow-sm hover:border-gray-300"
+          ? "border-gray-200 bg-gray-50/80 opacity-90 hover:border-gray-300"
+          : "border-gray-200 bg-white shadow-xs hover:border-gray-300 hover:shadow-sm"
       } p-3.5 ${className}`}
     >
       {/* Top Bar with Thread Status and Resolve Button */}
@@ -94,16 +105,21 @@ export default function CommentThread({
             </span>
           ) : null}
           {replies.length > 0 && (
-            <span className="text-[11px] text-gray-400">
+            <span
+              className="text-[11px] text-gray-400 font-medium"
+              aria-label={`${replies.length} ${replies.length === 1 ? "reply" : "replies"}`}
+            >
               {replies.length} {replies.length === 1 ? "reply" : "replies"}
             </span>
           )}
         </div>
 
-        <CommentResolveButton
-          isResolved={rootComment.isResolved}
-          onToggle={() => void onResolve(rootComment.id, !rootComment.isResolved)}
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <CommentResolveButton
+            isResolved={rootComment.isResolved}
+            onToggle={() => void onResolve(rootComment.id, !rootComment.isResolved)}
+          />
+        </div>
       </div>
 
       {/* Root Comment */}
@@ -117,7 +133,11 @@ export default function CommentThread({
 
       {/* Indented Replies */}
       {sortedReplies.length > 0 && (
-        <div className="mt-3 space-y-2.5 border-l-2 border-gray-100 pl-3">
+        <div
+          role="feed"
+          aria-label="Thread replies"
+          className="mt-3 space-y-2.5 border-l-2 border-gray-100 pl-3"
+        >
           {sortedReplies.map((reply) => (
             <CommentItem
               key={reply.id}
@@ -134,7 +154,7 @@ export default function CommentThread({
 
       {/* Reply Button & Composer (Only if root is not deleted) */}
       {!rootComment.isDeleted && (
-        <div className="mt-3">
+        <div className="mt-3" onClick={(e) => e.stopPropagation()}>
           {isReplying ? (
             <CommentReplyComposer
               parentCommentId={rootComment.id}
@@ -148,18 +168,19 @@ export default function CommentThread({
           ) : (
             <button
               type="button"
+              aria-label={`Reply to ${authorName}'s thread`}
               onClick={(e) => {
                 e.stopPropagation();
                 setIsReplying(true);
               }}
-              className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600 transition-colors cursor-pointer pl-9"
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-blue-600 transition-colors cursor-pointer pl-9 py-1 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              <MessageSquareReply className="h-3.5 w-3.5" />
+              <MessageSquareReply className="h-3.5 w-3.5" aria-hidden="true" />
               <span>Reply</span>
             </button>
           )}
         </div>
       )}
-    </div>
+    </article>
   );
 }

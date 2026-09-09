@@ -139,3 +139,19 @@ export function formatZoomPercentage(zoom: number): string {
   }
   return `${Math.round(zoom * 100)}%`;
 }
+
+/**
+ * Calculates pan coordinates to center a target world coordinate point within the viewport.
+ */
+export function calculateCenterPan(
+  worldPoint: CanvasPoint,
+  zoom: number,
+  viewportSize: { width: number; height: number }
+): CanvasPoint {
+  const panX = viewportSize.width / 2 - worldPoint.x * zoom;
+  const panY = viewportSize.height / 2 - worldPoint.y * zoom;
+  return {
+    x: Math.round(panX * 100) / 100,
+    y: Math.round(panY * 100) / 100,
+  };
+}

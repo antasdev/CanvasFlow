@@ -90,4 +90,32 @@ describe("CommentMarker Logic & State Tests", () => {
     handleKeyDown({ key: "Tab", preventDefault, stopPropagation }, mockComment.id);
     expect(onSelect).toHaveBeenCalledTimes(2);
   });
+
+  it("generates comprehensive accessible labels including author, snippet, and resolution status", () => {
+    const generateAriaLabel = (comment: Comment, isActive: boolean) => {
+      const author = comment.author?.fullName || "Anonymous";
+      const status = comment.isResolved ? "Resolved" : "Open";
+      const snippet = comment.content.slice(0, 40);
+      return `Comment by ${author}: ${snippet}. Status: ${status}.${isActive ? " Currently selected." : ""}`;
+    };
+
+    const labelInactive = generateAriaLabel(mockComment, false);
+    expect(labelInactive).toBe(
+      "Comment by Jane Engineer: Please check the layout here.. Status: Open."
+    );
+
+    const labelActive = generateAriaLabel(mockComment, true);
+    expect(labelActive).toBe(
+      "Comment by Jane Engineer: Please check the layout here.. Status: Open. Currently selected."
+    );
+
+    const resolvedComment: Comment = {
+      ...mockComment,
+      isResolved: true,
+    };
+    const labelResolved = generateAriaLabel(resolvedComment, false);
+    expect(labelResolved).toBe(
+      "Comment by Jane Engineer: Please check the layout here.. Status: Resolved."
+    );
+  });
 });

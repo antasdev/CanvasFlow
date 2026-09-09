@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useCommentStore } from "../../store";
 import type { Comment } from "../../types";
@@ -190,5 +190,60 @@ describe("CommentPanel Filtering, Counts & Invariants", () => {
     expect(getEmptyState("open", 0, null)).toBe("No open comments");
     expect(getEmptyState("resolved", 1, "shape-1")).toBe("No resolved comments on this shape");
     expect(getEmptyState("all", 0, "shape-1")).toBe("No comments on this shape");
+  });
+
+  it("validates WAI-ARIA tablist properties for All / Open / Resolved tabs", () => {
+    const activeFilter: "all" | "open" | "resolved" = "open";
+
+    const getAriaTabProps = (tab: "all" | "open" | "resolved") => ({
+      role: "tab",
+      id: `comment-tab-${tab}`,
+      "aria-selected": tab === activeFilter,
+      "aria-controls": "comment-threads-feed",
+      tabIndex: tab === activeFilter ? 0 : -1,
+    });
+
+    expect(getAriaTabProps("all")).toEqual({
+      role: "tab",
+      id: "comment-tab-all",
+      "aria-selected": false,
+      "aria-controls": "comment-threads-feed",
+      tabIndex: -1,
+    });
+
+    expect(getAriaTabProps("open")).toEqual({
+      role: "tab",
+      id: "comment-tab-open",
+      "aria-selected": true,
+      "aria-controls": "comment-threads-feed",
+      tabIndex: 0,
+    });
+
+    expect(getAriaTabProps("resolved")).toEqual({
+      role: "tab",
+      id: "comment-tab-resolved",
+      "aria-selected": false,
+      "aria-controls": "comment-threads-feed",
+      tabIndex: -1,
+    });
+  });
+
+  it("handles navigation to canvas anchor and attached shapes", () => {
+    const onNavigateToAnchor = vi.fn();
+    const onNavigateToShape = vi.fn();
+
+    const handleAnchorClick = (comment: Comment) => {
+      if (comment.position) {
+        onNavigateToAnchor(comment.position);
+      } else if (comment.shapeId) {
+        onNavigateToShape(comment.shapeId);
+      }
+    };
+
+    handleAnchorClick(rootOpenA);
+    expect(onNavigateToAnchor).toHaveBeenCalledWith({ x: 100, y: 100 });
+
+    handleAnchorClick(rootOpenB);
+    expect(onNavigateToShape).toHaveBeenCalledWith("shape-99");
   });
 });

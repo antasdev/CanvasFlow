@@ -155,7 +155,23 @@ describe("Comment API Client (commentApi)", () => {
 
     const result = await commentApi.deleteComment("b1", "c1");
 
-    expect(api.delete).toHaveBeenCalledWith("/boards/b1/comments/c1");
+    expect(api.delete).toHaveBeenCalledWith("/boards/b1/comments/c1", {
+      data: undefined,
+    });
     expect(result.isDeleted).toBe(true);
+
+    // With expectedVersion
+    vi.mocked(api.delete).mockResolvedValueOnce({
+      data: {
+        success: true,
+        data: { ...mockDto, content: "", isDeleted: true, version: 2 },
+      },
+    });
+
+    const resultWithVersion = await commentApi.deleteComment("b1", "c1", 1);
+    expect(api.delete).toHaveBeenCalledWith("/boards/b1/comments/c1", {
+      data: { expectedVersion: 1 },
+    });
+    expect(resultWithVersion.isDeleted).toBe(true);
   });
 });

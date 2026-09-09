@@ -6,6 +6,7 @@ import {
   calculatePointerZoom,
   calculateWheelTransform,
   calculatePanDelta,
+  calculateCenterPan,
   formatZoomPercentage,
 } from "./viewport.utils";
 
@@ -166,6 +167,38 @@ describe("viewport.utils", () => {
 
       const result = calculatePanDelta(startPan, pointerStart, pointerCurrent);
       expect(result).toEqual({ x: 125, y: 190 });
+    });
+  });
+
+  describe("calculateCenterPan", () => {
+    it("calculates pan required to center a world point in viewport", () => {
+      const worldPoint = { x: 500, y: 300 };
+      const zoom = 1.0;
+      const viewportSize = { width: 1000, height: 600 };
+
+      const pan = calculateCenterPan(worldPoint, zoom, viewportSize);
+      expect(pan).toEqual({ x: 0, y: 0 }); // 1000/2 - 500 = 0, 600/2 - 300 = 0
+    });
+
+    it("handles scaled zoom levels accurately", () => {
+      const worldPoint = { x: 200, y: 150 };
+      const zoom = 2.0;
+      const viewportSize = { width: 800, height: 600 };
+
+      // viewport width / 2 = 400, worldPoint.x * zoom = 400 -> pan.x = 0
+      // viewport height / 2 = 300, worldPoint.y * zoom = 300 -> pan.y = 0
+      const pan = calculateCenterPan(worldPoint, zoom, viewportSize);
+      expect(pan).toEqual({ x: 0, y: 0 });
+    });
+
+    it("handles offsets when world point is away from origin", () => {
+      const worldPoint = { x: 100, y: 100 };
+      const zoom = 1.0;
+      const viewportSize = { width: 800, height: 600 };
+
+      // 400 - 100 = 300, 300 - 100 = 200
+      const pan = calculateCenterPan(worldPoint, zoom, viewportSize);
+      expect(pan).toEqual({ x: 300, y: 200 });
     });
   });
 
