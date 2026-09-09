@@ -1,5 +1,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 
+import { NotificationBell } from "@/features/notifications";
+
 import { useWorkspacePermissions } from "../hooks";
 import type { WorkspaceRole } from "../types";
 
@@ -80,6 +82,8 @@ export default function WorkspaceTopBar({
         >
           {role}
         </span>
+
+        <NotificationBell />
 
         {permissions.canManageMembers && (
           <button

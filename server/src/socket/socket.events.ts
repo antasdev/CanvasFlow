@@ -81,6 +81,11 @@ export const SocketEvents = {
 
   WORKSPACE_MEMBER_ROLE_UPDATED: "workspace:member-role-updated",
 
+  NOTIFICATION_NEW: "notification:new",
+  NOTIFICATION_READ: "notification:read",
+  NOTIFICATION_ALL_READ: "notification:all-read",
+  NOTIFICATION_COUNT_UPDATED: "notification:count-updated",
+
   ERROR: "error",
 } as const;
 

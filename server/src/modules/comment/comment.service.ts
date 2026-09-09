@@ -12,6 +12,7 @@ import {
   WorkspacePermission,
   assertWorkspacePermission,
 } from "@/modules/workspace/workspace.authorization";
+import { notificationService } from "@/modules/notification";
 import { ApiError, ConflictError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
 
@@ -292,6 +293,39 @@ export class CommentService {
     // 6. Return populated comment
     const populated = await commentRepository.findById(created._id, session);
 
+    // 7. Dispatch Notifications (asynchronous domain boundary)
+    const mentionedUserIds = canonicalMentions.map((m) => m.userId.toString());
+
+    if (dto.parentCommentId) {
+      // Thread Reply Notification
+      await notificationService.dispatchReplyNotification({
+        workspaceId: board.workspaceId,
+        boardId: dto.boardId,
+        canvasId: effectiveCanvasId!,
+        replyCommentId: created._id,
+        parentCommentId: dto.parentCommentId,
+        authorId,
+        content: dto.content,
+        mentionedUserIds,
+        session,
+      });
+    }
+
+    if (canonicalMentions.length > 0) {
+      // Mention Notification
+      await notificationService.dispatchMentionNotifications({
+        workspaceId: board.workspaceId,
+        boardId: dto.boardId,
+        canvasId: effectiveCanvasId!,
+        commentId: created._id,
+        parentCommentId: dto.parentCommentId ?? null,
+        authorId,
+        mentions: canonicalMentions,
+        content: dto.content,
+        session,
+      });
+    }
+
     return {
       comment: populated ?? created,
       boardId: dto.boardId,
@@ -504,6 +538,22 @@ export class CommentService {
       }
     }
 
+    // Dispatch Mention Notifications for newly added mentions
+    if (canonicalMentions.length > 0) {
+      await notificationService.dispatchMentionNotifications({
+        workspaceId: board.workspaceId,
+        boardId: comment.boardId,
+        canvasId: comment.canvasId,
+        commentId: updated._id,
+        authorId: userId,
+        mentions: canonicalMentions,
+        previousMentions: comment.mentions ?? [],
+        content: dto.content,
+        parentCommentId: comment.parentCommentId,
+        session,
+      });
+    }
+
     return {
       comment: updated,
       boardId: comment.boardId,
@@ -605,6 +655,19 @@ export class CommentService {
           "Failed to resolve comment."
         );
       }
+    }
+
+    // Dispatch Thread Activity Notification if resolution state changed
+    if (comment.isResolved !== dto.isResolved) {
+      await notificationService.dispatchThreadActivityNotification({
+        workspaceId: board.workspaceId,
+        boardId: comment.boardId,
+        canvasId: comment.canvasId,
+        rootCommentId: comment._id,
+        actorId: userId,
+        action: dto.isResolved ? "RESOLVED" : "REOPENED",
+        session,
+      });
     }
 
     return {

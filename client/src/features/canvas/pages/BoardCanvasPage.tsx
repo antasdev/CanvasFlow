@@ -8,6 +8,8 @@ import { useWorkspace, useWorkspacePermissions } from "@/features/workspace";
 import { workspaceQueryKeys } from "@/features/workspace/constants";
 import { socketClientService } from "@/services/socket";
 
+import { NotificationBell } from "@/features/notifications";
+
 import BoardSyncStatus from "../components/BoardSyncStatus";
 import CanvasEditor from "../components/CanvasEditor";
 import CanvasToolbar from "../components/CanvasToolbar";
@@ -129,8 +131,9 @@ export default function BoardCanvasPage(): React.JSX.Element {
         <CanvasToolbar canEditCanvas={canEditCanvas} />
       </div>
 
-      {/* Top Right: Collaborators Presence */}
+      {/* Top Right: Notifications & Collaborators Presence */}
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <NotificationBell />
         <PresenceAvatars />
       </div>
     </main>

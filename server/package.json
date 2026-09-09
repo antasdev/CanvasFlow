@@ -19,6 +19,7 @@
     "test:alignment": "tsx -r tsconfig-paths/register src/socket/tests/socket-alignment.test.ts",
     "test:clipboard": "tsx -r tsconfig-paths/register src/socket/tests/socket-clipboard.test.ts",
     "test:comments": "tsx -r tsconfig-paths/register src/modules/comment/tests/comment.domain.test.ts && tsx -r tsconfig-paths/register src/modules/comment/tests/comment.service.test.ts && tsx -r tsconfig-paths/register src/modules/comment/tests/comment.api.test.ts",
+    "test:notifications": "tsx -r tsconfig-paths/register src/modules/notification/tests/notification.domain.test.ts && tsx -r tsconfig-paths/register src/modules/notification/tests/notification.service.test.ts && tsx -r tsconfig-paths/register src/modules/notification/tests/notification.api.test.ts",
     "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],
