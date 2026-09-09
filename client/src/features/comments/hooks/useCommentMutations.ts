@@ -1,12 +1,42 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { socketClientService } from "@/services/socket";
+import { mutationManager } from "@/features/canvas/services/mutation-manager";
 import { useAuthStore } from "@/store";
 
-import { commentApi, mapCommentResponseToComment } from "../api";
+import { mapCommentResponseToComment } from "../api";
 import { useCommentStore } from "../store";
 import type { Comment, CreateCommentInput, UpdateCommentInput } from "../types";
+
+function isForbiddenError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const e = error as Record<string, unknown>;
+    return (
+      e.code === "FORBIDDEN" ||
+      e.statusCode === 403 ||
+      (typeof e.message === "string" &&
+        (e.message.toLowerCase().includes("forbidden") ||
+          e.message.toLowerCase().includes("permission") ||
+          e.message.toLowerCase().includes("must be a member")))
+    );
+  }
+  return false;
+}
+
+function isConflictError(error: unknown): boolean {
+  if (typeof error === "object" && error !== null) {
+    const e = error as Record<string, unknown>;
+    return (
+      e.code === "CONFLICT" ||
+      e.statusCode === 409 ||
+      (typeof e.message === "string" &&
+        (e.message.toLowerCase().includes("conflict") ||
+          e.message.toLowerCase().includes("modified by another") ||
+          e.message.toLowerCase().includes("version mismatch")))
+    );
+  }
+  return false;
+}
 
 export function useCommentMutations(boardId?: string) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,7 +62,7 @@ export function useCommentMutations(boardId?: string) {
   );
 
   /**
-   * Create a new comment or reply with optimistic UI and rollback.
+   * Create a new comment or reply with optimistic UI and mutation journal tracking.
    */
   const createComment = async (
     input: CreateCommentInput
@@ -67,28 +97,34 @@ export function useCommentMutations(boardId?: string) {
     setIsSubmitting(true);
 
     try {
-      let authoritative: Comment;
-      if (socketClientService.isConnected()) {
-        const dto = await socketClientService.createComment({
-          boardId,
+      const responseDto = await mutationManager.executeCommentCreate(
+        boardId,
+        {
           canvasId: input.canvasId,
           content: input.content,
           mentions: input.mentions,
           shapeId: input.shapeId,
           parentCommentId: input.parentCommentId,
           position: input.position,
-        });
-        authoritative = mapCommentResponseToComment(dto);
-      } else {
-        authoritative = await commentApi.createComment(boardId, input);
-      }
+        },
+        tempId
+      );
 
+      const authoritative = mapCommentResponseToComment(responseDto);
       replaceOptimisticComment(tempId, authoritative);
       return authoritative;
     } catch (error) {
       removeOptimisticComment(tempId);
-      const message =
-        error instanceof Error ? error.message : "Failed to post comment.";
+
+      let message = "Failed to post comment.";
+      if (isForbiddenError(error)) {
+        message = "You do not have permission to post comments in this workspace.";
+      } else if (isConflictError(error)) {
+        message = "Conflict occurred while creating comment.";
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
+
       toast.error(message);
       return null;
     } finally {
@@ -115,7 +151,7 @@ export function useCommentMutations(boardId?: string) {
   };
 
   /**
-   * Update comment content with optimistic UI and rollback.
+   * Update comment content with optimistic UI and OCC journal tracking.
    */
   const updateComment = async (
     commentId: string,
@@ -137,35 +173,31 @@ export function useCommentMutations(boardId?: string) {
     setIsSubmitting(true);
 
     try {
-      let authoritative: Comment;
-      if (socketClientService.isConnected()) {
-        const dto = await socketClientService.updateComment({
-          boardId,
-          commentId,
+      const responseDto = await mutationManager.executeCommentUpdate(
+        boardId,
+        commentId,
+        {
           content: input.content,
           mentions: input.mentions,
-        });
-        authoritative = mapCommentResponseToComment(dto);
-      } else {
-        authoritative = await commentApi.updateComment(boardId, commentId, input);
-      }
+        },
+        previousComment.version
+      );
 
+      const authoritative = mapCommentResponseToComment(responseDto);
       updateStoreComment(authoritative);
       return authoritative;
     } catch (error) {
+      // Rollback optimistic update
       updateStoreComment(previousComment);
-      const errObj = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : null;
-      const isConflict =
-        errObj?.code === "CONFLICT" ||
-        errObj?.statusCode === 409 ||
-        (error as Error)?.message?.toLowerCase().includes("conflict") ||
-        (error as Error)?.message?.toLowerCase().includes("modified by another");
 
-      const message = isConflict
-        ? "Comment was modified by another collaborator. Please refresh."
-        : error instanceof Error
-        ? error.message
-        : "Failed to update comment.";
+      let message = "Failed to update comment.";
+      if (isForbiddenError(error)) {
+        message = "You do not have permission to edit this comment.";
+      } else if (isConflictError(error)) {
+        message = "Comment was modified by another collaborator (conflict). Please refresh.";
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
 
       toast.error(message);
       return null;
@@ -175,7 +207,7 @@ export function useCommentMutations(boardId?: string) {
   };
 
   /**
-   * Resolve or unresolve a comment thread with optimistic UI and rollback.
+   * Resolve or unresolve a comment thread with optimistic UI and OCC journal tracking.
    */
   const resolveComment = async (
     commentId: string,
@@ -189,43 +221,31 @@ export function useCommentMutations(boardId?: string) {
     resolveStoreComment(commentId, isResolved);
 
     try {
-      let authoritative: Comment;
-      if (socketClientService.isConnected()) {
-        const dto = await socketClientService.resolveComment({
-          boardId,
-          commentId,
-          isResolved,
-          expectedVersion: previousComment.version,
-        });
-        authoritative = mapCommentResponseToComment(dto);
-      } else {
-        authoritative = await commentApi.resolveComment(
-          boardId,
-          commentId,
-          isResolved,
-          previousComment.version
-        );
-      }
+      const responseDto = await mutationManager.executeCommentResolve(
+        boardId,
+        commentId,
+        isResolved,
+        previousComment.version
+      );
 
+      const authoritative = mapCommentResponseToComment(responseDto);
       updateStoreComment(authoritative);
       toast.success(
         isResolved ? "Thread marked as resolved" : "Thread reopened"
       );
       return authoritative;
     } catch (error) {
+      // Rollback optimistic resolution
       updateStoreComment(previousComment);
-      const errObj = typeof error === "object" && error !== null ? (error as Record<string, unknown>) : null;
-      const isConflict =
-        errObj?.code === "CONFLICT" ||
-        errObj?.statusCode === 409 ||
-        (error as Error)?.message?.toLowerCase().includes("conflict") ||
-        (error as Error)?.message?.toLowerCase().includes("modified by another");
 
-      const message = isConflict
-        ? "Comment was modified by another collaborator. Please refresh."
-        : error instanceof Error
-        ? error.message
-        : "Failed to resolve comment.";
+      let message = "Failed to resolve comment.";
+      if (isForbiddenError(error)) {
+        message = "You do not have permission to resolve comments in this workspace.";
+      } else if (isConflictError(error)) {
+        message = "Comment was modified by another collaborator (conflict). Please refresh.";
+      } else if (error instanceof Error) {
+        message = error.message;
+      }
 
       toast.error(message);
       return null;
@@ -233,7 +253,7 @@ export function useCommentMutations(boardId?: string) {
   };
 
   /**
-   * Soft-delete a comment with optimistic UI and rollback.
+   * Soft-delete a comment with optimistic UI and OCC journal tracking.
    */
   const deleteComment = async (
     commentId: string
@@ -246,24 +266,27 @@ export function useCommentMutations(boardId?: string) {
     removeStoreComment(commentId);
 
     try {
-      let authoritative: Comment;
-      if (socketClientService.isConnected()) {
-        const dto = await socketClientService.deleteComment({
-          boardId,
-          commentId,
-        });
-        authoritative = mapCommentResponseToComment(dto);
-      } else {
-        authoritative = await commentApi.deleteComment(boardId, commentId);
+      await mutationManager.executeCommentDelete(
+        boardId,
+        commentId,
+        previousComment.version
+      );
+
+      toast.success("Comment deleted");
+      return null;
+    } catch (error) {
+      // Rollback optimistic delete
+      updateStoreComment(previousComment);
+
+      let message = "Failed to delete comment.";
+      if (isForbiddenError(error)) {
+        message = "You do not have permission to delete this comment.";
+      } else if (isConflictError(error)) {
+        message = "Comment was modified by another collaborator (conflict). Please refresh.";
+      } else if (error instanceof Error) {
+        message = error.message;
       }
 
-      updateStoreComment(authoritative);
-      toast.success("Comment deleted");
-      return authoritative;
-    } catch (error) {
-      updateStoreComment(previousComment);
-      const message =
-        error instanceof Error ? error.message : "Failed to delete comment.";
       toast.error(message);
       return null;
     }

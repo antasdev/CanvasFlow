@@ -12,6 +12,7 @@ type CommentStore = {
 
   // Actions
   setComments: (comments: Comment[]) => void;
+  reconcileAuthoritativeComments: (comments: Comment[]) => void;
   addComment: (comment: Comment) => void;
   updateComment: (comment: Comment) => void;
   removeComment: (commentId: string) => void;
@@ -46,13 +47,47 @@ export const useCommentStore = create<CommentStore>((set) => ({
     set({ comments: map });
   },
 
+  reconcileAuthoritativeComments: (authoritativeComments: Comment[]): void => {
+    set((state) => {
+      const nextMap: Record<string, Comment> = {};
+
+      // 1. Populate authoritative comments
+      for (const comment of authoritativeComments) {
+        nextMap[comment.id] = comment;
+      }
+
+      // 2. Preserve active in-flight optimistic comments (temp_*)
+      for (const [id, localComment] of Object.entries(state.comments)) {
+        if (localComment.isOptimistic && !nextMap[id]) {
+          nextMap[id] = localComment;
+        }
+      }
+
+      return { comments: nextMap };
+    });
+  },
+
   addComment: (comment: Comment): void => {
-    set((state) => ({
-      comments: {
-        ...state.comments,
-        [comment.id]: comment,
-      },
-    }));
+    set((state) => {
+      const existing = state.comments[comment.id];
+      if (
+        existing &&
+        !existing.isOptimistic &&
+        typeof comment.version === "number" &&
+        typeof existing.version === "number" &&
+        comment.version < existing.version
+      ) {
+        // Stale entity version - ignore
+        return state;
+      }
+
+      return {
+        comments: {
+          ...state.comments,
+          [comment.id]: comment,
+        },
+      };
+    });
   },
 
   updateComment: (comment: Comment): void => {
@@ -67,12 +102,23 @@ export const useCommentStore = create<CommentStore>((set) => ({
         };
       }
 
+      // Stale entity version check (ignore if incoming version is older than existing authoritative version)
+      if (
+        !existing.isOptimistic &&
+        typeof comment.version === "number" &&
+        typeof existing.version === "number" &&
+        comment.version < existing.version
+      ) {
+        return state;
+      }
+
       return {
         comments: {
           ...state.comments,
           [comment.id]: {
             ...existing,
             ...comment,
+            isOptimistic: false,
           },
         },
       };
