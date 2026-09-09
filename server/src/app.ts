@@ -18,6 +18,7 @@ import { boardRouter } from "@/modules/board";
 import { canvasRouter } from "@/modules/canvas";
 import { shapeRouter } from "@/modules/shape";
 import { commentRouter, canvasCommentRouter } from "@/modules/comment";
+import { notificationRouter } from "@/modules/notification";
 
 
 const app:Application=express();
@@ -51,6 +52,8 @@ app.use("/api/v1/boards/:boardId/canvases/:canvasId/comments", canvasCommentRout
 app.use("/api/v1/canvases", canvasRouter);
 
 app.use("/api/v1/shapes", shapeRouter);
+
+app.use("/api/v1/notifications", notificationRouter);
 
 //404 middleware
 app.use(notFoundMiddleware);

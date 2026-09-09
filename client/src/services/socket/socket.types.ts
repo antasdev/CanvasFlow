@@ -975,8 +975,49 @@ export interface ServerToClientEvents {
 
   "workspace:member-role-updated": (payload: WorkspaceMemberRoleUpdatedPayload) => void;
 
+  "notification:new": (payload: NotificationNewPayload) => void;
+  "notification:read": (payload: NotificationReadPayload) => void;
+  "notification:all-read": (payload: NotificationAllReadPayload) => void;
+  "notification:count-updated": (payload: NotificationCountUpdatedPayload) => void;
+
   error: (message: string) => void;
 }
+
+export type NotificationNewPayload = {
+  notification: {
+    id: string;
+    recipientId: string;
+    type: string;
+    actorId: string;
+    actor: {
+      id: string;
+      name: string;
+      email: string;
+      avatarUrl?: string;
+    } | null;
+    metadata: Record<string, unknown>;
+    isRead: boolean;
+    readAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+  unreadCount?: number;
+};
+
+export type NotificationReadPayload = {
+  notificationId: string;
+  readAt: string;
+  unreadCount?: number;
+};
+
+export type NotificationAllReadPayload = {
+  readAt: string;
+  unreadCount: number;
+};
+
+export type NotificationCountUpdatedPayload = {
+  unreadCount: number;
+};
 
 export type WorkspaceMemberRoleUpdatedPayload = {
   workspaceId: string;

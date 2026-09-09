@@ -3,8 +3,9 @@ import { Socket } from "socket.io";
 import type { UserRole } from "@/modules/user/user.types";
 import type { ShapeResponseDto } from "@/modules/shape/shape.dto";
 import type { CommentResponseDto } from "@/modules/comment/comment.dto";
+import type { NotificationResponseDto } from "@/modules/notification/notification.dto";
 
-export type { ShapeResponseDto, CommentResponseDto };
+export type { ShapeResponseDto, CommentResponseDto, NotificationResponseDto };
 
 import type {
   PresenceActivity,
@@ -754,6 +755,11 @@ export interface ServerToClientEvents {
   "interaction:snapshot": (payload: { boardId: string; interactions: CollaborativeInteraction[] }) => void;
 
   "workspace:member-role-updated": (payload: WorkspaceMemberRoleUpdatedPayload) => void;
+
+  "notification:new": (payload: NotificationResponseDto) => void;
+  "notification:read": (payload: { id: string; readAt: string }) => void;
+  "notification:all-read": (payload: { readAt: string; count: number }) => void;
+  "notification:count-updated": (payload: { unreadCount: number }) => void;
 
   error: (message: string) => void;
 }

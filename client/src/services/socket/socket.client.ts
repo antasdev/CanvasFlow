@@ -56,6 +56,10 @@ import type {
   UpdateCommentPayload,
   UpdateShapePayload,
   WorkspaceMemberRoleUpdatedPayload,
+  NotificationNewPayload,
+  NotificationReadPayload,
+  NotificationAllReadPayload,
+  NotificationCountUpdatedPayload,
 } from "./socket.types";
 
 export interface SocketClientError extends Error {
@@ -1267,6 +1271,62 @@ export class SocketClientService {
 
     return () => {
       socket.off(SocketEvents.WORKSPACE_MEMBER_ROLE_UPDATED, handler);
+    };
+  }
+
+  /**
+   * Subscribes to incoming new notification events for authenticated user.
+   */
+  public onNotificationNew(
+    handler: (payload: NotificationNewPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.NOTIFICATION_NEW, handler as any);
+
+    return () => {
+      socket.off(SocketEvents.NOTIFICATION_NEW, handler as any);
+    };
+  }
+
+  /**
+   * Subscribes to notification read events for authenticated user.
+   */
+  public onNotificationRead(
+    handler: (payload: NotificationReadPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.NOTIFICATION_READ, handler as any);
+
+    return () => {
+      socket.off(SocketEvents.NOTIFICATION_READ, handler as any);
+    };
+  }
+
+  /**
+   * Subscribes to notification mark-all-read events for authenticated user.
+   */
+  public onNotificationAllRead(
+    handler: (payload: NotificationAllReadPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.NOTIFICATION_ALL_READ, handler as any);
+
+    return () => {
+      socket.off(SocketEvents.NOTIFICATION_ALL_READ, handler as any);
+    };
+  }
+
+  /**
+   * Subscribes to notification unread count update events for authenticated user.
+   */
+  public onNotificationCountUpdated(
+    handler: (payload: NotificationCountUpdatedPayload) => void
+  ): () => void {
+    const socket = this.socket ?? this.connect();
+    socket.on(SocketEvents.NOTIFICATION_COUNT_UPDATED, handler as any);
+
+    return () => {
+      socket.off(SocketEvents.NOTIFICATION_COUNT_UPDATED, handler as any);
     };
   }
 

@@ -79,6 +79,18 @@ export class CommentRepository {
     });
   }
 
+  async findByParentCommentId(
+    parentCommentId: Types.ObjectId,
+    session?: ClientSession
+  ): Promise<CommentDocument[]> {
+    return CommentModel.find({ parentCommentId }, null, { session })
+      .sort({ createdAt: 1 })
+      .populate({
+        path: "authorId",
+        select: "fullName email profile",
+      });
+  }
+
   async updateWithExpectedVersion(
     id: Types.ObjectId,
     expectedVersion: number,
