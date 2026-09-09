@@ -1,4 +1,4 @@
-import { Send, X, MessageSquare } from "lucide-react";
+import { Send, X, MessageSquare, Loader2 } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 
 import { useMentionAutocomplete } from "../hooks/useMentionAutocomplete";
@@ -17,6 +17,8 @@ export type FloatingCommentComposerProps = {
 };
 
 const MAX_CHAR_COUNT = 2000;
+const CARD_WIDTH = 320;
+const CARD_HEIGHT = 180;
 
 /**
  * Floating in-canvas composer positioned at a draft comment anchor coordinate.
@@ -93,26 +95,36 @@ export default function FloatingCommentComposer({
   const isOverLimit = remaining < 0;
   const canSubmit = content.trim().length > 0 && !isOverLimit && !isSubmitting;
 
+  // Viewport clamping to prevent floating card from rendering off-screen
+  const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 768;
+  const clampedX = Math.max(CARD_WIDTH / 2 + 16, Math.min(viewportWidth - CARD_WIDTH / 2 - 16, screenX));
+  const clampedY = Math.max(80, Math.min(viewportHeight - CARD_HEIGHT - 20, screenY));
+
   return (
     <div
       style={{
-        left: `${screenX}px`,
-        top: `${screenY}px`,
+        left: `${clampedX}px`,
+        top: `${clampedY}px`,
       }}
       className="absolute z-40 pointer-events-auto select-none"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Draft Pin Point Indicator */}
-      <div className="relative -translate-x-1/2 -translate-y-full mb-1 flex items-center justify-center">
+      <div className="relative -translate-x-1/2 -translate-y-full mb-1 flex items-center justify-center pointer-events-none">
         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg ring-4 ring-blue-500/30 animate-bounce">
-          <MessageSquare className="h-3.5 w-3.5" />
+          <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
         </div>
         <div className="absolute -bottom-1 left-1/2 h-2.5 w-2.5 -translate-x-1/2 rotate-45 bg-blue-600" />
       </div>
 
-      {/* Floating Composer Card */}
-      <div className="relative -translate-x-1/2 mt-2 w-72 sm:w-80 rounded-xl border border-gray-200/90 bg-white/95 backdrop-blur-md p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      {/* Floating Composer Card Dialog */}
+      <div
+        role="dialog"
+        aria-label="New comment composer"
+        className="relative -translate-x-1/2 mt-2 w-72 sm:w-80 rounded-xl border border-gray-200/90 bg-white/95 backdrop-blur-md p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+      >
         <form onSubmit={(e) => void handleSubmit(e)}>
           {/* Mention Autocomplete Listbox */}
           <MentionListbox
@@ -127,16 +139,16 @@ export default function FloatingCommentComposer({
           {/* Header */}
           <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-1.5">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
-              <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" aria-hidden="true" />
               <span>New Comment</span>
             </div>
             <button
               type="button"
               onClick={onCancel}
               aria-label="Cancel comment"
-              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+              className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors focus:outline-none focus:ring-1 focus:ring-gray-300 cursor-pointer"
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -150,6 +162,7 @@ export default function FloatingCommentComposer({
             rows={2}
             disabled={isSubmitting}
             maxLength={MAX_CHAR_COUNT + 50}
+            aria-label="Comment text"
             aria-autocomplete="list"
             aria-expanded={autocomplete.isOpen}
             aria-controls="mention-listbox"
@@ -164,6 +177,7 @@ export default function FloatingCommentComposer({
                   ? "text-[11px] text-red-600 font-medium"
                   : "text-[11px] text-gray-400"
               }
+              aria-live="polite"
             >
               {content.length > 0 && `${content.length}/${MAX_CHAR_COUNT}`}
             </span>
@@ -171,30 +185,32 @@ export default function FloatingCommentComposer({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                aria-label="Cancel comment"
                 onClick={onCancel}
                 disabled={isSubmitting}
-                className="rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                className="rounded px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-1 focus:ring-gray-300 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
+                aria-label="Post comment"
                 disabled={!canSubmit}
-                className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                   canSubmit
-                    ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700 cursor-pointer"
+                    ? "bg-blue-600 text-white shadow-xs hover:bg-blue-700 cursor-pointer"
                     : "bg-gray-100 text-gray-400 cursor-not-allowed"
                 }`}
               >
                 {isSubmitting ? (
                   <>
-                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-white" aria-hidden="true" />
                     <span>Posting...</span>
                   </>
                 ) : (
                   <>
                     <span>Post</span>
-                    <Send className="h-3 w-3" />
+                    <Send className="h-3 w-3" aria-hidden="true" />
                   </>
                 )}
               </button>

@@ -66,6 +66,7 @@ export default function CommentMarker({
         onClick={handleClick}
         onMouseDown={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
+        aria-pressed={isActive}
         aria-label={
           comment.isResolved
             ? `Resolved comment by ${authorName}: ${snippet}`

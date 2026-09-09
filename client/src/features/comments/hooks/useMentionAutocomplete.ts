@@ -272,13 +272,19 @@ export function useMentionAutocomplete({
         return true;
       }
 
-      if ((e.key === "Enter" || e.key === "Tab") && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey) {
         if (matchingMembers.length > 0 && selectedIndex >= 0 && selectedIndex < matchingMembers.length) {
           e.preventDefault();
           e.stopPropagation();
           selectMember(matchingMembers[selectedIndex]);
           return true;
         }
+      }
+
+      if (e.key === "Tab") {
+        // Do not consume Tab - allow natural browser focus navigation while closing autocomplete
+        closeAutocomplete();
+        return false;
       }
 
       if (e.key === "Escape") {

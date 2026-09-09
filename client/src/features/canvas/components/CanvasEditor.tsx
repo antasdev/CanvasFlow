@@ -1,6 +1,7 @@
 import type Konva from "konva";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Arrow, Circle, Ellipse, Group, Layer, Line, Rect, Stage } from "react-konva";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
@@ -47,6 +48,7 @@ import {
     normalizePointsToLocal,
 } from "../utils/stroke-simplification";
 import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
+import { calculateCenterPan } from "../utils/viewport.utils";
 
 import CanvasGrid from "./CanvasGrid";
 import CanvasZoomControls from "./CanvasZoomControls";
@@ -131,8 +133,12 @@ export default function CanvasEditor({
         triggerRecovery,
     } = useBoardRecovery(boardId, canvasId);
 
+    const [searchParams] = useSearchParams();
+    const commentIdParam = searchParams.get("commentId");
+    const handledDeepLinkRef = useRef<string | null>(null);
+
     // Initialize real-time comments subscriptions and data loading
-    useComments(boardId);
+    const { isLoading: isCommentsLoading } = useComments(boardId);
     useCommentSocket(boardId);
 
     // Initialize collaborative presence & session lifecycle
@@ -295,6 +301,56 @@ export default function CanvasEditor({
     const moveSelectedShapes = useCanvasStore(
         (state) => state.moveSelectedShapes,
     );
+
+    const setPan = useCanvasStore((state) => state.setPan);
+
+    const handleNavigateToAnchor = useCallback(
+        (position: { x: number; y: number }): void => {
+            if (size.width > 0 && size.height > 0) {
+                const nextPan = calculateCenterPan(position, zoom, size);
+                setPan(nextPan.x, nextPan.y);
+            }
+        },
+        [size, zoom, setPan]
+    );
+
+    const handleNavigateToShape = useCallback(
+        (shapeId: string): void => {
+            const shape = shapes.find((s) => s.id === shapeId);
+            if (shape && size.width > 0 && size.height > 0) {
+                selectShape(shapeId);
+                const center = {
+                    x: shape.x + (shape.width || 100) / 2,
+                    y: shape.y + (shape.height || 100) / 2,
+                };
+                const nextPan = calculateCenterPan(center, zoom, size);
+                setPan(nextPan.x, nextPan.y);
+            }
+        },
+        [shapes, size, zoom, selectShape, setPan]
+    );
+
+    // Asynchronously resolve deep-link comment query param once comments load
+    useEffect(() => {
+        if (!commentIdParam || handledDeepLinkRef.current === commentIdParam) {
+            return;
+        }
+
+        const targetComment = comments[commentIdParam];
+        if (targetComment) {
+            handledDeepLinkRef.current = commentIdParam;
+            const rootId = targetComment.parentCommentId || targetComment.id;
+            useCommentStore.getState().setActiveThreadId(rootId);
+            useCommentStore.getState().togglePanel(true);
+
+            if (targetComment.position && size.width > 0 && size.height > 0) {
+                const nextPan = calculateCenterPan(targetComment.position, zoom, size);
+                setPan(nextPan.x, nextPan.y);
+            } else if (targetComment.shapeId) {
+                handleNavigateToShape(targetComment.shapeId);
+            }
+        }
+    }, [commentIdParam, comments, size, zoom, setPan, handleNavigateToShape]);
 
     const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
 
@@ -2209,7 +2265,12 @@ export default function CanvasEditor({
             />
 
             {/* Real-time Collaborative Comments Panel */}
-            <CommentPanel boardId={boardId} />
+            <CommentPanel
+                boardId={boardId}
+                isLoading={isCommentsLoading}
+                onNavigateToAnchor={handleNavigateToAnchor}
+                onNavigateToShape={handleNavigateToShape}
+            />
 
             {/* Keyboard Shortcuts Cheatsheet Modal */}
             <KeyboardShortcutsModal

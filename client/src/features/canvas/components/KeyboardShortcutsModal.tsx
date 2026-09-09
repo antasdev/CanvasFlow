@@ -66,6 +66,16 @@ const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { keys: ["Enter"], description: "Enter group edit mode" },
     ],
   },
+  {
+    title: "Comments & Collaboration",
+    shortcuts: [
+      { keys: ["C"], description: "Comment tool" },
+      { keys: ["Enter"], description: "Submit comment" },
+      { keys: ["Shift", "Enter"], description: "New line in composer" },
+      { keys: ["@"], description: "Mention autocomplete" },
+      { keys: ["Esc"], description: "Cancel / Close composer or thread" },
+    ],
+  },
 ];
 
 export default function KeyboardShortcutsModal({
