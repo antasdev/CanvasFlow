@@ -126,7 +126,7 @@ export function useBoardRecovery(
         useCanvasStore.getState().replaceShapesFromRecovery(authoritativeShapes);
 
         // 7. Update Comments Store & Invalidate TanStack Query Cache
-        useCommentStore.getState().setComments(comments);
+        useCommentStore.getState().reconcileAuthoritativeComments(comments);
         queryClient.invalidateQueries({
           queryKey: COMMENT_QUERY_KEYS.boardComments(activeBoardId),
         });

@@ -1,6 +1,8 @@
+import { commentApi, mapCommentResponseToComment } from "@/features/comments/api";
+import { useCommentStore } from "@/features/comments/store";
 import type { Comment } from "@/features/comments/types/comment.types";
 import { socketClientService } from "@/services/socket";
-import type { ShapeResponseDto } from "@/services/socket";
+import type { ShapeResponseDto, CommentResponseDto, CommentMentionDto } from "@/services/socket";
 
 import { useCanvasStore } from "../store/canvas.store";
 import type { CollaborationConflict } from "../store/collaboration.store";
@@ -309,6 +311,341 @@ export class MutationManager {
         useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
       } else {
         useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Delete failed");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Executes comment creation with optimistic tracking and temporary ID replacement.
+   */
+  public async executeCommentCreate(
+    boardId: string,
+    payload: {
+      canvasId?: string;
+      content: string;
+      mentions?: CommentMentionDto[];
+      shapeId?: string | null;
+      parentCommentId?: string | null;
+      position?: { x: number; y: number } | null;
+    },
+    temporaryId?: string,
+    existingMutationId?: string
+  ): Promise<CommentResponseDto> {
+    const mutationId = existingMutationId ?? this.createMutationId();
+
+    const intent: CommentMutationIntent = {
+      resourceType: "comment",
+      resourceId: temporaryId ?? mutationId,
+      operation: "create",
+      temporaryId,
+      payload: { ...payload },
+    };
+
+    this.registerMutation({
+      mutationId,
+      boardId,
+      resourceType: "comment",
+      resourceId: temporaryId ?? mutationId,
+      operation: "create",
+      intent,
+    });
+
+    try {
+      let response: CommentResponseDto;
+      if (socketClientService.isConnected()) {
+        response = await socketClientService.createComment({
+          boardId,
+          canvasId: payload.canvasId,
+          content: payload.content,
+          mentions: payload.mentions,
+          shapeId: payload.shapeId,
+          parentCommentId: payload.parentCommentId,
+          position: payload.position,
+          mutationId,
+        });
+      } else {
+        const mapped = await commentApi.createComment(boardId, {
+          canvasId: payload.canvasId,
+          content: payload.content,
+          mentions: payload.mentions,
+          shapeId: payload.shapeId,
+          parentCommentId: payload.parentCommentId,
+          position: payload.position,
+        });
+        response = {
+          id: mapped.id,
+          boardId: mapped.boardId,
+          canvasId: mapped.canvasId,
+          shapeId: mapped.shapeId,
+          authorId: mapped.authorId,
+          author: mapped.author,
+          parentCommentId: mapped.parentCommentId,
+          position: mapped.position ? { x: mapped.position.x, y: mapped.position.y } : null,
+          content: mapped.content,
+          mentions: mapped.mentions,
+          isResolved: mapped.isResolved,
+          resolvedAt: mapped.resolvedAt,
+          resolvedBy: mapped.resolvedBy,
+          isEdited: mapped.isEdited,
+          isDeleted: mapped.isDeleted,
+          version: mapped.version ?? 1,
+          createdAt: mapped.createdAt,
+          updatedAt: mapped.updatedAt,
+        };
+      }
+
+      this.clearTimeout(mutationId);
+      useMutationStore.getState().markConfirmed(mutationId);
+
+      if (temporaryId && temporaryId !== response.id) {
+        useCommentStore.getState().replaceOptimisticComment(temporaryId, mapCommentResponseToComment(response));
+      }
+
+      return response;
+    } catch (err: unknown) {
+      this.clearTimeout(mutationId);
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
+      } else {
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Comment creation failed");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Executes comment update with OCC expectedVersion and journal tracking.
+   */
+  public async executeCommentUpdate(
+    boardId: string,
+    commentId: string,
+    payload: {
+      content: string;
+      mentions?: CommentMentionDto[];
+    },
+    expectedVersion?: number,
+    existingMutationId?: string
+  ): Promise<CommentResponseDto> {
+    const mutationId = existingMutationId ?? this.createMutationId();
+
+    const intent: CommentMutationIntent = {
+      resourceType: "comment",
+      resourceId: commentId,
+      operation: "update",
+      expectedVersion,
+      payload: { ...payload },
+    };
+
+    this.registerMutation({
+      mutationId,
+      boardId,
+      resourceType: "comment",
+      resourceId: commentId,
+      operation: "update",
+      expectedVersion,
+      intent,
+    });
+
+    try {
+      let response: CommentResponseDto;
+      if (socketClientService.isConnected()) {
+        response = await socketClientService.updateComment({
+          boardId,
+          commentId,
+          content: payload.content,
+          mentions: payload.mentions,
+          expectedVersion,
+          mutationId,
+        });
+      } else {
+        const mapped = await commentApi.updateComment(boardId, commentId, {
+          content: payload.content,
+          mentions: payload.mentions,
+          expectedVersion,
+        });
+        response = {
+          id: mapped.id,
+          boardId: mapped.boardId,
+          canvasId: mapped.canvasId,
+          shapeId: mapped.shapeId,
+          authorId: mapped.authorId,
+          author: mapped.author,
+          parentCommentId: mapped.parentCommentId,
+          position: mapped.position ? { x: mapped.position.x, y: mapped.position.y } : null,
+          content: mapped.content,
+          mentions: mapped.mentions,
+          isResolved: mapped.isResolved,
+          resolvedAt: mapped.resolvedAt,
+          resolvedBy: mapped.resolvedBy,
+          isEdited: mapped.isEdited,
+          isDeleted: mapped.isDeleted,
+          version: mapped.version ?? 1,
+          createdAt: mapped.createdAt,
+          updatedAt: mapped.updatedAt,
+        };
+      }
+
+      this.clearTimeout(mutationId);
+      useMutationStore.getState().markConfirmed(mutationId);
+      return response;
+    } catch (err: unknown) {
+      this.clearTimeout(mutationId);
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
+      } else {
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Comment update failed");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Executes comment resolve with OCC expectedVersion and journal tracking.
+   */
+  public async executeCommentResolve(
+    boardId: string,
+    commentId: string,
+    isResolved: boolean,
+    expectedVersion?: number,
+    existingMutationId?: string
+  ): Promise<CommentResponseDto> {
+    const mutationId = existingMutationId ?? this.createMutationId();
+
+    const intent: CommentMutationIntent = {
+      resourceType: "comment",
+      resourceId: commentId,
+      operation: "resolve",
+      expectedVersion,
+      payload: { isResolved },
+    };
+
+    this.registerMutation({
+      mutationId,
+      boardId,
+      resourceType: "comment",
+      resourceId: commentId,
+      operation: "resolve",
+      expectedVersion,
+      intent,
+    });
+
+    try {
+      let response: CommentResponseDto;
+      if (socketClientService.isConnected()) {
+        response = await socketClientService.resolveComment({
+          boardId,
+          commentId,
+          isResolved,
+          expectedVersion,
+          mutationId,
+        });
+      } else {
+        const mapped = await commentApi.resolveComment(boardId, commentId, isResolved, expectedVersion);
+        response = {
+          id: mapped.id,
+          boardId: mapped.boardId,
+          canvasId: mapped.canvasId,
+          shapeId: mapped.shapeId,
+          authorId: mapped.authorId,
+          author: mapped.author,
+          parentCommentId: mapped.parentCommentId,
+          position: mapped.position ? { x: mapped.position.x, y: mapped.position.y } : null,
+          content: mapped.content,
+          mentions: mapped.mentions,
+          isResolved: mapped.isResolved,
+          resolvedAt: mapped.resolvedAt,
+          resolvedBy: mapped.resolvedBy,
+          isEdited: mapped.isEdited,
+          isDeleted: mapped.isDeleted,
+          version: mapped.version ?? 1,
+          createdAt: mapped.createdAt,
+          updatedAt: mapped.updatedAt,
+        };
+      }
+
+      this.clearTimeout(mutationId);
+      useMutationStore.getState().markConfirmed(mutationId);
+      return response;
+    } catch (err: unknown) {
+      this.clearTimeout(mutationId);
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
+      } else {
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Comment resolve failed");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Executes comment delete with OCC expectedVersion and journal tracking.
+   */
+  public async executeCommentDelete(
+    boardId: string,
+    commentId: string,
+    expectedVersion?: number,
+    existingMutationId?: string
+  ): Promise<void> {
+    const mutationId = existingMutationId ?? this.createMutationId();
+
+    const intent: CommentMutationIntent = {
+      resourceType: "comment",
+      resourceId: commentId,
+      operation: "delete",
+      expectedVersion,
+    };
+
+    this.registerMutation({
+      mutationId,
+      boardId,
+      resourceType: "comment",
+      resourceId: commentId,
+      operation: "delete",
+      expectedVersion,
+      intent,
+    });
+
+    try {
+      if (socketClientService.isConnected()) {
+        await socketClientService.deleteComment({
+          boardId,
+          commentId,
+          expectedVersion,
+          mutationId,
+        });
+      } else {
+        await commentApi.deleteComment(boardId, commentId, expectedVersion);
+      }
+
+      this.clearTimeout(mutationId);
+      useMutationStore.getState().markConfirmed(mutationId);
+    } catch (err: unknown) {
+      this.clearTimeout(mutationId);
+      const parsedErr = extractSocketError(err);
+      if (parsedErr.code === "CONFLICT") {
+        useMutationStore.getState().markConflicted(mutationId, err as CollaborationConflict);
+      } else if (parsedErr.code === "MUTATION_IN_PROGRESS") {
+        useMutationStore.getState().markUncertain(mutationId);
+      } else if (parsedErr.code === "IDEMPOTENCY_KEY_REUSED") {
+        useMutationStore.getState().markFailed(mutationId, "Idempotency key reused with different payload.");
+      } else {
+        useMutationStore.getState().markFailed(mutationId, parsedErr.message ?? "Comment delete failed");
       }
       throw err;
     }
@@ -633,10 +970,15 @@ export class MutationManager {
 
     if (mutation.operation === "create") {
       const match = Array.from(commentsById.values()).find(
-        (c) => intent?.payload && c.content === intent.payload.content
+        (c) =>
+          intent?.temporaryId === c.id ||
+          (intent?.payload && c.content === intent.payload.content)
       );
 
       if (match) {
+        if (intent?.temporaryId && intent.temporaryId !== match.id) {
+          useCommentStore.getState().replaceOptimisticComment(intent.temporaryId, match);
+        }
         useMutationStore.getState().markConfirmed(mutation.mutationId);
         return "confirmed";
       } else if (intent?.payload) {

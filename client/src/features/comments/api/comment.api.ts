@@ -147,9 +147,14 @@ export const commentApi = {
   /**
    * Soft-deletes a comment over HTTP.
    */
-  async deleteComment(boardId: string, commentId: string): Promise<Comment> {
+  async deleteComment(
+    boardId: string,
+    commentId: string,
+    expectedVersion?: number
+  ): Promise<Comment> {
     const response = await api.delete<SingleCommentApiResponse>(
-      `/boards/${boardId}/comments/${commentId}`
+      `/boards/${boardId}/comments/${commentId}`,
+      { data: expectedVersion !== undefined ? { expectedVersion } : undefined }
     );
     return mapCommentResponseToComment(response.data.data);
   },
