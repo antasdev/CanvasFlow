@@ -1,13 +1,17 @@
 import { Send, X, MessageSquare } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 
-import type { CommentPosition } from "../types";
+import { useMentionAutocomplete } from "../hooks/useMentionAutocomplete";
+import type { CommentMention, CommentPosition } from "../types";
+import MentionListbox from "./MentionListbox";
 
 export type FloatingCommentComposerProps = {
   position: CommentPosition;
   screenX: number;
   screenY: number;
-  onSubmit: (content: string) => Promise<boolean | void>;
+  workspaceId?: string;
+  boardId?: string;
+  onSubmit: (content: string, mentions?: CommentMention[]) => Promise<boolean | void>;
   onCancel: () => void;
   isSubmitting?: boolean;
 };
@@ -16,18 +20,28 @@ const MAX_CHAR_COUNT = 2000;
 
 /**
  * Floating in-canvas composer positioned at a draft comment anchor coordinate.
- * Allows entering and posting a canvas-anchored comment thread.
+ * Allows entering and posting a canvas-anchored comment thread with mention autocomplete.
  */
 export default function FloatingCommentComposer({
   position: _position,
   screenX,
   screenY,
+  workspaceId,
+  boardId,
   onSubmit,
   onCancel,
   isSubmitting = false,
 }: FloatingCommentComposerProps): React.JSX.Element {
   const [content, setContent] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const autocomplete = useMentionAutocomplete({
+    content,
+    onChangeContent: setContent,
+    workspaceId,
+    boardId,
+    textareaRef,
+  });
 
   useEffect(() => {
     // Focus textarea on mount
@@ -41,15 +55,20 @@ export default function FloatingCommentComposer({
       return;
     }
 
-    const success = await onSubmit(trimmed);
+    const success = await onSubmit(trimmed, autocomplete.mentions);
     if (success) {
       setContent("");
+      autocomplete.setMentions([]);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
     // Stop propagation so global canvas shortcuts (like V, Delete, Space) do not trigger while typing
     e.stopPropagation();
+
+    if (autocomplete.handleKeyDown(e)) {
+      return;
+    }
 
     if (e.key === "Escape") {
       e.preventDefault();
@@ -60,6 +79,13 @@ export default function FloatingCommentComposer({
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
       e.preventDefault();
       void handleSubmit();
+      return;
+    }
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSubmit();
+      return;
     }
   };
 
@@ -88,6 +114,16 @@ export default function FloatingCommentComposer({
       {/* Floating Composer Card */}
       <div className="relative -translate-x-1/2 mt-2 w-72 sm:w-80 rounded-xl border border-gray-200/90 bg-white/95 backdrop-blur-md p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
         <form onSubmit={(e) => void handleSubmit(e)}>
+          {/* Mention Autocomplete Listbox */}
+          <MentionListbox
+            isOpen={autocomplete.isOpen}
+            searchQuery={autocomplete.searchQuery}
+            selectedIndex={autocomplete.selectedIndex}
+            members={autocomplete.matchingMembers}
+            isLoading={autocomplete.isLoading}
+            onSelect={autocomplete.selectMember}
+          />
+
           {/* Header */}
           <div className="mb-2 flex items-center justify-between border-b border-gray-100 pb-1.5">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-800">
@@ -110,10 +146,13 @@ export default function FloatingCommentComposer({
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Write a comment..."
+            placeholder="Write a comment... (type @ to mention)"
             rows={2}
             disabled={isSubmitting}
             maxLength={MAX_CHAR_COUNT + 50}
+            aria-autocomplete="list"
+            aria-expanded={autocomplete.isOpen}
+            aria-controls="mention-listbox"
             className="w-full resize-none border-0 p-0 text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0 disabled:bg-transparent"
           />
 

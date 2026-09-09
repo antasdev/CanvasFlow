@@ -458,6 +458,13 @@ export type UserLeftPayload = {
   activeUsers: ActiveUser[];
 };
 
+export type CommentMentionPayload = {
+  userId: string;
+  displayName: string;
+  startIndex: number;
+  endIndex: number;
+};
+
 /**
  * Comment Event Payloads (Slice 9)
  */
@@ -466,6 +473,7 @@ export type CreateCommentPayload = {
   canvasId?: string;
   mutationId?: string;
   content: string;
+  mentions?: CommentMentionPayload[];
   shapeId?: string | null;
   parentCommentId?: string | null;
   position?: {
@@ -480,6 +488,7 @@ export type UpdateCommentPayload = {
   mutationId?: string;
   expectedVersion?: number;
   content: string;
+  mentions?: CommentMentionPayload[];
 };
 
 export type ResolveCommentPayload = {

@@ -79,6 +79,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
                   ? new Types.ObjectId(parsed.data.canvasId)
                   : undefined,
                 content: parsed.data.content,
+                mentions: parsed.data.mentions,
                 shapeId: parsed.data.shapeId
                   ? new Types.ObjectId(parsed.data.shapeId)
                   : null,
@@ -266,6 +267,7 @@ export const registerCommentHandlers = (socket: AuthSocket): void => {
               userId,
               {
                 content: parsed.data.content,
+                mentions: parsed.data.mentions,
               },
               session,
               parsed.data.expectedVersion

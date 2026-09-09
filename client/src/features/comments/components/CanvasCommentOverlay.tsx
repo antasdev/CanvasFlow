@@ -66,12 +66,16 @@ export default function CanvasCommentOverlay({
     togglePanel(true);
   };
 
-  const handleComposerSubmit = async (content: string): Promise<boolean> => {
+  const handleComposerSubmit = async (
+    content: string,
+    mentions?: import("../types").CommentMention[]
+  ): Promise<boolean> => {
     if (!draftPosition) return false;
 
     const result = await createComment({
       canvasId,
       content,
+      mentions,
       position: draftPosition,
       parentCommentId: null,
       shapeId: null,
@@ -89,11 +93,12 @@ export default function CanvasCommentOverlay({
 
   const handleComposerCancel = (): void => {
     clearDraftPosition();
+    setActiveTool(CANVAS_TOOLS.SELECT);
   };
 
   return (
     <div
-      className="absolute inset-0 pointer-events-none z-10 overflow-hidden"
+      className="absolute inset-0 pointer-events-none z-20 overflow-hidden"
       data-testid="canvas-comment-overlay"
     >
       {/* Canvas-anchored Comment Markers */}
@@ -123,6 +128,7 @@ export default function CanvasCommentOverlay({
               position={draftPosition}
               screenX={draftScreenPos.x}
               screenY={draftScreenPos.y}
+              boardId={boardId}
               onSubmit={handleComposerSubmit}
               onCancel={handleComposerCancel}
               isSubmitting={isSubmitting}

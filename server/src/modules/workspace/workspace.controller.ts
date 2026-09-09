@@ -93,9 +93,14 @@ export class WorkspaceController {
     req: Request<IdParams>,
     res: Response
   ): Promise<void> {
+    const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+
     const result = await workspaceService.getWorkspaceMembers(
       new Types.ObjectId(req.params.id),
-      new Types.ObjectId(req.user.userId)
+      new Types.ObjectId(req.user.userId),
+      q,
+      limit
     );
 
     res.status(HttpStatus.OK).json({

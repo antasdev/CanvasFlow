@@ -1,14 +1,22 @@
 import { Edit2, Trash2, MoreVertical } from "lucide-react";
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 
 import { getCursorColor } from "@/features/canvas/utils/cursor.utils";
 import { useAuthStore } from "@/store";
 
-import type { Comment } from "../types";
+import { useMentionAutocomplete } from "../hooks/useMentionAutocomplete";
+import type { Comment, CommentMention } from "../types";
+import MentionListbox from "./MentionListbox";
 
 type CommentItemProps = {
   comment: Comment;
-  onUpdate?: (commentId: string, content: string) => Promise<void | unknown>;
+  workspaceId?: string;
+  boardId?: string;
+  onUpdate?: (
+    commentId: string,
+    content: string,
+    mentions?: CommentMention[]
+  ) => Promise<void | unknown>;
   onDelete?: (commentId: string) => Promise<void | unknown>;
   isReply?: boolean;
   className?: string;
@@ -33,8 +41,66 @@ function formatRelativeTime(dateString: string): string {
   }
 }
 
+/**
+ * Safely renders comment content with structured mention badges and screen-reader labels.
+ */
+export function renderCommentContent(
+  content: string,
+  mentions?: CommentMention[]
+): React.ReactNode {
+  if (!content) return null;
+  if (!mentions || mentions.length === 0) {
+    return content;
+  }
+
+  // Sort mentions by startIndex
+  const sorted = [...mentions].sort((a, b) => a.startIndex - b.startIndex);
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (let i = 0; i < sorted.length; i++) {
+    const m = sorted[i];
+
+    // Out of bounds safety check
+    if (
+      m.startIndex < lastIndex ||
+      m.endIndex > content.length ||
+      m.startIndex >= m.endIndex
+    ) {
+      continue;
+    }
+
+    // Push text before this mention
+    if (m.startIndex > lastIndex) {
+      elements.push(content.slice(lastIndex, m.startIndex));
+    }
+
+    // Push styled mention badge
+    elements.push(
+      <span
+        key={`mention-${m.userId}-${m.startIndex}-${i}`}
+        className="inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/60 mx-0.5 align-baseline"
+        aria-label={`Mentioned user ${m.displayName}`}
+      >
+        @{m.displayName}
+      </span>
+    );
+
+    lastIndex = m.endIndex;
+  }
+
+  // Push remaining text
+  if (lastIndex < content.length) {
+    elements.push(content.slice(lastIndex));
+  }
+
+  return elements;
+}
+
 export default function CommentItem({
   comment,
+  workspaceId,
+  boardId,
   onUpdate,
   onDelete,
   isReply = false,
@@ -45,6 +111,17 @@ export default function CommentItem({
   const [editContent, setEditContent] = useState(comment.content);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const autocomplete = useMentionAutocomplete({
+    content: editContent,
+    onChangeContent: setEditContent,
+    workspaceId,
+    boardId: boardId || comment.boardId,
+    textareaRef: editTextareaRef,
+    initialMentions: comment.mentions || [],
+  });
 
   const isAuthor = currentUser?.id === comment.authorId;
   const avatarColor = getCursorColor(comment.authorId);
@@ -62,7 +139,7 @@ export default function CommentItem({
 
     setIsSubmitting(true);
     try {
-      await onUpdate(comment.id, trimmed);
+      await onUpdate(comment.id, trimmed, autocomplete.mentions);
       setIsEditing(false);
     } finally {
       setIsSubmitting(false);
@@ -138,6 +215,7 @@ export default function CommentItem({
                       type="button"
                       onClick={() => {
                         setEditContent(comment.content);
+                        autocomplete.setMentions(comment.mentions || []);
                         setIsEditing(true);
                         setIsMenuOpen(false);
                       }}
@@ -167,12 +245,27 @@ export default function CommentItem({
             This comment was deleted.
           </p>
         ) : isEditing ? (
-          <div className="mt-1.5">
+          <div className="relative mt-1.5">
+            {/* Autocomplete Listbox in editing mode */}
+            <MentionListbox
+              isOpen={autocomplete.isOpen}
+              searchQuery={autocomplete.searchQuery}
+              selectedIndex={autocomplete.selectedIndex}
+              members={autocomplete.matchingMembers}
+              isLoading={autocomplete.isLoading}
+              onSelect={autocomplete.selectMember}
+            />
+
             <textarea
+              ref={editTextareaRef}
               autoFocus
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               onKeyDown={(e) => {
+                if (autocomplete.handleKeyDown(e)) {
+                  return;
+                }
+
                 if (e.key === "Escape") {
                   e.preventDefault();
                   setIsEditing(false);
@@ -191,6 +284,9 @@ export default function CommentItem({
               }}
               rows={2}
               maxLength={2000}
+              aria-autocomplete="list"
+              aria-expanded={autocomplete.isOpen}
+              aria-controls="mention-listbox"
               className="w-full rounded border border-blue-400 p-1.5 text-xs text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
             />
             <div className="mt-1.5 flex justify-end gap-1.5">
@@ -198,7 +294,7 @@ export default function CommentItem({
                 type="button"
                 onClick={() => setIsEditing(false)}
                 disabled={isSubmitting}
-                className="rounded px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100"
+                className="rounded px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100 cursor-pointer"
               >
                 Cancel
               </button>
@@ -206,7 +302,7 @@ export default function CommentItem({
                 type="button"
                 onClick={() => void handleSaveEdit()}
                 disabled={isSubmitting || !editContent.trim()}
-                className="rounded bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                className="rounded bg-blue-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
               >
                 {isSubmitting ? "Saving..." : "Save"}
               </button>
@@ -214,7 +310,7 @@ export default function CommentItem({
           </div>
         ) : (
           <p className="mt-1 whitespace-pre-wrap break-words text-gray-800 text-xs leading-relaxed">
-            {comment.content}
+            {renderCommentContent(comment.content, comment.mentions)}
           </p>
         )}
       </div>

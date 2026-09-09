@@ -12,6 +12,7 @@ import {
   createWorkspaceSchema,
   updateWorkspaceSchema,
   workspaceParamsSchema,
+  getWorkspaceMembersSchema,
   addWorkspaceMemberSchema,
   updateWorkspaceMemberRoleSchema,
   workspaceMemberParamsSchema,
@@ -95,7 +96,7 @@ workspaceRouter.delete(
 workspaceRouter.get(
   "/:id/members",
   authenticate,
-  validate(workspaceParamsSchema),
+  validate(getWorkspaceMembersSchema),
   asyncHandler(
     workspaceController.getMembers.bind(
       workspaceController

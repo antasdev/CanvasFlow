@@ -2,6 +2,32 @@ import { Schema, model } from "mongoose";
 
 import { Comment } from "./comment.types";
 
+const commentMentionSchema = new Schema(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    displayName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    startIndex: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    endIndex: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+  },
+  { _id: false }
+);
+
 const commentSchema = new Schema<Comment>(
   {
     boardId: {
@@ -51,6 +77,11 @@ const commentSchema = new Schema<Comment>(
       default: "",
       trim: true,
       maxlength: 2000,
+    },
+
+    mentions: {
+      type: [commentMentionSchema],
+      default: [],
     },
 
     isResolved: {

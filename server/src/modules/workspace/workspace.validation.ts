@@ -36,6 +36,23 @@ export const workspaceParamsSchema = z.object({
   }),
 });
 
+export const getWorkspaceMembersSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .regex(
+        /^[0-9a-fA-F]{24}$/,
+        "Invalid workspace ID."
+      ),
+  }),
+  query: z
+    .object({
+      q: z.string().trim().max(100).optional(),
+      limit: z.coerce.number().int().min(1).max(100).optional(),
+    })
+    .optional(),
+});
+
 export const addWorkspaceMemberSchema = z.object({
   params: z.object({
     id: z

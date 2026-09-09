@@ -54,6 +54,7 @@ export function useCommentMutations(boardId?: string) {
       parentCommentId: input.parentCommentId ?? null,
       position: input.position ?? null,
       content: input.content,
+      mentions: input.mentions || [],
       isResolved: false,
       isEdited: false,
       isDeleted: false,
@@ -72,6 +73,7 @@ export function useCommentMutations(boardId?: string) {
           boardId,
           canvasId: input.canvasId,
           content: input.content,
+          mentions: input.mentions,
           shapeId: input.shapeId,
           parentCommentId: input.parentCommentId,
           position: input.position,
@@ -99,11 +101,13 @@ export function useCommentMutations(boardId?: string) {
    */
   const createReply = async (
     parentCommentId: string,
-    content: string
+    content: string,
+    mentions?: import("../types").CommentMention[]
   ): Promise<Comment | null> => {
     const parent = useCommentStore.getState().comments[parentCommentId];
     return createComment({
       content,
+      mentions,
       parentCommentId,
       canvasId: parent?.canvasId,
       shapeId: parent?.shapeId ?? null,
@@ -125,6 +129,7 @@ export function useCommentMutations(boardId?: string) {
     updateStoreComment({
       ...previousComment,
       content: input.content,
+      mentions: input.mentions || previousComment.mentions || [],
       isEdited: true,
       updatedAt: new Date().toISOString(),
     });
@@ -138,6 +143,7 @@ export function useCommentMutations(boardId?: string) {
           boardId,
           commentId,
           content: input.content,
+          mentions: input.mentions,
         });
         authoritative = mapCommentResponseToComment(dto);
       } else {

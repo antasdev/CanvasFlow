@@ -17,6 +17,20 @@ export const positionSchema = z.object({
 });
 
 /**
+ * Mention validation schema
+ */
+export const commentMentionValidationSchema = z.object({
+  userId: objectIdSchema,
+  displayName: z
+    .string()
+    .trim()
+    .min(1, "Mention display name cannot be empty.")
+    .max(100, "Mention display name cannot exceed 100 characters."),
+  startIndex: z.number().int().min(0, "Start index must be non-negative."),
+  endIndex: z.number().int().min(1, "End index must be greater than 0."),
+});
+
+/**
  * HTTP validation schemas
  */
 export const createCommentSchema = z.object({
@@ -31,6 +45,7 @@ export const createCommentSchema = z.object({
       .trim()
       .min(1, "Comment content cannot be empty.")
       .max(2000, "Comment content cannot exceed 2000 characters."),
+    mentions: z.array(commentMentionValidationSchema).optional(),
     shapeId: objectIdSchema.nullable().optional(),
     parentCommentId: objectIdSchema.nullable().optional(),
     position: positionSchema.nullable().optional(),
@@ -48,6 +63,7 @@ export const createReplySchema = z.object({
       .trim()
       .min(1, "Comment content cannot be empty.")
       .max(2000, "Comment content cannot exceed 2000 characters."),
+    mentions: z.array(commentMentionValidationSchema).optional(),
     expectedVersion: z.number().int().min(1).optional(),
   }),
 });
@@ -63,6 +79,7 @@ export const updateCommentSchema = z.object({
       .trim()
       .min(1, "Comment content cannot be empty.")
       .max(2000, "Comment content cannot exceed 2000 characters."),
+    mentions: z.array(commentMentionValidationSchema).optional(),
     expectedVersion: z.number().int().min(1).optional(),
   }),
 });
@@ -123,6 +140,7 @@ export const createCommentSocketSchema = z.object({
     .trim()
     .min(1, "Comment content cannot be empty.")
     .max(2000, "Comment content cannot exceed 2000 characters."),
+  mentions: z.array(commentMentionValidationSchema).optional(),
   shapeId: objectIdSchema.nullable().optional(),
   parentCommentId: objectIdSchema.nullable().optional(),
   position: positionSchema.nullable().optional(),
@@ -138,6 +156,7 @@ export const updateCommentSocketSchema = z.object({
     .trim()
     .min(1, "Comment content cannot be empty.")
     .max(2000, "Comment content cannot exceed 2000 characters."),
+  mentions: z.array(commentMentionValidationSchema).optional(),
 });
 
 export const resolveCommentSocketSchema = z.object({

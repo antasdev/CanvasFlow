@@ -260,6 +260,75 @@ async function runCommentDomainTests(): Promise<void> {
     assert(refetchedShapeComment?.shapeId === null, "shapeId is decoupled to null");
     console.log("✓ Shape deletion decoupling preserves comments as canvas-level items.");
 
+    // ----------------------------------------------------
+    // TEST 9: Comment Mentions Persistence & DTO Mapping
+    // ----------------------------------------------------
+    console.log("Test 9: Creating comment with structured mentions and verifying mapper...");
+    const mentionedUser = await UserModel.create({
+      fullName: "Mentioned User",
+      email: `mentioned_${Date.now()}@example.com`,
+      password: "Password123!",
+      role: UserRole.USER,
+    });
+    userIds.push(mentionedUser._id as Types.ObjectId);
+
+    const mentionComment = await commentRepository.create({
+      boardId: board._id as Types.ObjectId,
+      canvasId: canvas._id as Types.ObjectId,
+      authorId: user._id as Types.ObjectId,
+      content: "Hello @Mentioned User, please check this!",
+      mentions: [
+        {
+          userId: mentionedUser._id as Types.ObjectId,
+          displayName: "Mentioned User",
+          startIndex: 6,
+          endIndex: 21,
+        },
+      ],
+    });
+    commentIds.push(mentionComment._id as Types.ObjectId);
+
+    assert(mentionComment.mentions?.length === 1, "mentions array has 1 item");
+    assert(
+      (mentionComment.mentions?.[0].userId as Types.ObjectId).equals(
+        mentionedUser._id as Types.ObjectId
+      ),
+      "Mentioned userId matches"
+    );
+    assert(
+      mentionComment.mentions?.[0].displayName === "Mentioned User",
+      "Mentioned displayName matches"
+    );
+
+    const mentionDto = CommentMapper.toResponseDto(
+      mentionComment,
+      mentionComment.authorId as any
+    );
+    assert(mentionDto.mentions?.length === 1, "DTO mentions has 1 item");
+    assert(
+      mentionDto.mentions?.[0].userId === mentionedUser._id.toString(),
+      "DTO mention userId is string"
+    );
+    assert(
+      mentionDto.mentions?.[0].startIndex === 6 &&
+        mentionDto.mentions?.[0].endIndex === 21,
+      "DTO mention ranges preserved"
+    );
+
+    // Soft-delete and verify mentions are masked to empty array
+    const softDeletedMention = await commentRepository.softDeleteById(
+      mentionComment._id as Types.ObjectId
+    );
+    const maskedDto = CommentMapper.toResponseDto(
+      softDeletedMention!,
+      softDeletedMention?.authorId as any
+    );
+    assert(
+      Array.isArray(maskedDto.mentions) && maskedDto.mentions.length === 0,
+      "Soft-deleted comment masks mentions to empty array"
+    );
+    console.log("✓ Structured mentions persisted, mapped in DTO, and masked on soft-delete.");
+
     console.log("\nAll Comment Domain & Repository Unit Tests Passed Successfully!");
   } finally {
     if (isDbConnected) {

@@ -412,6 +412,256 @@ async function runCommentServiceTests(): Promise<void> {
     assert(decoupledComment?.content === "Author updated content", "Comment content preserved");
     console.log("✓ Shape deletion decoupling preserves comments without data loss.");
 
+    // ----------------------------------------------------
+    // TEST 7: Slice 32 — Mentions Validation & Normalization
+    // ----------------------------------------------------
+    console.log("Test 7: Mentions creation, validation, duplicate handling, and edit reconciliation...");
+
+    // 7a: Single mention of active workspace member
+    const singleMentionComment = await commentService.createComment(owner._id as Types.ObjectId, {
+      boardId: board._id as Types.ObjectId,
+      canvasId: canvas1._id as Types.ObjectId,
+      content: "Hey @Service Admin please review!",
+      mentions: [
+        {
+          userId: admin._id.toString(),
+          displayName: "Service Admin",
+          startIndex: 4,
+          endIndex: 18,
+        },
+      ],
+    });
+    commentIds.push(singleMentionComment.comment._id as Types.ObjectId);
+    assert(singleMentionComment.comment.mentions?.length === 1, "Single mention saved");
+    assert(
+      (singleMentionComment.comment.mentions?.[0].userId as Types.ObjectId).equals(admin._id as Types.ObjectId),
+      "Mentioned user ID matches admin"
+    );
+    assert(
+      singleMentionComment.comment.mentions?.[0].displayName === "Service Admin",
+      "Canonical display name matches"
+    );
+
+    // 7b: Multiple distinct workspace member mentions
+    const multiMentionComment = await commentService.createComment(owner._id as Types.ObjectId, {
+      boardId: board._id as Types.ObjectId,
+      canvasId: canvas1._id as Types.ObjectId,
+      content: "@Service Admin and @Service Editor please look at this.",
+      mentions: [
+        {
+          userId: admin._id.toString(),
+          displayName: "Service Admin",
+          startIndex: 0,
+          endIndex: 14,
+        },
+        {
+          userId: editor._id.toString(),
+          displayName: "Service Editor",
+          startIndex: 19,
+          endIndex: 34,
+        },
+      ],
+    });
+    commentIds.push(multiMentionComment.comment._id as Types.ObjectId);
+    assert(multiMentionComment.comment.mentions?.length === 2, "Multiple mentions saved");
+
+    // 7c: Duplicate occurrences of the same user with distinct ranges
+    const duplicateMentionComment = await commentService.createComment(owner._id as Types.ObjectId, {
+      boardId: board._id as Types.ObjectId,
+      canvasId: canvas1._id as Types.ObjectId,
+      content: "Hey @Service Admin, and again @Service Admin!",
+      mentions: [
+        {
+          userId: admin._id.toString(),
+          displayName: "Service Admin",
+          startIndex: 4,
+          endIndex: 18,
+        },
+        {
+          userId: admin._id.toString(),
+          displayName: "Service Admin",
+          startIndex: 30,
+          endIndex: 44,
+        },
+      ],
+    });
+    commentIds.push(duplicateMentionComment.comment._id as Types.ObjectId);
+    assert(duplicateMentionComment.comment.mentions?.length === 2, "Duplicate occurrences preserved");
+    assert(
+      duplicateMentionComment.comment.mentions?.[0].startIndex === 4 &&
+        duplicateMentionComment.comment.mentions?.[1].startIndex === 30,
+      "Distinct start indices preserved"
+    );
+
+    // 7d: Self-mention is allowed and persisted
+    const selfMentionComment = await commentService.createComment(owner._id as Types.ObjectId, {
+      boardId: board._id as Types.ObjectId,
+      canvasId: canvas1._id as Types.ObjectId,
+      content: "Note to @Service Owner: finish this.",
+      mentions: [
+        {
+          userId: owner._id.toString(),
+          displayName: "Service Owner",
+          startIndex: 8,
+          endIndex: 22,
+        },
+      ],
+    });
+    commentIds.push(selfMentionComment.comment._id as Types.ObjectId);
+    assert(selfMentionComment.comment.mentions?.length === 1, "Self mention persisted");
+
+    // 7e: Rejection of non-workspace member mention (MUST fail entire mutation)
+    let nonMemberFailed = false;
+    try {
+      await commentService.createComment(owner._id as Types.ObjectId, {
+        boardId: board._id as Types.ObjectId,
+        canvasId: canvas1._id as Types.ObjectId,
+        content: "Hey @Service Outsider, look at this!",
+        mentions: [
+          {
+            userId: outsider._id.toString(),
+            displayName: "Service Outsider",
+            startIndex: 4,
+            endIndex: 21,
+          },
+        ],
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 400) {
+        nonMemberFailed = true;
+      }
+    }
+    assert(nonMemberFailed, "Non-member mention must be rejected with 400");
+
+    // 7f: Rejection of out-of-bounds mention ranges
+    let outOfBoundsFailed = false;
+    try {
+      await commentService.createComment(owner._id as Types.ObjectId, {
+        boardId: board._id as Types.ObjectId,
+        canvasId: canvas1._id as Types.ObjectId,
+        content: "Short text",
+        mentions: [
+          {
+            userId: admin._id.toString(),
+            displayName: "Service Admin",
+            startIndex: 0,
+            endIndex: 50,
+          },
+        ],
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 400) {
+        outOfBoundsFailed = true;
+      }
+    }
+    assert(outOfBoundsFailed, "Out-of-bounds range must be rejected with 400");
+
+    // 7g: Rejection of overlapping mention ranges
+    let overlapFailed = false;
+    try {
+      await commentService.createComment(owner._id as Types.ObjectId, {
+        boardId: board._id as Types.ObjectId,
+        canvasId: canvas1._id as Types.ObjectId,
+        content: "@Service Admin and more text",
+        mentions: [
+          {
+            userId: admin._id.toString(),
+            displayName: "Service Admin",
+            startIndex: 0,
+            endIndex: 14,
+          },
+          {
+            userId: editor._id.toString(),
+            displayName: "Service Editor",
+            startIndex: 10,
+            endIndex: 20,
+          },
+        ],
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 400) {
+        overlapFailed = true;
+      }
+    }
+    assert(overlapFailed, "Overlapping mention ranges must be rejected with 400");
+
+    // 7h: Rejection of mention slice not starting with '@'
+    let noAtSliceFailed = false;
+    try {
+      await commentService.createComment(owner._id as Types.ObjectId, {
+        boardId: board._id as Types.ObjectId,
+        canvasId: canvas1._id as Types.ObjectId,
+        content: "Hello Service Admin",
+        mentions: [
+          {
+            userId: admin._id.toString(),
+            displayName: "Service Admin",
+            startIndex: 6,
+            endIndex: 19,
+          },
+        ],
+      });
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 400) {
+        noAtSliceFailed = true;
+      }
+    }
+    assert(noAtSliceFailed, "Mention slice not starting with '@' must be rejected with 400");
+
+    // 7i: Updating comment: replacing a mention during edit
+    const updatedMentionComment = await commentService.updateComment(
+      singleMentionComment.comment._id as Types.ObjectId,
+      owner._id as Types.ObjectId,
+      {
+        content: "Hey @Service Editor please review instead!",
+        mentions: [
+          {
+            userId: editor._id.toString(),
+            displayName: "Service Editor",
+            startIndex: 4,
+            endIndex: 19,
+          },
+        ],
+      }
+    );
+    assert(updatedMentionComment.comment.mentions?.length === 1, "Updated mention count is 1");
+    assert(
+      (updatedMentionComment.comment.mentions?.[0].userId as Types.ObjectId).equals(editor._id as Types.ObjectId),
+      "Mention updated from admin to editor"
+    );
+
+    // 7j: Updating comment: removing all mentions during edit
+    const noMentionEdit = await commentService.updateComment(
+      singleMentionComment.comment._id as Types.ObjectId,
+      owner._id as Types.ObjectId,
+      {
+        content: "Hey everyone, please review!",
+        mentions: [],
+      }
+    );
+    assert(noMentionEdit.comment.mentions?.length === 0, "Mentions removed after edit");
+
+    // 7k: Reply creation with mentions
+    const replyWithMention = await commentService.createReply(
+      editor._id as Types.ObjectId,
+      board._id as Types.ObjectId,
+      multiMentionComment.comment._id as Types.ObjectId,
+      {
+        content: "Thanks @Service Owner!",
+        mentions: [
+          {
+            userId: owner._id.toString(),
+            displayName: "Service Owner",
+            startIndex: 7,
+            endIndex: 21,
+          },
+        ],
+      }
+    );
+    commentIds.push(replyWithMention.comment._id as Types.ObjectId);
+    assert(replyWithMention.comment.mentions?.length === 1, "Reply with mention persisted");
+    console.log("✓ Mentions lifecycle, validation, duplicate handling, and edit reconciliation verified.");
+
     console.log("\nAll Comment Service Integration Tests Passed Successfully!");
   } finally {
     if (isDbConnected) {
