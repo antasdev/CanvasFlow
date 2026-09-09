@@ -1,7 +1,7 @@
 import { MessageSquareReply } from "lucide-react";
 import React, { useState } from "react";
 
-import type { Comment } from "../types";
+import type { Comment, CommentMention } from "../types";
 
 import CommentItem from "./CommentItem";
 import CommentReplyComposer from "./CommentReplyComposer";
@@ -10,8 +10,18 @@ import CommentResolveButton from "./CommentResolveButton";
 type CommentThreadProps = {
   rootComment: Comment;
   replies: Comment[];
-  onReply: (parentCommentId: string, content: string) => Promise<boolean | void>;
-  onUpdate: (commentId: string, content: string) => Promise<void | unknown>;
+  workspaceId?: string;
+  boardId?: string;
+  onReply: (
+    parentCommentId: string,
+    content: string,
+    mentions?: CommentMention[]
+  ) => Promise<boolean | void>;
+  onUpdate: (
+    commentId: string,
+    content: string,
+    mentions?: CommentMention[]
+  ) => Promise<void | unknown>;
   onDelete: (commentId: string) => Promise<void | unknown>;
   onResolve: (commentId: string, isResolved: boolean) => Promise<void | unknown>;
   isSelected?: boolean;
@@ -22,6 +32,8 @@ type CommentThreadProps = {
 export default function CommentThread({
   rootComment,
   replies,
+  workspaceId,
+  boardId,
   onReply,
   onUpdate,
   onDelete,
@@ -41,10 +53,13 @@ export default function CommentThread({
     );
   }, [replies]);
 
-  const handleReplySubmit = async (content: string): Promise<boolean> => {
+  const handleReplySubmit = async (
+    content: string,
+    mentions?: CommentMention[]
+  ): Promise<boolean> => {
     setIsSubmittingReply(true);
     try {
-      const result = await onReply(rootComment.id, content);
+      const result = await onReply(rootComment.id, content, mentions);
       if (result !== false) {
         setIsReplying(false);
         return true;
@@ -94,6 +109,8 @@ export default function CommentThread({
       {/* Root Comment */}
       <CommentItem
         comment={rootComment}
+        workspaceId={workspaceId}
+        boardId={boardId}
         onUpdate={onUpdate}
         onDelete={onDelete}
       />
@@ -105,6 +122,8 @@ export default function CommentThread({
             <CommentItem
               key={reply.id}
               comment={reply}
+              workspaceId={workspaceId}
+              boardId={boardId}
               onUpdate={onUpdate}
               onDelete={onDelete}
               isReply
@@ -120,6 +139,8 @@ export default function CommentThread({
             <CommentReplyComposer
               parentCommentId={rootComment.id}
               shapeId={rootComment.shapeId}
+              workspaceId={workspaceId}
+              boardId={boardId}
               onSubmit={handleReplySubmit}
               onCancel={() => setIsReplying(false)}
               isSubmitting={isSubmittingReply}

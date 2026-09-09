@@ -11,6 +11,16 @@ export type CommentAuthorDto = {
 };
 
 /**
+ * Structured Mention representation in Comment DTOs.
+ */
+export type CommentMentionDto = {
+  userId: string;
+  displayName: string;
+  startIndex: number;
+  endIndex: number;
+};
+
+/**
  * Canonical Comment Response DTO returned over HTTP and Socket.IO.
  */
 export type CommentResponseDto = {
@@ -26,6 +36,7 @@ export type CommentResponseDto = {
     y: number;
   } | null;
   content: string;
+  mentions?: CommentMentionDto[];
   isResolved: boolean;
   resolvedAt?: string | null;
   resolvedBy?: string | null;
@@ -49,6 +60,7 @@ export type CreateCommentDto = {
     y: number;
   } | null;
   content: string;
+  mentions?: CommentMentionDto[];
 };
 
 /**
@@ -56,6 +68,7 @@ export type CreateCommentDto = {
  */
 export type CreateReplyDto = {
   content: string;
+  mentions?: CommentMentionDto[];
   expectedVersion?: number;
 };
 
@@ -65,6 +78,7 @@ export type CreateReplyDto = {
 export type UpdateCommentDto = {
   expectedVersion?: number;
   content: string;
+  mentions?: CommentMentionDto[];
 };
 
 /**

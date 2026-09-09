@@ -236,7 +236,9 @@ export class WorkspaceService {
 
   async getWorkspaceMembers(
     workspaceId: Types.ObjectId,
-    userId: Types.ObjectId
+    userId: Types.ObjectId,
+    query?: string,
+    limit?: number
   ): Promise<WorkspaceMemberResponseDto[]> {
     const workspace = await workspaceRepository.findById(workspaceId);
 
@@ -260,7 +262,7 @@ export class WorkspaceService {
     const members =
       await workspaceMemberRepository.findByWorkspaceIdWithUser(workspaceId);
 
-    return members.map((member) => {
+    const mapped = members.map((member) => {
       const userDoc = member.userId as any;
       const isPopulated = userDoc && typeof userDoc === "object" && "_id" in userDoc;
 
@@ -280,6 +282,18 @@ export class WorkspaceService {
           : undefined,
       };
     });
+
+    if (query && query.trim()) {
+      const normalizedQuery = query.trim().toLowerCase();
+      const filtered = mapped.filter((m) => {
+        const nameMatch = m.user?.fullName?.toLowerCase().includes(normalizedQuery);
+        const emailMatch = m.user?.email?.toLowerCase().includes(normalizedQuery);
+        return Boolean(nameMatch || emailMatch);
+      });
+      return limit ? filtered.slice(0, limit) : filtered;
+    }
+
+    return limit ? mapped.slice(0, limit) : mapped;
   }
 
   async addWorkspaceMember(

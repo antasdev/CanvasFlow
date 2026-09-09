@@ -1,10 +1,16 @@
 import { Send } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 
+import { useMentionAutocomplete } from "../hooks/useMentionAutocomplete";
+import type { CommentMention } from "../types";
+import MentionListbox from "./MentionListbox";
+
 type CommentComposerProps = {
   placeholder?: string;
   shapeId?: string | null;
-  onSubmit: (content: string) => Promise<boolean | void>;
+  workspaceId?: string;
+  boardId?: string;
+  onSubmit: (content: string, mentions?: CommentMention[]) => Promise<boolean | void>;
   onCancel?: () => void;
   autoFocus?: boolean;
   isSubmitting?: boolean;
@@ -14,8 +20,10 @@ type CommentComposerProps = {
 const MAX_CHAR_COUNT = 2000;
 
 export default function CommentComposer({
-  placeholder = "Write a comment...",
+  placeholder = "Write a comment... (type @ to mention)",
   shapeId,
+  workspaceId,
+  boardId,
   onSubmit,
   onCancel,
   autoFocus = false,
@@ -24,6 +32,14 @@ export default function CommentComposer({
 }: CommentComposerProps): React.JSX.Element {
   const [content, setContent] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const autocomplete = useMentionAutocomplete({
+    content,
+    onChangeContent: setContent,
+    workspaceId,
+    boardId,
+    textareaRef,
+  });
 
   useEffect(() => {
     if (autoFocus && textareaRef.current) {
@@ -38,13 +54,18 @@ export default function CommentComposer({
       return;
     }
 
-    const result = await onSubmit(trimmed);
+    const result = await onSubmit(trimmed, autocomplete.mentions);
     if (result !== false) {
       setContent("");
+      autocomplete.setMentions([]);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (autocomplete.handleKeyDown(e)) {
+      return;
+    }
+
     if (e.key === "Escape") {
       e.preventDefault();
       onCancel?.();
@@ -71,8 +92,18 @@ export default function CommentComposer({
   return (
     <form
       onSubmit={(e) => void handleSubmit(e)}
-      className={`rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 ${className}`}
+      className={`relative rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition-all focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 ${className}`}
     >
+      {/* Mention Autocomplete Listbox */}
+      <MentionListbox
+        isOpen={autocomplete.isOpen}
+        searchQuery={autocomplete.searchQuery}
+        selectedIndex={autocomplete.selectedIndex}
+        members={autocomplete.matchingMembers}
+        isLoading={autocomplete.isLoading}
+        onSelect={autocomplete.selectMember}
+      />
+
       {shapeId && (
         <div className="mb-2 flex items-center gap-1.5 text-xs text-blue-600 font-medium">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-blue-500" />
@@ -89,6 +120,9 @@ export default function CommentComposer({
         rows={2}
         disabled={isSubmitting}
         maxLength={MAX_CHAR_COUNT + 50}
+        aria-autocomplete="list"
+        aria-expanded={autocomplete.isOpen}
+        aria-controls="mention-listbox"
         className="w-full resize-none border-0 p-0 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-0 disabled:bg-transparent"
       />
 

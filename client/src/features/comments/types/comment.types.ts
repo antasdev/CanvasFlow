@@ -17,6 +17,16 @@ export type CommentPosition = {
 };
 
 /**
+ * Structured mention representation on the frontend.
+ */
+export type CommentMention = {
+  userId: string;
+  displayName: string;
+  startIndex: number;
+  endIndex: number;
+};
+
+/**
  * Domain entity representing a persistent comment on the canvas or shape.
  */
 export type Comment = {
@@ -29,6 +39,7 @@ export type Comment = {
   parentCommentId: string | null;
   position?: CommentPosition | null;
   content: string;
+  mentions?: CommentMention[];
   isResolved: boolean;
   resolvedAt?: string | null;
   resolvedBy?: string | null;
@@ -51,6 +62,7 @@ export type CommentFilterType = "all" | "open" | "resolved";
 export type CreateCommentInput = {
   canvasId?: string;
   content: string;
+  mentions?: CommentMention[];
   shapeId?: string | null;
   parentCommentId?: string | null;
   position?: CommentPosition | null;
@@ -61,6 +73,7 @@ export type CreateCommentInput = {
  */
 export type CreateReplyInput = {
   content: string;
+  mentions?: CommentMention[];
   expectedVersion?: number;
 };
 
@@ -69,5 +82,6 @@ export type CreateReplyInput = {
  */
 export type UpdateCommentInput = {
   content: string;
+  mentions?: CommentMention[];
   expectedVersion?: number;
 };

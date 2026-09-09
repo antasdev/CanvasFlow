@@ -53,6 +53,18 @@ export class CommentMapper {
           }
         : null,
       content: isDeleted ? "" : doc.content,
+      mentions:
+        isDeleted || !doc.mentions
+          ? []
+          : doc.mentions.map((m) => ({
+              userId:
+                typeof m.userId === "object" && "_id" in (m.userId as any)
+                  ? String((m.userId as any)._id)
+                  : m.userId.toString(),
+              displayName: m.displayName,
+              startIndex: m.startIndex,
+              endIndex: m.endIndex,
+            })),
       isResolved: Boolean(doc.isResolved),
       resolvedAt: doc.resolvedAt
         ? doc.resolvedAt instanceof Date

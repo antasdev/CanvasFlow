@@ -4,6 +4,9 @@ import { boardService } from "@/modules/board";
 import { canvasRepository } from "@/modules/canvas/canvas.repository";
 import { CanvasModel } from "@/modules/canvas/canvas.model";
 import { ShapeModel } from "@/modules/shape/shape.model";
+import { UserModel } from "@/modules/user/user.model";
+import { workspaceRepository } from "@/modules/workspace/workspace.repository";
+import { workspaceMemberRepository } from "@/modules/workspace/workspaceMember.repository";
 import { WorkspaceRole } from "@/modules/workspace/workspace.types";
 import {
   WorkspacePermission,
@@ -19,10 +22,129 @@ import {
   UpdateCommentDto,
   ResolveCommentDto,
   CommentFilterDto,
+  CommentMentionDto,
 } from "./comment.dto";
-import { CommentDocument, UpdateCommentData } from "./comment.types";
+import {
+  CommentDocument,
+  CommentMention,
+  UpdateCommentData,
+} from "./comment.types";
 
 export class CommentService {
+  /**
+   * Validates and normalizes structured mention metadata against the target workspace and content.
+   * Rejects mutations if any mention is invalid, out of bounds, non-member, or malformed.
+   */
+  async resolveAndValidateMentions(
+    workspaceId: Types.ObjectId,
+    content: string,
+    submittedMentions?: CommentMentionDto[],
+    session?: ClientSession
+  ): Promise<CommentMention[]> {
+    if (!submittedMentions || submittedMentions.length === 0) {
+      return [];
+    }
+
+    // 1. Sort mentions by startIndex to verify range integrity and non-overlapping invariant
+    const sorted = [...submittedMentions].sort(
+      (a, b) => a.startIndex - b.startIndex
+    );
+
+    const canonicalMentions: CommentMention[] = [];
+
+    const workspace = await workspaceRepository.findById(workspaceId);
+    if (!workspace) {
+      throw new ApiError(
+        HttpStatus.NOT_FOUND,
+        "Workspace associated with comment not found."
+      );
+    }
+
+    for (let i = 0; i < sorted.length; i++) {
+      const mention = sorted[i];
+
+      // A. Validate index boundaries
+      if (
+        typeof mention.startIndex !== "number" ||
+        typeof mention.endIndex !== "number" ||
+        mention.startIndex < 0 ||
+        mention.endIndex <= mention.startIndex ||
+        mention.endIndex > content.length
+      ) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          `Invalid mention range: indices [${mention.startIndex}, ${mention.endIndex}] are out of bounds for content length ${content.length}.`
+        );
+      }
+
+      // B. Ensure ranges do not overlap
+      if (i > 0) {
+        const prev = sorted[i - 1];
+        if (mention.startIndex < prev.endIndex) {
+          throw new ApiError(
+            HttpStatus.BAD_REQUEST,
+            "Invalid mention ranges: overlapping mention tokens are not permitted."
+          );
+        }
+      }
+
+      // C. Validate content slice begins with '@'
+      const mentionSlice = content.slice(mention.startIndex, mention.endIndex);
+      if (!mentionSlice.startsWith("@")) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          `Invalid mention range: content slice "${mentionSlice}" must begin with '@'.`
+        );
+      }
+
+      // D. Validate user ID format
+      if (!Types.ObjectId.isValid(mention.userId)) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          `Invalid user ID format for mention: ${mention.userId}.`
+        );
+      }
+
+      const targetUserId = new Types.ObjectId(mention.userId);
+
+      // E. Verify workspace membership (owner or member)
+      const isOwner = workspace.ownerId.equals(targetUserId);
+      const member = isOwner
+        ? true
+        : await workspaceMemberRepository.findByWorkspaceAndUser(
+            workspaceId,
+            targetUserId
+          );
+
+      if (!isOwner && !member) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          `Mentioned user ${mention.userId} is not a member of this workspace.`
+        );
+      }
+
+      // F. Verify user existence & active status
+      const user = await UserModel.findById(targetUserId, null, { session });
+      if (!user) {
+        throw new ApiError(
+          HttpStatus.BAD_REQUEST,
+          `Mentioned user ${mention.userId} was not found.`
+        );
+      }
+
+      const canonicalDisplayName = user.fullName || mention.displayName;
+
+      canonicalMentions.push({
+        userId: targetUserId,
+        displayName: canonicalDisplayName,
+        startIndex: mention.startIndex,
+        endIndex: mention.endIndex,
+      });
+    }
+
+    return canonicalMentions;
+  }
+
   /**
    * Creates a new canvas-level comment, shape-attached comment, or thread reply.
    */
@@ -141,7 +263,15 @@ export class CommentService {
       }
     }
 
-    // 4. Authoritative persistence
+    // 4. Resolve & validate mentions
+    const canonicalMentions = await this.resolveAndValidateMentions(
+      board.workspaceId,
+      dto.content,
+      dto.mentions,
+      session
+    );
+
+    // 5. Authoritative persistence
     const created = await commentRepository.create(
       {
         boardId: dto.boardId,
@@ -151,6 +281,7 @@ export class CommentService {
         parentCommentId: dto.parentCommentId ?? null,
         position: effectivePosition,
         content: dto.content,
+        mentions: canonicalMentions,
         isResolved: false,
         isEdited: false,
         version: 1,
@@ -158,7 +289,7 @@ export class CommentService {
       session
     );
 
-    // 5. Return populated comment
+    // 6. Return populated comment
     const populated = await commentRepository.findById(created._id, session);
 
     return {
@@ -197,6 +328,7 @@ export class CommentService {
         canvasId: parent.canvasId,
         parentCommentId,
         content: dto.content,
+        mentions: dto.mentions,
       },
       session
     );
@@ -295,7 +427,10 @@ export class CommentService {
       throw new ApiError(HttpStatus.NOT_FOUND, "Comment not found.");
     }
 
-    await boardService.authorizeBoardAccess(comment.boardId, userId);
+    const { board } = await boardService.resolveUserWorkspaceRole(
+      comment.boardId,
+      userId
+    );
 
     if (comment.deletedAt) {
       throw new ApiError(
@@ -317,17 +452,28 @@ export class CommentService {
       );
     }
 
+    // Resolve & validate updated mentions against target workspace
+    const canonicalMentions = await this.resolveAndValidateMentions(
+      board.workspaceId,
+      dto.content,
+      dto.mentions,
+      session
+    );
+
     const effectiveExpectedVersion = expectedVersion ?? dto.expectedVersion;
     let updated: CommentDocument | null = null;
+
+    const updateData: UpdateCommentData = {
+      content: dto.content,
+      mentions: canonicalMentions,
+      isEdited: true,
+    };
 
     if (effectiveExpectedVersion !== undefined) {
       updated = await commentRepository.updateWithExpectedVersion(
         commentId,
         effectiveExpectedVersion,
-        {
-          content: dto.content,
-          isEdited: true,
-        },
+        updateData,
         session
       );
 
@@ -346,10 +492,7 @@ export class CommentService {
     } else {
       updated = await commentRepository.updateById(
         commentId,
-        {
-          content: dto.content,
-          isEdited: true,
-        },
+        updateData,
         session
       );
 

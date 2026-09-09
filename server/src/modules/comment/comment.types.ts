@@ -28,6 +28,13 @@ export type CommentPosition = {
   y: number;
 };
 
+export type CommentMention = {
+  userId: Types.ObjectId | string;
+  displayName: string;
+  startIndex: number;
+  endIndex: number;
+};
+
 /**
  * Persistent Comment Domain Entity.
  */
@@ -40,6 +47,7 @@ export type Comment = {
   parentCommentId?: Types.ObjectId | null;
   position?: CommentPosition | null;
   content: string;
+  mentions?: CommentMention[];
   isResolved: boolean;
   resolvedAt?: Date | null;
   resolvedBy?: Types.ObjectId | null;
@@ -61,6 +69,7 @@ export type CreateCommentData = {
   parentCommentId?: Types.ObjectId | null;
   position?: CommentPosition | null;
   content: string;
+  mentions?: CommentMention[];
   isResolved?: boolean;
   isEdited?: boolean;
   version?: number;
@@ -71,6 +80,7 @@ export type CreateCommentData = {
  */
 export type UpdateCommentData = {
   content?: string;
+  mentions?: CommentMention[];
   isEdited?: boolean;
   isResolved?: boolean;
   resolvedAt?: Date | null;

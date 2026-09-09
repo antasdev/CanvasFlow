@@ -23,6 +23,7 @@ export class CommentController {
       boardId,
       canvasId: canvasIdParam ? new Types.ObjectId(canvasIdParam) : undefined,
       content: req.body.content,
+      mentions: req.body.mentions,
       shapeId: req.body.shapeId ? new Types.ObjectId(req.body.shapeId) : null,
       parentCommentId: req.body.parentCommentId
         ? new Types.ObjectId(req.body.parentCommentId)
@@ -53,6 +54,7 @@ export class CommentController {
 
     const dto: CreateReplyDto = {
       content: req.body.content,
+      mentions: req.body.mentions,
       expectedVersion:
         req.body.expectedVersion !== undefined
           ? Number(req.body.expectedVersion)
@@ -156,6 +158,7 @@ export class CommentController {
 
     const dto: UpdateCommentDto = {
       content: req.body.content,
+      mentions: req.body.mentions,
       expectedVersion:
         req.body.expectedVersion !== undefined
           ? Number(req.body.expectedVersion)

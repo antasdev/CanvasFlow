@@ -101,9 +101,13 @@ export default function CommentPanel({
     return <></>;
   }
 
-  const handleCreateTopLevelComment = async (content: string): Promise<boolean> => {
+  const handleCreateTopLevelComment = async (
+    content: string,
+    mentions?: import("../types").CommentMention[]
+  ): Promise<boolean> => {
     const result = await createComment({
       content,
+      mentions,
       shapeId: selectedShapeId ?? null,
       parentCommentId: null,
     });
@@ -112,11 +116,13 @@ export default function CommentPanel({
 
   const handleReplyToThread = async (
     parentCommentId: string,
-    content: string
+    content: string,
+    mentions?: import("../types").CommentMention[]
   ): Promise<boolean> => {
     const parent = comments[parentCommentId];
     const result = await createComment({
       content,
+      mentions,
       shapeId: parent?.shapeId ?? null,
       parentCommentId,
     });
@@ -235,10 +241,11 @@ export default function CommentPanel({
       {/* Main Composer Area */}
       <div className="p-3 bg-white border-b border-gray-200">
         <CommentComposer
+          boardId={boardId}
           placeholder={
             selectedShapeId
-              ? "Add a comment to this shape..."
-              : "Add a comment to the board..."
+              ? "Add a comment to this shape... (type @ to mention)"
+              : "Add a comment to the board... (type @ to mention)"
           }
           shapeId={selectedShapeId}
           onSubmit={handleCreateTopLevelComment}
@@ -292,10 +299,13 @@ export default function CommentPanel({
           filteredThreads.map((root) => (
             <CommentThread
               key={root.id}
+              boardId={boardId}
               rootComment={root}
               replies={repliesByParentId[root.id] ?? []}
               onReply={handleReplyToThread}
-              onUpdate={async (id, content) => void updateComment(id, { content })}
+              onUpdate={async (id, content, mentions) =>
+                void updateComment(id, { content, mentions })
+              }
               onDelete={async (id) => void deleteComment(id)}
               onResolve={async (id, isResolved) => void resolveComment(id, isResolved)}
               isSelected={activeThreadId === root.id}

@@ -80,12 +80,17 @@ export const workspaceApi = {
   },
 
   async getMembers(
-    workspaceId: string
+    workspaceId: string,
+    query?: string
   ): Promise<import("../types").WorkspaceMember[]> {
+    const url = query && query.trim()
+      ? `${WORKSPACE_ENDPOINT}/${workspaceId}/members?q=${encodeURIComponent(query.trim())}`
+      : `${WORKSPACE_ENDPOINT}/${workspaceId}/members`;
+
     const response = await api.get<{
       success: boolean;
       data: import("../types").WorkspaceMember[];
-    }>(`${WORKSPACE_ENDPOINT}/${workspaceId}/members`);
+    }>(url);
 
     return response.data.data;
   },

@@ -28,6 +28,7 @@ export function mapCommentResponseToComment(dto: CommentResponseDto): Comment {
         }
       : null,
     content: dto.isDeleted ? "" : dto.content,
+    mentions: dto.isDeleted || !dto.mentions ? [] : dto.mentions.map((m) => ({ ...m })),
     isResolved: Boolean(dto.isResolved),
     resolvedAt: dto.resolvedAt ?? null,
     resolvedBy: dto.resolvedBy ?? null,

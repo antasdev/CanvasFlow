@@ -365,7 +365,193 @@ async function runCommentApiTests(): Promise<void> {
     const deleteJson = (await deleteRes.json()) as SingleCommentApiResponse;
     assert(deleteJson.data.isDeleted === true, "isDeleted is true");
     assert(deleteJson.data.content === "", "Content masked to empty string");
+    assert((deleteJson.data.mentions ?? []).length === 0, "Mentions masked to empty array on soft delete");
     console.log("✓ Comment soft-deleted via DELETE /boards/:boardId/comments/:commentId.");
+
+    // ----------------------------------------------------
+    // TEST 10: Mentions & Workspace Member Search via REST API
+    // ----------------------------------------------------
+    console.log("Test 10: Testing Mentions & Workspace Member Search via REST API...");
+
+    // 10a: Workspace member search
+    const searchMembersRes = await fetch(
+      `${baseUrl}/workspaces/${workspace._id}/members?q=Edit`,
+      {
+        headers: { Authorization: `Bearer ${viewer.token}` },
+      }
+    );
+    assert(searchMembersRes.status === 200, "Member search succeeded with 200");
+    const searchMembersJson = (await searchMembersRes.json()) as {
+      success: boolean;
+      data: Array<{ user: { fullName: string } }>;
+    };
+    assert(searchMembersJson.data.length >= 1, "Found matching member");
+    assert(
+      searchMembersJson.data.some((m) => m.user.fullName.includes("Editor")),
+      "Member search filtered correctly by query"
+    );
+
+    // 10b: Create root comment with mentions
+    const mentionContent = `Hello @${owner.user.fullName} and @${editor.user.fullName}!`;
+    const ownerMentionStart = mentionContent.indexOf(`@${owner.user.fullName}`);
+    const ownerMentionEnd = ownerMentionStart + owner.user.fullName.length + 1;
+    const editorMentionStart = mentionContent.indexOf(`@${editor.user.fullName}`);
+    const editorMentionEnd = editorMentionStart + editor.user.fullName.length + 1;
+
+    const createMentionRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${viewer.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: mentionContent,
+          position: { x: 50, y: 50 },
+          canvasId: canvas._id,
+          mentions: [
+            {
+              userId: owner.user._id.toString(),
+              displayName: owner.user.fullName,
+              startIndex: ownerMentionStart,
+              endIndex: ownerMentionEnd,
+            },
+            {
+              userId: editor.user._id.toString(),
+              displayName: editor.user.fullName,
+              startIndex: editorMentionStart,
+              endIndex: editorMentionEnd,
+            },
+          ],
+        }),
+      }
+    );
+
+    assert(createMentionRes.status === 201, "Create comment with mentions returned 201");
+    const createMentionJson = (await createMentionRes.json()) as SingleCommentApiResponse;
+    commentIds.push(new Types.ObjectId(createMentionJson.data.id));
+    assert((createMentionJson.data.mentions ?? []).length === 2, "Comment has 2 structured mentions");
+    assert(createMentionJson.data.mentions?.[0].userId === owner.user._id.toString(), "Owner mention userId matches");
+    assert(createMentionJson.data.mentions?.[1].userId === editor.user._id.toString(), "Editor mention userId matches");
+
+    // 10c: Create reply with mention
+    const replyMentionContent = `Replying to @${owner.user.fullName}`;
+    const replyOwnerStart = 12;
+    const replyOwnerEnd = 12 + owner.user.fullName.length + 1;
+
+    const createReplyMentionRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments/${createMentionJson.data.id}/replies`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${editor.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: replyMentionContent,
+          mentions: [
+            {
+              userId: owner.user._id.toString(),
+              displayName: owner.user.fullName,
+              startIndex: replyOwnerStart,
+              endIndex: replyOwnerEnd,
+            },
+          ],
+        }),
+      }
+    );
+
+    assert(createReplyMentionRes.status === 201, "Create reply with mention returned 201");
+    const replyMentionJson = (await createReplyMentionRes.json()) as SingleCommentApiResponse;
+    commentIds.push(new Types.ObjectId(replyMentionJson.data.id));
+    assert((replyMentionJson.data.mentions ?? []).length === 1, "Reply has 1 mention");
+
+    // 10d: Update comment with modified mentions
+    const updatedContent = `Updated message @${editor.user.fullName}`;
+    const updatedEditorStart = 16;
+    const updatedEditorEnd = 16 + editor.user.fullName.length + 1;
+
+    const updateMentionRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments/${createMentionJson.data.id}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${viewer.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: updatedContent,
+          expectedVersion: createMentionJson.data.version,
+          mentions: [
+            {
+              userId: editor.user._id.toString(),
+              displayName: editor.user.fullName,
+              startIndex: updatedEditorStart,
+              endIndex: updatedEditorEnd,
+            },
+          ],
+        }),
+      }
+    );
+
+    assert(updateMentionRes.status === 200, "Update comment with mentions returned 200");
+    const updateMentionJson = (await updateMentionRes.json()) as SingleCommentApiResponse;
+    assert((updateMentionJson.data.mentions ?? []).length === 1, "Updated comment has 1 mention");
+    assert(updateMentionJson.data.mentions?.[0].userId === editor.user._id.toString(), "Mention updated to editor");
+
+    // 10e: Reject non-member mention (HTTP 400)
+    const invalidMemberRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${viewer.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: `Hello @${outsider.user.fullName}`,
+          position: { x: 50, y: 50 },
+          canvasId: canvas._id,
+          mentions: [
+            {
+              userId: outsider.user._id.toString(),
+              displayName: outsider.user.fullName,
+              startIndex: 6,
+              endIndex: 6 + outsider.user.fullName.length + 1,
+            },
+          ],
+        }),
+      }
+    );
+    assert(invalidMemberRes.status === 400, "Reject non-member mention with 400 Bad Request");
+
+    // 10f: Reject invalid/mismatched mention range (HTTP 400)
+    const invalidRangeRes = await fetch(
+      `${baseUrl}/boards/${board._id}/comments`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${viewer.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          content: `Hello @${owner.user.fullName}`,
+          position: { x: 50, y: 50 },
+          canvasId: canvas._id,
+          mentions: [
+            {
+              userId: owner.user._id.toString(),
+              displayName: owner.user.fullName,
+              startIndex: 0,
+              endIndex: 100, // Out of bounds
+            },
+          ],
+        }),
+      }
+    );
+    assert(invalidRangeRes.status === 400, "Reject out-of-bounds mention range with 400 Bad Request");
+    console.log("✓ Mentions & Workspace Member Search REST API verified.");
 
     console.log("\nAll Comment REST API Integration Tests Passed Successfully!");
   } finally {

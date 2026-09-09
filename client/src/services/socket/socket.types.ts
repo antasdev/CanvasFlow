@@ -657,6 +657,13 @@ export type CommentAuthorDto = {
   avatar?: string;
 };
 
+export type CommentMentionDto = {
+  userId: string;
+  displayName: string;
+  startIndex: number;
+  endIndex: number;
+};
+
 export type CommentResponseDto = {
   id: string;
   boardId: string;
@@ -670,6 +677,7 @@ export type CommentResponseDto = {
     y: number;
   } | null;
   content: string;
+  mentions?: CommentMentionDto[];
   isResolved: boolean;
   resolvedAt?: string | null;
   resolvedBy?: string | null;
@@ -685,6 +693,7 @@ export type CreateCommentPayload = {
   canvasId?: string;
   mutationId?: string;
   content: string;
+  mentions?: CommentMentionDto[];
   shapeId?: string | null;
   parentCommentId?: string | null;
   position?: {
@@ -699,6 +708,7 @@ export type UpdateCommentPayload = {
   mutationId?: string;
   expectedVersion?: number;
   content: string;
+  mentions?: CommentMentionDto[];
 };
 
 export type ResolveCommentPayload = {
