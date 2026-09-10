@@ -1,6 +1,7 @@
 import { api } from "@/services/api";
 
 import type {
+  VersionDetail,
   VersionListResponse,
   VersionQueryParams,
   VersionSummary,
@@ -14,6 +15,11 @@ type HistoryListApiResponse = {
     hasMore: boolean;
     totalCount: number;
   };
+};
+
+type HistoryDetailApiResponse = {
+  success: boolean;
+  data: VersionDetail;
 };
 
 export const historyApi = {
@@ -43,5 +49,18 @@ export const historyApi = {
       items: response.data.data,
       pagination: response.data.pagination,
     };
+  },
+
+  /**
+   * Fetches the complete historical version checkpoint including full canvas snapshot.
+   */
+  async getVersionById(
+    boardId: string,
+    versionId: string
+  ): Promise<VersionDetail> {
+    const response = await api.get<HistoryDetailApiResponse>(
+      `/boards/${boardId}/versions/${versionId}`
+    );
+    return response.data.data;
   },
 };
