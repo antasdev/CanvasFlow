@@ -49,3 +49,50 @@ export interface VersionQueryParams {
   cursor?: number;
   trigger?: VersionTrigger;
 }
+
+export interface VersionShapeSnapshot {
+  id: string;
+  canvasId: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  zIndex?: number;
+  text?: string;
+  points?: number[];
+  connector?: {
+    sourceShapeId?: string;
+    sourceAnchor?: "top" | "right" | "bottom" | "left" | "center";
+    targetShapeId?: string;
+    targetAnchor?: "top" | "right" | "bottom" | "left" | "center";
+    routing?: "orthogonal" | "straight" | "curved";
+  };
+  shapeConfig?: Record<string, unknown>;
+  style?: Record<string, unknown>;
+  createdBy?: string;
+  parentId?: string | null;
+  version?: number;
+}
+
+export interface VersionCanvasSnapshot {
+  canvasId: string;
+  name: string;
+  order: number;
+  backgroundColor: string;
+  thumbnail?: string;
+  shapes: VersionShapeSnapshot[];
+}
+
+export interface VersionSnapshot {
+  boardId?: string;
+  boardName?: string;
+  canvases: VersionCanvasSnapshot[];
+  shapeCount: number;
+  canvasCount?: number;
+}
+
+export interface VersionDetail extends VersionSummary {
+  snapshot: VersionSnapshot;
+}

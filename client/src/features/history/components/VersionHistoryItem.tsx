@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import React from "react";
 
+import { type HistoryUIState, useVersionHistoryStore } from "../store";
 import type { VersionSummary } from "../types";
 import {
   formatVersionTime,
@@ -23,6 +24,8 @@ export function VersionHistoryItem({
   version,
   className = "",
 }: VersionHistoryItemProps): React.JSX.Element {
+  const openPreview = useVersionHistoryStore((state: HistoryUIState) => state.openPreview);
+
   const formattedTime = formatVersionTime(version.createdAt);
   const fullDateTime = formatFullDateTime(version.createdAt);
   const authorName = version.author?.fullName || "Collaborator";
@@ -134,14 +137,15 @@ export function VersionHistoryItem({
           </div>
         </div>
 
-        {/* Action Affordances for Future Slices (Slice 40 Preview, Slice 41 Restore) */}
-        <div className="flex items-center gap-1">
+        {/* Action Affordances (Slice 40 Preview, Slice 41 Restore) */}
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            disabled
-            title="Preview historical version (available in Slice 40)"
-            aria-label="Preview historical version (available in Slice 40)"
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-gray-400 bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed"
+            onClick={() => openPreview(version.id)}
+            title={`Preview Version ${version.versionNumber}`}
+            aria-label={`Preview Version ${version.versionNumber}`}
+            data-testid={`preview-version-btn-${version.id}`}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-slate-700 bg-slate-100 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 border border-gray-200 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <Eye className="h-3 w-3" />
             <span>Preview</span>
@@ -152,7 +156,7 @@ export function VersionHistoryItem({
             disabled
             title="Restore version (available in Slice 41)"
             aria-label="Restore version (available in Slice 41)"
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-gray-400 bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed"
+            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-400 bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed"
           >
             <RotateCcw className="h-3 w-3" />
             <span>Restore</span>

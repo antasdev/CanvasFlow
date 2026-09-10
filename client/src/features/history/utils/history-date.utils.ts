@@ -62,6 +62,11 @@ export function formatFullDateTime(dateInput: string | Date): string {
 }
 
 /**
+ * Formats a timeline date for display in the preview header.
+ */
+export const formatTimelineDate = formatFullDateTime;
+
+/**
  * Groups an array of versions into date buckets in chronological descending order.
  */
 export function groupVersionsByDate(
