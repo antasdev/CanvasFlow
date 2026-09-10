@@ -21,6 +21,7 @@
     "test:comments": "tsx -r tsconfig-paths/register src/modules/comment/tests/comment.domain.test.ts && tsx -r tsconfig-paths/register src/modules/comment/tests/comment.service.test.ts && tsx -r tsconfig-paths/register src/modules/comment/tests/comment.api.test.ts && tsx -r tsconfig-paths/register src/modules/comment/tests/comment.reliability.test.ts",
     "test:notifications": "tsx -r tsconfig-paths/register src/modules/notification/tests/notification.domain.test.ts && tsx -r tsconfig-paths/register src/modules/notification/tests/notification.service.test.ts && tsx -r tsconfig-paths/register src/modules/notification/tests/notification.api.test.ts",
     "test:history": "tsx -r tsconfig-paths/register src/modules/history/tests/history.domain.test.ts",
+    "test:history-pipeline": "tsx -r tsconfig-paths/register src/modules/history/tests/history.pipeline.test.ts",
     "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],

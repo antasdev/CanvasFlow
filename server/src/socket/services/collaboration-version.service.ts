@@ -3,6 +3,7 @@ import mongoose, { Types } from "mongoose";
 
 import { boardRepository } from "@/modules/board/board.repository";
 import { mutationService, MutationOperation } from "@/modules/mutation";
+import { historyPipeline } from "@/modules/history";
 import { CollaborationEventMeta } from "../socket.types";
 import { ApiError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
@@ -195,6 +196,17 @@ export class CollaborationVersionService {
             isIdempotentReplay: false,
           };
 
+          if (operation) {
+            await historyPipeline.processMutation({
+              boardId,
+              actorId: actorObjectId,
+              operation,
+              mutationId,
+              collaborationRevision: updatedBoard.collaborationRevision ?? 1,
+              isIdempotentReplay: false,
+            });
+          }
+
           return { result, meta };
         } else {
           try {
@@ -229,6 +241,17 @@ export class CollaborationVersionService {
               occurredAt: new Date().toISOString(),
               isIdempotentReplay: false,
             };
+
+            if (operation) {
+              await historyPipeline.processMutation({
+                boardId,
+                actorId: actorObjectId,
+                operation,
+                mutationId,
+                collaborationRevision: updatedBoard.collaborationRevision ?? 1,
+                isIdempotentReplay: false,
+              });
+            }
 
             return { result, meta };
           } catch (error: any) {

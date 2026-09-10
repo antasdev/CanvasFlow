@@ -7,3 +7,7 @@ export * from "./history.repository";
 export * from "./history.service";
 export * from "./history.controller";
 export * from "./history.routes";
+export * from "./pipeline/history-pipeline.types";
+export * from "./pipeline/history.policy";
+export * from "./pipeline/history.snapshot";
+export * from "./pipeline/history.pipeline";

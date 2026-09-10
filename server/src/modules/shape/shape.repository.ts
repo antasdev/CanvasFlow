@@ -40,10 +40,11 @@ export class ShapeRepository {
   }
 
   async findByCanvasId(
-    canvasId: Types.ObjectId
+    canvasId: Types.ObjectId,
+    session?: ClientSession
   ): Promise<ShapeDocument[]> {
     return ShapeModel
-      .find({ canvasId })
+      .find({ canvasId }, null, { session })
       .sort({ zIndex: 1 });
   }
 
