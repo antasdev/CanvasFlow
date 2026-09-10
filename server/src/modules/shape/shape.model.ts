@@ -197,6 +197,11 @@ shapeSchema.index({
   parentId: 1,
 });
 
+shapeSchema.index({
+  canvasId: 1,
+  text: 1,
+});
+
 export const ShapeModel = model<Shape>(
   "Shape",
   shapeSchema

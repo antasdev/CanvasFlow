@@ -62,6 +62,12 @@ boardSchema.index({
   isArchived: 1,
 });
 
+boardSchema.index({
+  workspaceId: 1,
+  isArchived: 1,
+  name: 1,
+});
+
 const MODEL_NAME = "Board";
 
 export const BoardModel =
