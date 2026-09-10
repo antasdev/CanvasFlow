@@ -7,6 +7,7 @@ import {
   UpdateVersionMetadataDto,
   VersionFilterDto,
 } from "./history.dto";
+import { VersionTrigger } from "./history.types";
 
 export class HistoryController {
   /**
@@ -43,7 +44,7 @@ export class HistoryController {
     const boardId = new Types.ObjectId(req.params.boardId as string);
 
     const filterDto: VersionFilterDto = {
-      trigger: req.query.trigger as any,
+      trigger: req.query.trigger as VersionTrigger | undefined,
       isNamed:
         req.query.isNamed === "true"
           ? true
