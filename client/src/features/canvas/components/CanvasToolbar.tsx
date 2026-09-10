@@ -17,10 +17,12 @@ import {
   Redo2,
   MessageSquare,
   Eye,
+  History,
 } from "lucide-react";
 import React, { useMemo } from "react";
 
 import { useCommentStore } from "@/features/comments";
+import { useHistoryStore } from "@/features/history";
 
 import { CANVAS_TOOLS, type CanvasTool } from "../constants";
 import { useCanvasStore } from "../store";
@@ -52,6 +54,9 @@ export default function CanvasToolbar({
   const isPanelOpen = useCommentStore((state) => state.isPanelOpen);
   const togglePanel = useCommentStore((state) => state.togglePanel);
   const comments = useCommentStore((state) => state.comments);
+
+  const isHistoryOpen = useHistoryStore((state) => state.isPanelOpen);
+  const toggleHistory = useHistoryStore((state) => state.togglePanel);
 
   const openCommentsCount = useMemo(() => {
     return Object.values(comments).filter(
@@ -287,6 +292,22 @@ export default function CanvasToolbar({
             {openCommentsCount}
           </span>
         )}
+      </button>
+
+      {/* Version History Panel Toggle */}
+      <button
+        type="button"
+        onClick={() => toggleHistory()}
+        title="Toggle Version History"
+        aria-label="Toggle Version History"
+        className={`relative inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+          isHistoryOpen
+            ? "bg-slate-900 text-white shadow-sm"
+            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+        }`}
+      >
+        <History className="h-4 w-4" />
+        <span className="hidden sm:inline">History</span>
       </button>
     </div>
   );
