@@ -28,6 +28,7 @@ import {
   VersionAuthorDto,
   VersionFilterDto,
   VersionResponseDto,
+  VersionSummaryResponseDto,
 } from "./history.dto";
 import {
   BoardVersionDocument,
@@ -470,43 +471,59 @@ export class HistoryService {
     }
 
     // 5. Post-commit: Capture committed restored state into a NEW BoardVersion document
-    const committedSnapshot = await SnapshotBuilder.buildBoardSnapshot(boardId);
-    const restoreDescription =
-      dto?.description?.trim() ||
-      `Restored from Version ${historicalVersion.versionNumber}${
-        historicalVersion.name ? ` (${historicalVersion.name})` : ""
-      }`;
+    let newVersionSummary: VersionSummaryResponseDto;
 
-    const newVersionDoc = await historyRepository.create({
-      boardId,
-      versionNumber: 0, // Concurrency-safe monotonic allocation
-      name: `Restored from Version ${historicalVersion.versionNumber}`,
-      description: restoreDescription,
-      trigger: "restore",
-      createdBy: userId,
-      collaborationRevision: meta.revision,
-      snapshot: committedSnapshot,
-      changeSummary: {
-        description: `Restored from Version ${historicalVersion.versionNumber}`,
-      },
-      isNamed: true,
-    });
+    try {
+      const committedSnapshot = await SnapshotBuilder.buildBoardSnapshot(boardId);
+      const restoreDescription =
+        dto?.description?.trim() ||
+        `Restored from Version ${historicalVersion.versionNumber}${
+          historicalVersion.name ? ` (${historicalVersion.name})` : ""
+        }`;
 
-    // 7. Broadcast CANVAS_SYNC to connected collaborators in the board room
+      const newVersionDoc = await historyRepository.create({
+        boardId,
+        versionNumber: 0, // Concurrency-safe monotonic allocation
+        name: `Restored from Version ${historicalVersion.versionNumber}`,
+        description: restoreDescription,
+        trigger: "restore",
+        createdBy: userId,
+        collaborationRevision: meta.revision,
+        snapshot: committedSnapshot,
+        changeSummary: {
+          description: `Restored from Version ${historicalVersion.versionNumber}`,
+        },
+        isNamed: true,
+      });
+
+      newVersionSummary = HistoryMapper.toSummaryDto(newVersionDoc);
+    } catch (checkpointError) {
+      console.error("[HistoryService] Post-commit restore checkpoint creation failed:", {
+        boardId: boardId.toString(),
+        versionId: versionId.toString(),
+        error:
+          checkpointError instanceof Error
+            ? checkpointError.message
+            : String(checkpointError),
+      });
+
+      newVersionSummary = HistoryMapper.toSummaryDto(historicalVersion);
+    }
+
+    // 6. Broadcast CANVAS_SYNC to connected collaborators in the board room
     try {
       const io = getIO();
       if (io) {
         const room = getBoardRoom(boardId.toString());
+        const canvases = await canvasRepository.findByBoardId(boardId);
 
-        for (const canvasSnap of committedSnapshot.canvases) {
-          const shapes = await shapeService.getCanvasShapes(
-            new Types.ObjectId(canvasSnap.canvasId)
-          );
+        for (const canvas of canvases) {
+          const shapes = await shapeService.getCanvasShapes(canvas._id);
           const shapeDtos = shapes.map((s) => ShapeMapper.toResponseDto(s));
 
           io.to(room).emit(SocketEvents.CANVAS_SYNC, {
             boardId: boardId.toString(),
-            canvasId: canvasSnap.canvasId,
+            canvasId: canvas._id.toString(),
             shapes: shapeDtos,
           });
         }
@@ -514,8 +531,6 @@ export class HistoryService {
     } catch {
       // Non-blocking broadcast error in standalone/test environments without initialized socket server
     }
-
-    const newVersionSummary = HistoryMapper.toSummaryDto(newVersionDoc);
 
     const finalResponse: RestoreVersionResponseDto = {
       restoredVersionId: result.restoredFromVersionId,

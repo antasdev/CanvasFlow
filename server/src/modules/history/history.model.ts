@@ -167,17 +167,18 @@ boardVersionSchema.index(
   }
 );
 
-// Timeline ordering index
-boardVersionSchema.index({
-  boardId: 1,
-  createdAt: -1,
-});
-
-// Filter by trigger type on timeline
+// Compound index for trigger filtering with version sort
 boardVersionSchema.index({
   boardId: 1,
   trigger: 1,
-  createdAt: -1,
+  versionNumber: -1,
+});
+
+// Compound index for isNamed filtering with version sort
+boardVersionSchema.index({
+  boardId: 1,
+  isNamed: 1,
+  versionNumber: -1,
 });
 
 const MODEL_NAME = "BoardVersion";

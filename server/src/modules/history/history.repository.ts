@@ -43,11 +43,16 @@ export class HistoryRepository {
         );
 
         return created;
-      } catch (error: any) {
+      } catch (error) {
+        const hasCode = typeof error === "object" && error !== null && "code" in error;
+        const hasMsg = typeof error === "object" && error !== null && "message" in error;
+        const codeVal = hasCode ? (error as { code: number | string }).code : undefined;
+        const msgVal = hasMsg ? String((error as { message: string }).message) : "";
+
         const isDuplicateKeyError =
-          error?.code === 11000 ||
-          error?.message?.includes("E11000 duplicate key error") ||
-          error?.message?.includes("boardId_1_versionNumber_-1");
+          codeVal === 11000 ||
+          msgVal.includes("E11000 duplicate key error") ||
+          msgVal.includes("boardId_1_versionNumber_-1");
 
         if (isDuplicateKeyError && attempt < maxRetries) {
           // Jittered backoff before retrying with freshly queried version number
@@ -146,6 +151,14 @@ export class HistoryRepository {
 
     const limit = Math.min(Math.max(filter.limit ?? 20, 1), 100);
 
+    const countQuery: Record<string, unknown> = { boardId };
+    if (filter.trigger) {
+      countQuery.trigger = filter.trigger;
+    }
+    if (filter.isNamed !== undefined) {
+      countQuery.isNamed = filter.isNamed;
+    }
+
     const [versions, totalCount] = await Promise.all([
       BoardVersionModel.find(
         query,
@@ -154,7 +167,7 @@ export class HistoryRepository {
       )
         .sort({ versionNumber: -1 })
         .limit(limit + 1), // fetch limit + 1 to detect hasMore
-      BoardVersionModel.countDocuments({ boardId }),
+      BoardVersionModel.countDocuments(countQuery, { session }),
     ]);
 
     return { versions, totalCount };
