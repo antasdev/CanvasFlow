@@ -147,7 +147,11 @@ export class HistoryRepository {
     const limit = Math.min(Math.max(filter.limit ?? 20, 1), 100);
 
     const [versions, totalCount] = await Promise.all([
-      BoardVersionModel.find(query, null, { session })
+      BoardVersionModel.find(
+        query,
+        { "snapshot.canvases.shapes": 0 },
+        { session }
+      )
         .sort({ versionNumber: -1 })
         .limit(limit + 1), // fetch limit + 1 to detect hasMore
       BoardVersionModel.countDocuments({ boardId }),
