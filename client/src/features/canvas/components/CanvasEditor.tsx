@@ -12,6 +12,7 @@ import {
     CommentPanel,
     CanvasCommentOverlay,
 } from "@/features/comments";
+import { VersionHistoryPanel } from "@/features/history";
 import { socketClientService } from "@/services/socket";
 
 import { mapShapeResponseToShape, shapeApi, type CreateShapeRequest } from "../api";
@@ -2271,6 +2272,9 @@ export default function CanvasEditor({
                 onNavigateToAnchor={handleNavigateToAnchor}
                 onNavigateToShape={handleNavigateToShape}
             />
+
+            {/* Historical Version History Panel */}
+            <VersionHistoryPanel boardId={boardId} />
 
             {/* Keyboard Shortcuts Cheatsheet Modal */}
             <KeyboardShortcutsModal

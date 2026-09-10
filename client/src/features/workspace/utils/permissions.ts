@@ -43,3 +43,7 @@ export const canEditCanvas = (role?: WorkspaceRole | null): boolean => {
 export const canAddComment = (role?: WorkspaceRole | null): boolean => {
   return !!role;
 };
+
+export const canViewHistory = (role?: WorkspaceRole | null): boolean => {
+  return !!role;
+};

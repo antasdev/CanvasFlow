@@ -8,6 +8,7 @@ import {
   canDeleteBoard,
   canEditCanvas,
   canAddComment,
+  canViewHistory,
 } from "../utils/permissions";
 
 export const useWorkspacePermissions = (role?: WorkspaceRole | null) => {
@@ -21,6 +22,7 @@ export const useWorkspacePermissions = (role?: WorkspaceRole | null) => {
     canDeleteBoard: (isCreator?: boolean) => canDeleteBoard(role, isCreator),
     canEditCanvas: canEditCanvas(role),
     canAddComment: canAddComment(role),
+    canViewHistory: canViewHistory(role),
     isOwner: role === "OWNER",
     isAdmin: role === "ADMIN",
     isEditor: role === "EDITOR",
