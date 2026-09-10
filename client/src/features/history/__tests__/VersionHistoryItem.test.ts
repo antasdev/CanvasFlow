@@ -86,11 +86,11 @@ describe("VersionHistoryItem Formatting, Badges & Invariants", () => {
     expect(fullDateTime).toContain("2026");
   });
 
-  it("verifies Slice 40 Preview is enabled and Slice 41 Restore remains deferred", () => {
+  it("verifies Slice 40 Preview and Slice 41 Restore are enabled", () => {
     const isPreviewEnabled = true; // Enabled in Slice 40
-    const isRestoreEnabled = false; // Deferred to Slice 41
+    const isRestoreEnabled = true; // Enabled in Slice 41
 
     expect(isPreviewEnabled).toBe(true);
-    expect(isRestoreEnabled).toBe(false);
+    expect(isRestoreEnabled).toBe(true);
   });
 });

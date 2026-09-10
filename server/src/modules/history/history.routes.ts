@@ -8,6 +8,7 @@ import { historyController } from "./history.controller";
 import {
   boardVersionsQuerySchema,
   createManualVersionSchema,
+  restoreVersionSchema,
   updateVersionMetadataSchema,
   versionParamsSchema,
 } from "./history.validation";
@@ -56,6 +57,17 @@ historyRouter.patch(
   authenticate,
   validate(updateVersionMetadataSchema),
   asyncHandler(historyController.updateVersionMetadata.bind(historyController))
+);
+
+/**
+ * Restore Historical Version Checkpoint
+ * POST /api/v1/boards/:boardId/versions/:versionId/restore
+ */
+historyRouter.post(
+  "/:versionId/restore",
+  authenticate,
+  validate(restoreVersionSchema),
+  asyncHandler(historyController.restoreVersion.bind(historyController))
 );
 
 export default historyRouter;

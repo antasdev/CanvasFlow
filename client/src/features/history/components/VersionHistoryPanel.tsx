@@ -1,10 +1,12 @@
 import { History, X, Loader2 } from "lucide-react";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
-import { useVersionHistory } from "../hooks";
+import { useRestoreVersion, useVersionHistory } from "../hooks";
 import { useHistoryStore } from "../store";
+import type { VersionSummary } from "../types";
 
 import { VersionPreviewModal } from "./preview";
+import { RestoreConfirmationModal } from "./RestoreConfirmationModal";
 import { VersionHistoryEmptyState } from "./VersionHistoryEmptyState";
 import { VersionHistoryErrorState } from "./VersionHistoryErrorState";
 import { VersionHistoryItem } from "./VersionHistoryItem";
@@ -23,6 +25,8 @@ export function VersionHistoryPanel({
   const togglePanel = useHistoryStore((state) => state.togglePanel);
 
   const panelRef = useRef<HTMLDivElement>(null);
+  const [selectedRestoreVersion, setSelectedRestoreVersion] =
+    useState<VersionSummary | null>(null);
 
   const {
     versions,
@@ -36,6 +40,22 @@ export function VersionHistoryPanel({
     fetchNextPage,
     refetch,
   } = useVersionHistory(isPanelOpen ? boardId : undefined);
+
+  const { restore, isRestoring } = useRestoreVersion({
+    boardId: boardId ?? "",
+    onSuccess: () => {
+      setSelectedRestoreVersion(null);
+    },
+  });
+
+  const handleConfirmRestore = async (): Promise<void> => {
+    if (!selectedRestoreVersion) return;
+    try {
+      await restore({ versionId: selectedRestoreVersion.id });
+    } catch {
+      // Error handled by useRestoreVersion toast
+    }
+  };
 
   // Close on Escape key press
   useEffect(() => {
@@ -125,6 +145,7 @@ export function VersionHistoryPanel({
                       <VersionHistoryItem
                         key={version.id}
                         version={version}
+                        onRestore={(v) => setSelectedRestoreVersion(v)}
                       />
                     ))}
                   </div>
@@ -158,6 +179,16 @@ export function VersionHistoryPanel({
 
       {/* Version Preview Modal */}
       {boardId && <VersionPreviewModal boardId={boardId} />}
+
+      {/* Restore Confirmation Modal */}
+      <RestoreConfirmationModal
+        isOpen={Boolean(selectedRestoreVersion)}
+        onClose={() => setSelectedRestoreVersion(null)}
+        onConfirm={() => void handleConfirmRestore()}
+        versionNumber={selectedRestoreVersion?.versionNumber}
+        versionName={selectedRestoreVersion?.name}
+        isRestoring={isRestoring}
+      />
     </>
   );
 }

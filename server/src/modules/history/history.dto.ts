@@ -109,3 +109,22 @@ export type PaginatedVersionsResponseDto = {
   hasMore: boolean;
   totalCount: number;
 };
+
+/**
+ * Client request DTO for restoring a historical version checkpoint.
+ */
+export type RestoreVersionDto = {
+  expectedCollaborationRevision?: number;
+  mutationId?: string;
+  description?: string;
+};
+
+/**
+ * Server response DTO returned after successful version restore.
+ */
+export type RestoreVersionResponseDto = {
+  restoredVersionId: string;
+  restoredVersionNumber: number;
+  newVersion: VersionSummaryResponseDto;
+  collaborationRevision: number;
+};

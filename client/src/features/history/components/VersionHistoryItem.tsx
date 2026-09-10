@@ -18,11 +18,13 @@ import {
 export interface VersionHistoryItemProps {
   version: VersionSummary;
   className?: string;
+  onRestore?: (version: VersionSummary) => void;
 }
 
 export function VersionHistoryItem({
   version,
   className = "",
+  onRestore,
 }: VersionHistoryItemProps): React.JSX.Element {
   const openPreview = useVersionHistoryStore((state: HistoryUIState) => state.openPreview);
 
@@ -153,10 +155,11 @@ export function VersionHistoryItem({
 
           <button
             type="button"
-            disabled
-            title="Restore version (available in Slice 41)"
-            aria-label="Restore version (available in Slice 41)"
-            className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium text-gray-400 bg-gray-50 border border-gray-200 opacity-60 cursor-not-allowed"
+            onClick={() => onRestore?.(version)}
+            title={`Restore Version ${version.versionNumber}`}
+            aria-label={`Restore Version ${version.versionNumber}`}
+            data-testid={`restore-version-btn-${version.id}`}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-300 border border-blue-200 transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
           >
             <RotateCcw className="h-3 w-3" />
             <span>Restore</span>

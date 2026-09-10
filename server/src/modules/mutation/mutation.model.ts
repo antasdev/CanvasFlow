@@ -33,6 +33,7 @@ const mutationRecordSchema = new Schema<IMutationRecord>(
         "comment:update",
         "comment:resolve",
         "comment:delete",
+        "version:restore",
       ],
       required: [true, "Mutation operation is required."],
     },

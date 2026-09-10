@@ -1,4 +1,4 @@
-export type VersionTrigger = "manual" | "automatic";
+export type VersionTrigger = "manual" | "automatic" | "restore";
 
 export interface VersionAuthor {
   id: string;
@@ -95,4 +95,17 @@ export interface VersionSnapshot {
 
 export interface VersionDetail extends VersionSummary {
   snapshot: VersionSnapshot;
+}
+
+export interface RestoreVersionPayload {
+  expectedCollaborationRevision?: number;
+  mutationId?: string;
+  description?: string;
+}
+
+export interface RestoreVersionResult {
+  restoredVersionId: string;
+  restoredVersionNumber: number;
+  newVersion: VersionSummary;
+  collaborationRevision: number;
 }

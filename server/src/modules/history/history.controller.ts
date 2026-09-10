@@ -119,6 +119,28 @@ export class HistoryController {
       data: updated,
     });
   }
+
+  /**
+   * Restore Historical Version Checkpoint
+   * POST /api/v1/boards/:boardId/versions/:versionId/restore
+   */
+  async restoreVersion(req: Request, res: Response): Promise<void> {
+    const userId = new Types.ObjectId(req.user!.userId);
+    const boardId = new Types.ObjectId(req.params.boardId as string);
+    const versionId = new Types.ObjectId(req.params.versionId as string);
+
+    const result = await historyService.restoreVersion(
+      boardId,
+      versionId,
+      userId,
+      req.body
+    );
+
+    res.status(HttpStatus.OK).json({
+      success: true,
+      data: result,
+    });
+  }
 }
 
 export const historyController = new HistoryController();

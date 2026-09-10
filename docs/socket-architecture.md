@@ -3241,3 +3241,43 @@ Emitted when `selectedShapeIds` changes on the local client. Transmitted over th
 #### Q3: How is the Group + Descendant selection invariant enforced in real-time collaboration?
 **Answer:**
 CanvasFlow's `enforceGroupHierarchyInvariant` guarantees that a parent group and its descendants are never simultaneously selected. If a local user drags a group, the group's transform frame moves all children via scene-graph inheritance. If child shapes were simultaneously selected, multi-selection move logic would apply the translation vector twice, desynchronizing the child relative to other collaborators.
+
+---
+
+## 48. Authoritative Document Restoration (Slice 41 — Version Restore)
+
+### Architectural Overview
+
+When an authorized collaborator performs a historical version restore (`POST /api/v1/boards/:boardId/versions/:versionId/restore`), the authoritative document state across all canvases and shapes is replaced inside an atomic MongoDB transaction.
+
+Rather than inventing a custom restore collaboration event, Slice 41 reuses the established **`SocketEvents.CANVAS_SYNC`** (`canvas:sync`) channel:
+
+```text
+Server (Successful Restore Transaction Commit)
+         │
+         ├── 1. Read newly committed canvases and shapes
+         ├── 2. Map entities via ShapeMapper.toResponseDto
+         │
+         ▼
+Socket.IO Gateway (socketServer.to(getBoardRoom(boardId)))
+         │
+         ├── Emit: SocketEvents.CANVAS_SYNC
+         │   {
+         │     canvasId: activeCanvasId,
+         │     shapes: restoredShapes,
+         │     canvases: restoredCanvases,
+         │     collaborationRevision: advancedRevision
+         │   }
+         │
+         ▼
+Connected Collaborator Clients (useCanvasSocket / useCollaborationStore)
+         ├── Reconcile useCanvasStore state with authoritative restored entities
+         ├── Advance useCollaborationStore revision counter
+         ├── Clear local transient selection (preventing stale transformer handles)
+         └── Invalidate TanStack Query cache ["boards", boardId, "versions"]
+```
+
+### Invariants:
+1. **Zero New Events**: Completely avoids event-space pollution by reusing the canonical synchronization mechanism (`CANVAS_SYNC`).
+2. **Post-Commit Emission**: Broadcast occurs strictly after the MongoDB transaction commits; failed or aborted restore attempts emit zero socket events.
+3. **Room-Wide Re-synchronization**: Broadcast reaches all connected collaborators in the board room, ensuring instantaneous visual alignment without requiring manual page reloads.
