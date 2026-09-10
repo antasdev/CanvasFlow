@@ -49,6 +49,11 @@ canvasSchema.index({
   order: 1,
 });
 
+canvasSchema.index({
+  boardId: 1,
+  name: 1,
+});
+
 
 export const CanvasModel =
   model<Canvas>(

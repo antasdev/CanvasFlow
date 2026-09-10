@@ -20,7 +20,7 @@ import { shapeRouter } from "@/modules/shape";
 import { commentRouter, canvasCommentRouter } from "@/modules/comment";
 import { notificationRouter } from "@/modules/notification";
 import { historyRouter } from "@/modules/history";
-
+import { searchRouter } from "@/modules/search";
 
 const app:Application=express();
 
@@ -56,6 +56,8 @@ app.use("/api/v1/canvases", canvasRouter);
 app.use("/api/v1/shapes", shapeRouter);
 
 app.use("/api/v1/notifications", notificationRouter);
+
+app.use("/api/v1/search", searchRouter);
 
 //404 middleware
 app.use(notFoundMiddleware);
