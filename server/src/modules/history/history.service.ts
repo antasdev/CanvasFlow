@@ -1,12 +1,11 @@
 import { ClientSession, Types } from "mongoose";
 import { boardService } from "@/modules/board";
-import { canvasRepository } from "@/modules/canvas";
-import { shapeRepository } from "@/modules/shape";
 import { UserModel } from "@/modules/user/user.model";
 import { ApiError } from "@/shared/utils";
 import { HttpStatus } from "@/shared/constants";
 import { historyRepository } from "./history.repository";
 import { HistoryMapper } from "./history.mapper";
+import { SnapshotBuilder } from "./pipeline/history.snapshot";
 import {
   CreateManualVersionDto,
   PaginatedVersionsResponseDto,
@@ -17,8 +16,6 @@ import {
 } from "./history.dto";
 import {
   BoardVersionDocument,
-  VersionCanvasSnapshot,
-  VersionShapeSnapshot,
   VersionSnapshot,
 } from "./history.types";
 
@@ -73,79 +70,7 @@ export class HistoryService {
     boardId: Types.ObjectId,
     session?: ClientSession
   ): Promise<VersionSnapshot> {
-    const canvases = await canvasRepository.findByBoardId(boardId, session);
-
-    const canvasSnapshots: VersionCanvasSnapshot[] = [];
-    let totalShapeCount = 0;
-
-    for (const canvas of canvases) {
-      const shapes = await shapeRepository.findByCanvasId(canvas._id);
-
-      const shapeSnapshots: VersionShapeSnapshot[] = shapes.map((s) => {
-        const rawObj =
-          typeof (s as any).toObject === "function" ? (s as any).toObject() : s;
-
-        return {
-          id: rawObj._id.toString(),
-          canvasId: rawObj.canvasId.toString(),
-          type: rawObj.type,
-          x: rawObj.x,
-          y: rawObj.y,
-          width: rawObj.width,
-          height: rawObj.height,
-          rotation: rawObj.rotation ?? 0,
-          zIndex: rawObj.zIndex,
-          text: rawObj.text,
-          points: rawObj.points ? [...rawObj.points] : undefined,
-          connector: rawObj.connector
-            ? {
-                sourceShapeId: rawObj.connector.sourceShapeId
-                  ? rawObj.connector.sourceShapeId.toString()
-                  : null,
-                sourceAnchor: rawObj.connector.sourceAnchor ?? null,
-                targetShapeId: rawObj.connector.targetShapeId
-                  ? rawObj.connector.targetShapeId.toString()
-                  : null,
-                targetAnchor: rawObj.connector.targetAnchor ?? null,
-                routing: rawObj.connector.routing ?? "straight",
-              }
-            : undefined,
-          shapeConfig: rawObj.shapeConfig
-            ? { ...rawObj.shapeConfig }
-            : undefined,
-          style: rawObj.style
-            ? JSON.parse(JSON.stringify(rawObj.style))
-            : {},
-          createdBy: rawObj.createdBy.toString(),
-          parentId: rawObj.parentId ? rawObj.parentId.toString() : null,
-          version: rawObj.version,
-          createdAt:
-            rawObj.createdAt instanceof Date
-              ? rawObj.createdAt.toISOString()
-              : new Date(rawObj.createdAt).toISOString(),
-          updatedAt:
-            rawObj.updatedAt instanceof Date
-              ? rawObj.updatedAt.toISOString()
-              : new Date(rawObj.updatedAt).toISOString(),
-        };
-      });
-
-      totalShapeCount += shapeSnapshots.length;
-
-      canvasSnapshots.push({
-        canvasId: canvas._id.toString(),
-        name: canvas.name,
-        order: canvas.order,
-        backgroundColor: canvas.backgroundColor ?? "#FFFFFF",
-        thumbnail: canvas.thumbnail,
-        shapes: shapeSnapshots,
-      });
-    }
-
-    return {
-      canvases: canvasSnapshots,
-      shapeCount: totalShapeCount,
-    };
+    return SnapshotBuilder.buildBoardSnapshot(boardId, session);
   }
 
   /**

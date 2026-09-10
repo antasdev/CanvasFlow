@@ -90,7 +90,7 @@ export type BoardVersion = {
  */
 export type CreateVersionData = {
   boardId: Types.ObjectId;
-  versionNumber: number;
+  versionNumber?: number;
   name?: string;
   description?: string;
   trigger?: VersionTrigger;
