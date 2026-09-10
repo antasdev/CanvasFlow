@@ -1,6 +1,8 @@
 import { api } from "@/services/api";
 
 import type {
+  RestoreVersionPayload,
+  RestoreVersionResult,
   VersionDetail,
   VersionListResponse,
   VersionQueryParams,
@@ -20,6 +22,11 @@ type HistoryListApiResponse = {
 type HistoryDetailApiResponse = {
   success: boolean;
   data: VersionDetail;
+};
+
+type HistoryRestoreApiResponse = {
+  success: boolean;
+  data: RestoreVersionResult;
 };
 
 export const historyApi = {
@@ -60,6 +67,21 @@ export const historyApi = {
   ): Promise<VersionDetail> {
     const response = await api.get<HistoryDetailApiResponse>(
       `/boards/${boardId}/versions/${versionId}`
+    );
+    return response.data.data;
+  },
+
+  /**
+   * Restores historical version checkpoint to live board state.
+   */
+  async restoreVersion(
+    boardId: string,
+    versionId: string,
+    payload?: RestoreVersionPayload
+  ): Promise<RestoreVersionResult> {
+    const response = await api.post<HistoryRestoreApiResponse>(
+      `/boards/${boardId}/versions/${versionId}/restore`,
+      payload ?? {}
     );
     return response.data.data;
   },

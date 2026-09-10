@@ -23,6 +23,7 @@
     "test:history": "tsx -r tsconfig-paths/register src/modules/history/tests/history.domain.test.ts",
     "test:history-pipeline": "tsx -r tsconfig-paths/register src/modules/history/tests/history.pipeline.test.ts",
     "test:history-api": "tsx -r tsconfig-paths/register src/modules/history/tests/history.api.test.ts",
+    "test:history-restore": "tsx -r tsconfig-paths/register src/modules/history/tests/history.restore.test.ts",
     "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],

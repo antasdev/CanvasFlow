@@ -8,7 +8,7 @@ import {
 /**
  * Trigger source for the historical version checkpoint.
  */
-export type VersionTrigger = "manual" | "automatic";
+export type VersionTrigger = "manual" | "automatic" | "restore";
 
 /**
  * Historical snapshot of an individual shape on a canvas page.

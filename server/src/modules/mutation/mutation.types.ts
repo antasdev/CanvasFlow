@@ -9,6 +9,7 @@ export type MutationOperation =
   | "shape:align"
   | "shape:distribute"
   | "shape:paste"
+  | "version:restore"
   | "comment:create"
   | "comment:update"
   | "comment:resolve"

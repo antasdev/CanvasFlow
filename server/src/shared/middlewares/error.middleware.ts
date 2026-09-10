@@ -13,6 +13,7 @@ export const errorMiddleware = (
     res.status(error.statusCode).json({
       success: false,
       message: error.message,
+      ...(error.code ? { code: error.code } : {}),
     });
 
     return;

@@ -121,7 +121,7 @@ const boardVersionSchema = new Schema<BoardVersion>(
     },
     trigger: {
       type: String,
-      enum: ["manual", "automatic"],
+      enum: ["manual", "automatic", "restore"],
       default: "manual",
       required: true,
     },

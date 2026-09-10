@@ -79,10 +79,39 @@ export const boardVersionsQuerySchema = z.object({
   }),
   query: z
     .object({
-      trigger: z.enum(["manual", "automatic"]).optional(),
+      trigger: z.enum(["manual", "automatic", "restore"]).optional(),
       isNamed: z.enum(["true", "false"]).optional(),
       limit: z.coerce.number().int().min(1).max(100).default(20),
       cursor: z.coerce.number().int().min(1).optional(),
+    })
+    .optional(),
+});
+
+/**
+ * Validation schema for version restore (POST /api/v1/boards/:boardId/versions/:versionId/restore).
+ */
+export const restoreVersionSchema = z.object({
+  params: z.object({
+    boardId: objectIdSchema,
+    versionId: objectIdSchema,
+  }),
+  body: z
+    .object({
+      expectedCollaborationRevision: z
+        .number()
+        .int()
+        .min(0)
+        .optional(),
+      mutationId: z
+        .string()
+        .trim()
+        .min(1, "mutationId cannot be empty.")
+        .optional(),
+      description: z
+        .string()
+        .trim()
+        .max(500, "Description cannot exceed 500 characters.")
+        .optional(),
     })
     .optional(),
 });
