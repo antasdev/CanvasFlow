@@ -10,6 +10,7 @@ import { socketClientService } from "@/services/socket";
 
 import { NotificationBell } from "@/features/notifications";
 import { SearchButton, useSearchDialog } from "@/features/search";
+import { ExportButton } from "@/features/export";
 
 import BoardSyncStatus from "../components/BoardSyncStatus";
 import CanvasEditor from "../components/CanvasEditor";
@@ -150,8 +151,9 @@ export default function BoardCanvasPage(): React.JSX.Element {
         <CanvasToolbar canEditCanvas={canEditCanvas} />
       </div>
 
-      {/* Top Right: Search, Notifications & Collaborators Presence */}
+      {/* Top Right: Export, Search, Notifications & Collaborators Presence */}
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <ExportButton boardName={board?.name} />
         <SearchButton
           scope="board"
           boardId={boardId}

@@ -2,6 +2,7 @@ import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuthStore } from "@/store";
 import { SearchDialog } from "@/features/search";
+import { ExportDialog } from "@/features/export";
 
 import { ROUTES } from "./route.constants";
 
@@ -23,6 +24,7 @@ export default function ProtectedRoute(): React.JSX.Element {
     <>
       <Outlet />
       <SearchDialog />
+      <ExportDialog />
     </>
   );
 }
