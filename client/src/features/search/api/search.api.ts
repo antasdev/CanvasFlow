@@ -7,7 +7,10 @@ interface SearchApiResponse {
 }
 
 export const searchApi = {
-  async search(params: SearchQueryParams): Promise<SearchResponse> {
+  async search(
+    params: SearchQueryParams,
+    signal?: AbortSignal
+  ): Promise<SearchResponse> {
     const queryParams = new URLSearchParams();
     queryParams.set("q", params.q.trim());
     queryParams.set("scope", params.scope);
@@ -29,7 +32,8 @@ export const searchApi = {
     }
 
     const response = await api.get<SearchApiResponse>(
-      `/search?${queryParams.toString()}`
+      `/search?${queryParams.toString()}`,
+      { signal }
     );
     return response.data.data;
   },

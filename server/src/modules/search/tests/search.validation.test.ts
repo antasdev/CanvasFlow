@@ -197,6 +197,29 @@ async function runSearchValidationTests(): Promise<void> {
   });
   assert(!badCursor.success, "Malformed cursor string must fail validation");
 
+  // Empty string cursor should be accepted as undefined (first page)
+  const emptyStringCursor = searchQuerySchema.safeParse({
+    query: {
+      q: "test",
+      scope: "board",
+      boardId: "507f1f77bcf86cd799439022",
+      cursor: "",
+    },
+  });
+  assert(emptyStringCursor.success, "Empty string cursor should pass validation");
+  assert(emptyStringCursor.data?.query.cursor === undefined, "Empty string cursor must be transformed to undefined");
+
+  const whitespaceCursor = searchQuerySchema.safeParse({
+    query: {
+      q: "test",
+      scope: "board",
+      boardId: "507f1f77bcf86cd799439022",
+      cursor: "   ",
+    },
+  });
+  assert(whitespaceCursor.success, "Whitespace cursor should pass validation");
+  assert(whitespaceCursor.data?.query.cursor === undefined, "Whitespace cursor must be transformed to undefined");
+
   console.log("✓ Hardened validation tests completed successfully.\n");
 }
 
