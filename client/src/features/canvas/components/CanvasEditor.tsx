@@ -53,6 +53,7 @@ import {
 } from "../utils/stroke-simplification";
 import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
 import { calculateCenterPan } from "../utils/viewport.utils";
+import { useRafScheduler } from "../utils/raf.utils";
 import {
     getViewportWorldBounds,
     filterVisibleRootShapes,
@@ -261,6 +262,70 @@ export default function CanvasEditor({
     // Transient anchor snap indicator position
     const [snapIndicator, setSnapIndicator] =
         useState<{ x: number; y: number } | null>(null);
+
+    // High-frequency transient interaction refs and rAF schedulers (Slice 52)
+    const freehandPointsRef = useRef<number[]>([]);
+    const freehandMetaRef = useRef<{ stroke: string; strokeWidth: number } | null>(null);
+    const drawingRef = useRef<DrawingState | null>(null);
+    const vectorDraftRef = useRef<VectorDraftState | null>(null);
+
+    const freehandRaf = useRafScheduler<void>(() => {
+        if (!freehandMetaRef.current || freehandPointsRef.current.length < 2) return;
+        setFreehandDrawing({
+            points: [...freehandPointsRef.current],
+            stroke: freehandMetaRef.current.stroke,
+            strokeWidth: freehandMetaRef.current.strokeWidth,
+        });
+    });
+
+    const drawingRaf = useRafScheduler<{ x: number; y: number }>((point) => {
+        if (!drawingRef.current) return;
+        const next: DrawingState = {
+            ...drawingRef.current,
+            currentX: point.x,
+            currentY: point.y,
+        };
+        drawingRef.current = next;
+        setDrawing(next);
+    });
+
+    const vectorDraftRaf = useRafScheduler<{ x: number; y: number }>((point) => {
+        const curr = vectorDraftRef.current;
+        if (!curr) return;
+        let next: VectorDraftState;
+        if (curr.tool === "connector") {
+            const nearest = findNearestAnchor(point, shapes, 20);
+            if (nearest) {
+                setSnapIndicator(nearest.point);
+                next = {
+                    ...curr,
+                    currentX: nearest.point.x,
+                    currentY: nearest.point.y,
+                    targetAnchor: {
+                        shapeId: nearest.shapeId,
+                        anchor: nearest.anchor,
+                        point: nearest.point,
+                    },
+                };
+            } else {
+                setSnapIndicator(null);
+                next = {
+                    ...curr,
+                    currentX: point.x,
+                    currentY: point.y,
+                    targetAnchor: null,
+                };
+            }
+        } else {
+            next = {
+                ...curr,
+                currentX: point.x,
+                currentY: point.y,
+            };
+        }
+        vectorDraftRef.current = next;
+        setVectorDraft(next);
+    });
 
     const activeDrawingInteractionIdRef =
         useRef<string | null>(null);
@@ -749,6 +814,13 @@ export default function CanvasEditor({
                         interactionController.endInteraction();
                         return;
                     case "cancel_drawing":
+                        drawingRaf.cancel();
+                        vectorDraftRaf.cancel();
+                        freehandRaf.cancel();
+                        drawingRef.current = null;
+                        vectorDraftRef.current = null;
+                        freehandPointsRef.current = [];
+                        freehandMetaRef.current = null;
                         setDrawing(null);
                         setVectorDraft(null);
                         setSnapIndicator(null);
@@ -1189,6 +1261,10 @@ export default function CanvasEditor({
             const worldPoint = screenToWorld(pointer, { pan, zoom });
             const initialPoints = [worldPoint.x, worldPoint.y];
 
+            freehandPointsRef.current = [...initialPoints];
+            freehandMetaRef.current = { stroke: "#1f2937", strokeWidth: 2 };
+            freehandRaf.cancel();
+
             setFreehandDrawing({
                 points: initialPoints,
                 stroke: "#1f2937",
@@ -1229,7 +1305,7 @@ export default function CanvasEditor({
                 const startX = nearest ? nearest.point.x : worldPoint.x;
                 const startY = nearest ? nearest.point.y : worldPoint.y;
 
-                setVectorDraft({
+                const initialDraft: VectorDraftState = {
                     tool: "connector",
                     startX,
                     startY,
@@ -1239,18 +1315,24 @@ export default function CanvasEditor({
                         ? { shapeId: nearest.shapeId, anchor: nearest.anchor, point: nearest.point }
                         : null,
                     targetAnchor: null,
-                });
+                };
+                vectorDraftRef.current = initialDraft;
+                vectorDraftRaf.cancel();
+                setVectorDraft(initialDraft);
                 if (nearest) {
                     setSnapIndicator(nearest.point);
                 }
             } else {
-                setVectorDraft({
+                const initialDraft: VectorDraftState = {
                     tool: activeTool === CANVAS_TOOLS.LINE ? "line" : "arrow",
                     startX: worldPoint.x,
                     startY: worldPoint.y,
                     currentX: worldPoint.x,
                     currentY: worldPoint.y,
-                });
+                };
+                vectorDraftRef.current = initialDraft;
+                vectorDraftRaf.cancel();
+                setVectorDraft(initialDraft);
             }
             return;
         }
@@ -1278,13 +1360,16 @@ export default function CanvasEditor({
             zoom,
         });
 
-        setDrawing({
+        const initialDrawing: DrawingState = {
             tool: activeTool as "rectangle" | "circle" | "ellipse" | "triangle" | "polygon" | "star",
             startX: worldPoint.x,
             startY: worldPoint.y,
             currentX: worldPoint.x,
             currentY: worldPoint.y,
-        });
+        };
+        drawingRef.current = initialDrawing;
+        drawingRaf.cancel();
+        setDrawing(initialDrawing);
     };
 
     /*
@@ -1342,27 +1427,22 @@ export default function CanvasEditor({
             return;
         }
 
-        if (freehandDrawing) {
+        if (freehandDrawing || freehandMetaRef.current) {
             emitActivity("drawing");
-            setFreehandDrawing((current) => {
-                if (!current) return null;
-                const len = current.points.length;
-                const lastX = current.points[len - 2];
-                const lastY = current.points[len - 1];
+            const pts = freehandPointsRef.current;
+            const len = pts.length;
+            if (len >= 2) {
+                const lastX = pts[len - 2];
+                const lastY = pts[len - 1];
                 const dx = worldPoint.x - lastX;
                 const dy = worldPoint.y - lastY;
                 // Only record point if moved at least 1px to reduce memory overhead
-                if (dx * dx + dy * dy < 1.0) {
-                    return current;
+                if (dx * dx + dy * dy >= 1.0) {
+                    pts.push(worldPoint.x, worldPoint.y);
+                    unstreamedPointsRef.current.push(worldPoint.x, worldPoint.y);
+                    freehandRaf.schedule();
                 }
-
-                unstreamedPointsRef.current.push(worldPoint.x, worldPoint.y);
-
-                return {
-                    ...current,
-                    points: [...current.points, worldPoint.x, worldPoint.y],
-                };
-            });
+            }
 
             // Throttle ephemeral interaction:update emissions to ~30 FPS (~33ms)
             const now = Date.now();
@@ -1378,77 +1458,25 @@ export default function CanvasEditor({
 
                 updateInteraction(activeDrawingInteractionIdRef.current, {
                     pointsBatch,
-                    stroke: freehandDrawing.stroke,
-                    strokeWidth: freehandDrawing.strokeWidth,
+                    stroke: freehandMetaRef.current?.stroke ?? "#1f2937",
+                    strokeWidth: freehandMetaRef.current?.strokeWidth ?? 2,
                 }).catch(() => {});
             }
 
             return;
         }
 
-        if (vectorDraft) {
+        if (vectorDraft || vectorDraftRef.current) {
             emitActivity("drawing");
-            if (vectorDraft.tool === "connector") {
-                const nearest = findNearestAnchor(worldPoint, shapes, 20);
-                if (nearest) {
-                    setSnapIndicator(nearest.point);
-                    setVectorDraft((curr) =>
-                        curr
-                            ? {
-                                  ...curr,
-                                  currentX: nearest.point.x,
-                                  currentY: nearest.point.y,
-                                  targetAnchor: {
-                                      shapeId: nearest.shapeId,
-                                      anchor: nearest.anchor,
-                                      point: nearest.point,
-                                  },
-                              }
-                            : null
-                    );
-                } else {
-                    setSnapIndicator(null);
-                    setVectorDraft((curr) =>
-                        curr
-                            ? {
-                                  ...curr,
-                                  currentX: worldPoint.x,
-                                  currentY: worldPoint.y,
-                                  targetAnchor: null,
-                              }
-                            : null
-                    );
-                }
-            } else {
-                setVectorDraft((curr) =>
-                    curr
-                        ? {
-                              ...curr,
-                              currentX: worldPoint.x,
-                              currentY: worldPoint.y,
-                          }
-                        : null
-                );
-            }
+            vectorDraftRaf.schedule({ x: worldPoint.x, y: worldPoint.y });
             return;
         }
 
-        if (!drawing) {
+        if (drawing || drawingRef.current) {
+            emitActivity("moving");
+            drawingRaf.schedule({ x: worldPoint.x, y: worldPoint.y });
             return;
         }
-
-        emitActivity("moving");
-        setDrawing((current) => {
-            if (!current) {
-                return null;
-            }
-
-            return {
-                ...current,
-                currentX: worldPoint.x,
-                currentY: worldPoint.y,
-            };
-        });
     };
 
     /*
@@ -1470,13 +1498,16 @@ export default function CanvasEditor({
             return;
         }
 
-        if (freehandDrawing) {
-            const strokePoints = freehandDrawing.points;
-            const strokeColor = freehandDrawing.stroke;
-            const strokeThickness = freehandDrawing.strokeWidth;
+        if (freehandDrawing || freehandMetaRef.current) {
+            freehandRaf.cancel();
+            const strokePoints = [...freehandPointsRef.current];
+            const strokeColor = freehandMetaRef.current?.stroke ?? "#1f2937";
+            const strokeThickness = freehandMetaRef.current?.strokeWidth ?? 2;
             const interactionId = activeDrawingInteractionIdRef.current;
 
             // Reset transient local state immediately
+            freehandPointsRef.current = [];
+            freehandMetaRef.current = null;
             setFreehandDrawing(null);
             activeDrawingInteractionIdRef.current = null;
             unstreamedPointsRef.current = [];
@@ -1541,11 +1572,14 @@ export default function CanvasEditor({
             return;
         }
 
-        if (vectorDraft) {
-            const draft = vectorDraft;
+        if (vectorDraft || vectorDraftRef.current) {
+            vectorDraftRaf.flush();
+            const draft = vectorDraftRef.current || vectorDraft;
+            vectorDraftRef.current = null;
             setVectorDraft(null);
             setSnapIndicator(null);
             interactionController.endInteraction();
+            if (!draft) return;
 
             const dx = draft.currentX - draft.startX;
             const dy = draft.currentY - draft.startY;
@@ -1689,18 +1723,23 @@ export default function CanvasEditor({
         /*
          * No shape is being drawn.
          */
-        if (!drawing) {
+        if (!drawing && !drawingRef.current) {
             return;
         }
 
+        drawingRaf.flush();
+        const activeDraft = drawingRef.current || drawing;
+        drawingRef.current = null;
+        if (!activeDraft) return;
+
         const bounds = normalizeShapeBounds(
-            drawing.startX,
-            drawing.startY,
-            drawing.currentX,
-            drawing.currentY
+            activeDraft.startX,
+            activeDraft.startY,
+            activeDraft.currentX,
+            activeDraft.currentY
         );
 
-        const currentTool = drawing.tool;
+        const currentTool = activeDraft.tool;
         setDrawing(null);
         interactionController.endInteraction();
 

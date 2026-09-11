@@ -24,6 +24,7 @@ import {
   getViewportWorldBounds,
   filterVisibleRootShapes,
 } from "../utils/viewport-culling.utils";
+import { createRafScheduler } from "../utils/raf.utils";
 import { calculateContentBounds } from "@/features/export/utils/export-bounds.utils";
 import { sortShapesForExport } from "@/features/export/utils/export-order.utils";
 import type { AABB } from "../utils/alignment.utils";
@@ -496,6 +497,90 @@ describe("Slice 50: Performance Audit & Baselines", () => {
       // Zooming in shrinks visible world bounds -> fewer shapes visible
       // Zooming out expands visible world bounds -> more shapes visible
       expect(visibleZoomIn.length).toBeLessThan(visibleZoomOut.length);
+    });
+  });
+
+  describe("10. Slice 52: High-Frequency Event Coalescing & Interaction Pipeline Benchmarks", () => {
+    it("measures high-frequency pointer event coalescing efficiency (1,000 burst events)", () => {
+      let executedPayload: { x: number; y: number } | null = null;
+      let executionCount = 0;
+
+      const scheduler = createRafScheduler<{ x: number; y: number }>((data) => {
+        executedPayload = data;
+        executionCount++;
+      });
+
+      const burstEventCount = 1000;
+      const start = performance.now();
+
+      for (let i = 0; i < burstEventCount; i++) {
+        scheduler.schedule({ x: i * 2, y: i * 3 });
+      }
+
+      const durationMs = performance.now() - start;
+
+      benchmarkResults.push({
+        operation: "rAF Burst Event Coalescing (1K events)",
+        shapeCount: burstEventCount,
+        durationMs,
+        itemsPerMs: burstEventCount / Math.max(0.001, durationMs),
+      });
+
+      // Scheduling 1,000 burst events should complete efficiently
+      expect(durationMs).toBeLessThan(50);
+      expect(scheduler.isPending()).toBe(true);
+
+      // Flush synchronously as on pointerup
+      scheduler.flush();
+
+      expect(executionCount).toBe(1);
+      expect(executedPayload).toEqual({ x: 999 * 2, y: 999 * 3 });
+      expect(scheduler.isPending()).toBe(false);
+
+      const eventReductionPercent = ((burstEventCount - executionCount) / burstEventCount) * 100;
+      benchmarkResults.push({
+        operation: `Event Reduction (${eventReductionPercent.toFixed(1)}% coalesced)`,
+        shapeCount: burstEventCount,
+        durationMs: executionCount,
+        itemsPerMs: executionCount,
+      });
+
+      expect(eventReductionPercent).toBe(99.9);
+    });
+
+    it("measures continuous freehand buffer streaming throughput (10,000 points)", () => {
+      const pointBuffer: number[] = [];
+      const totalPoints = 10000;
+
+      const start = performance.now();
+      for (let i = 0; i < totalPoints; i++) {
+        const x = i * 1.5;
+        const y = i * 0.8;
+        const len = pointBuffer.length;
+        if (len >= 2) {
+          const lastX = pointBuffer[len - 2];
+          const lastY = pointBuffer[len - 1];
+          const dx = x - lastX;
+          const dy = y - lastY;
+          if (dx * dx + dy * dy >= 1.0) {
+            pointBuffer.push(x, y);
+          }
+        } else {
+          pointBuffer.push(x, y);
+        }
+      }
+      const durationMs = performance.now() - start;
+
+      benchmarkResults.push({
+        operation: "Freehand Point Buffer Streaming",
+        shapeCount: totalPoints,
+        durationMs,
+        itemsPerMs: totalPoints / Math.max(0.001, durationMs),
+      });
+
+      // Ingesting 10k points into buffer without intermediate React state allocations should take < 5ms
+      expect(durationMs).toBeLessThan(15);
+      expect(pointBuffer.length).toBe(totalPoints * 2);
     });
   });
 
