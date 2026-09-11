@@ -1,7 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { useSearchDialogStore } from "../store/search-dialog.store";
 import { INFINITE_SEARCH_QUERY_KEYS } from "../hooks/useInfiniteSearch";
-import type { SearchResultItem } from "../types/search.types";
 
 describe("SearchDialog Keyboard Arbitration, Conflicts & Navigation", () => {
   beforeEach(() => {
@@ -49,7 +48,7 @@ describe("SearchDialog Keyboard Arbitration, Conflicts & Navigation", () => {
   it("suppresses canvas keyboard shortcuts when search dialog is open", () => {
     useSearchDialogStore.setState({ isOpen: true });
 
-    const handleCanvasKeyDown = vi.fn((e: { key: string }) => {
+    const handleCanvasKeyDown = vi.fn((_e: { key: string }) => {
       if (useSearchDialogStore.getState().isOpen) {
         return; // Suppressed!
       }
