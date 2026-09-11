@@ -41,11 +41,14 @@ export function useInfiniteSearch(
 
   return useInfiniteQuery({
     queryKey: INFINITE_SEARCH_QUERY_KEYS.search(params),
-    queryFn: async ({ pageParam }): Promise<SearchResponse> => {
-      return searchApi.search({
-        ...params,
-        cursor: pageParam ?? undefined,
-      });
+    queryFn: async ({ pageParam, signal }): Promise<SearchResponse> => {
+      return searchApi.search(
+        {
+          ...params,
+          cursor: pageParam ?? undefined,
+        },
+        signal
+      );
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage): string | undefined => {

@@ -5,17 +5,24 @@
 export function sanitizeFilename(input: string, extension: string): string {
   const cleanExt = extension.replace(/^\.+/, "").toLowerCase();
 
-  // Strip path traversal and invalid filename characters across OS platforms: / \ : * ? " < > |
+  // Strip control chars (0x00-0x1F, 0x7F), path traversal, and invalid filename characters: / \ : * ? " < > |
   let sanitized = input
+    .replace(/[\x00-\x1f\x7f]/g, "")
     .replace(/\.\.+[/\\]/g, "")
     .replace(/[/\\]/g, "")
     .replace(/[:*?"<>|]/g, "")
     .replace(/^\.+/, "")
+    .replace(/\.+$/, "")
     .trim();
 
   // Strip duplicate extension if user typed it (e.g. "my-drawing.png" when exporting as png)
   const extRegex = new RegExp(`\\.${cleanExt}$`, "i");
-  sanitized = sanitized.replace(extRegex, "").trim();
+  sanitized = sanitized.replace(extRegex, "").trim().replace(/\.+$/, "");
+
+  // Enforce safe basename limit (max 128 chars to stay well under filesystem MAX_PATH limits)
+  if (sanitized.length > 128) {
+    sanitized = sanitized.slice(0, 128).trim().replace(/\.+$/, "");
+  }
 
   // Fallback if sanitized string became empty
   if (!sanitized) {

@@ -221,11 +221,12 @@ export const searchQuerySchema = z.object({
       cursor: z
         .string()
         .trim()
+        .optional()
+        .transform((val) => (val && val.length > 0 ? val : undefined))
         .refine(
-          (val) => decodeCursor(val) !== null,
+          (val) => val === undefined || decodeCursor(val) !== null,
           "Cursor format is invalid."
-        )
-        .optional(),
+        ),
     })
     .refine(
       (data) => {

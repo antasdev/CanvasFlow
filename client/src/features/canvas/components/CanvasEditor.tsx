@@ -16,6 +16,7 @@ import { VersionHistoryPanel } from "@/features/history";
 import { socketClientService } from "@/services/socket";
 
 import { useSearchDialogStore } from "@/features/search";
+import { useExportDialogStore } from "@/features/export";
 
 import { mapShapeResponseToShape, shapeApi, type CreateShapeRequest } from "../api";
 import { CANVAS_TOOLS, type CanvasTool } from "../constants";
@@ -388,7 +389,10 @@ export default function CanvasEditor({
     const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
     useEffect(() => {
         const handleSpaceDown = (e: KeyboardEvent) => {
-            if (useSearchDialogStore.getState().isOpen) return;
+            if (
+                useSearchDialogStore.getState().isOpen ||
+                useExportDialogStore.getState().isOpen
+            ) return;
 
             const target = e.target as HTMLElement;
             const isTyping =
@@ -643,7 +647,10 @@ export default function CanvasEditor({
         const handleKeyDown = (
             event: KeyboardEvent,
         ): void => {
-            if (useSearchDialogStore.getState().isOpen) {
+            if (
+                useSearchDialogStore.getState().isOpen ||
+                useExportDialogStore.getState().isOpen
+            ) {
                 return;
             }
 

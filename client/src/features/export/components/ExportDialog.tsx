@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 
 import { useCanvasStore } from "@/features/canvas/store";
+import { useSearchDialogStore } from "@/features/search/store/search-dialog.store";
 import type {
   ExportFormat,
   ExportScope,
@@ -47,6 +48,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (target.isContentEditable || target.closest("[contenteditable='true']")) {
     return true;
   }
+  if (typeof target.closest === "function" && target.closest('[role="dialog"]') !== null) {
+    return true;
+  }
   return false;
 }
 
@@ -72,6 +76,8 @@ export function ExportDialog(): React.JSX.Element | null {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isExportingRef = useRef<boolean>(false);
+  const prevIsOpenRef = useRef<boolean>(false);
   const triggerRef = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const filenameInputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +93,7 @@ export function ExportDialog(): React.JSX.Element | null {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "e") {
-        if (isEditableTarget(e.target)) {
+        if (isEditableTarget(e.target) || useSearchDialogStore.getState().isOpen) {
           return;
         }
         e.preventDefault();
@@ -104,38 +110,44 @@ export function ExportDialog(): React.JSX.Element | null {
     };
   }, [isOpen, toggleExport]);
 
-  // Reset form defaults whenever dialog opens
+  // Reset form defaults only on transition from closed to open
   useEffect(() => {
     if (isOpen) {
-      setFormat("png");
-      setScope(hasSelection ? "selection" : "canvas");
-      setBackground("canvas");
-      setCustomBgColor(DEFAULT_CANVAS_BACKGROUND_COLOR);
-      setScale(DEFAULT_EXPORT_SCALE);
-      setQuality(DEFAULT_EXPORT_QUALITY);
-      setErrorMessage(null);
-      setIsExporting(false);
+      if (!prevIsOpenRef.current) {
+        setFormat("png");
+        setScope(hasSelection ? "selection" : "canvas");
+        setBackground("canvas");
+        setCustomBgColor(DEFAULT_CANVAS_BACKGROUND_COLOR);
+        setScale(DEFAULT_EXPORT_SCALE);
+        setQuality(DEFAULT_EXPORT_QUALITY);
+        setErrorMessage(null);
+        setIsExporting(false);
+        isExportingRef.current = false;
 
-      const baseName = boardName?.trim() || "canvasflow-export";
-      setFilenameInput(baseName);
+        const baseName = boardName?.trim() || "canvasflow-export";
+        setFilenameInput(baseName);
 
-      // Focus filename input on open
-      setTimeout(() => {
-        filenameInputRef.current?.focus();
-        filenameInputRef.current?.select();
-      }, 50);
+        // Focus filename input on open
+        setTimeout(() => {
+          filenameInputRef.current?.focus();
+          filenameInputRef.current?.select();
+        }, 50);
+      }
     } else {
       // Abort any ongoing export if dialog closes
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      isExportingRef.current = false;
+      setIsExporting(false);
       // Restore focus to trigger element
       if (triggerRef.current) {
         triggerRef.current.focus();
         triggerRef.current = null;
       }
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, boardName, hasSelection]);
 
   // If format changes to JPEG and background was transparent, adapt to canvas default
@@ -152,40 +164,48 @@ export function ExportDialog(): React.JSX.Element | null {
     }
   }, [scope, hasSelection]);
 
+  // Cancel in-flight export or close dialog
+  const handleCancel = useCallback((): void => {
+    if (isExporting) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    } else {
+      closeExport();
+    }
+  }, [isExporting, closeExport]);
+
   // Handle Escape key inside dialog
   const handleDialogKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>): void => {
       if (e.key === "Escape") {
         e.stopPropagation();
-        if (isExporting && abortControllerRef.current) {
-          abortControllerRef.current.abort();
-          abortControllerRef.current = null;
-          setIsExporting(false);
-          toast.info("Export cancelled");
-        } else {
-          closeExport();
-        }
+        handleCancel();
       }
     },
-    [isExporting, closeExport]
+    [handleCancel]
   );
 
   // Execute export and trigger browser download
   const handleExport = async (): Promise<void> => {
-    if (isExporting) return;
+    if (isExportingRef.current || isExporting) return;
+    isExportingRef.current = true;
+    setIsExporting(true);
+    setErrorMessage(null);
 
     if (!shapes || shapes.length === 0) {
       setErrorMessage("Cannot export an empty canvas. Add shapes before exporting.");
+      isExportingRef.current = false;
+      setIsExporting(false);
       return;
     }
 
     if (scope === "selection" && !hasSelection) {
       setErrorMessage("No shapes selected. Select shapes or switch to Full Canvas scope.");
+      isExportingRef.current = false;
+      setIsExporting(false);
       return;
     }
-
-    setIsExporting(true);
-    setErrorMessage(null);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -242,6 +262,7 @@ export function ExportDialog(): React.JSX.Element | null {
         toast.error("Export failed. Please try a smaller scale or different format.");
       }
     } finally {
+      isExportingRef.current = false;
       setIsExporting(false);
       abortControllerRef.current = null;
     }
@@ -285,10 +306,9 @@ export function ExportDialog(): React.JSX.Element | null {
           </div>
           <button
             type="button"
-            onClick={closeExport}
-            disabled={isExporting}
+            onClick={handleCancel}
             aria-label="Close export dialog"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors disabled:opacity-50"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
           >
             <X className="h-4 w-4" />
           </button>
@@ -593,6 +613,12 @@ export function ExportDialog(): React.JSX.Element | null {
                 type="text"
                 value={filenameInput}
                 onChange={(e) => setFilenameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleExport();
+                  }
+                }}
                 disabled={isExporting}
                 placeholder="canvasflow-export"
                 className="w-full text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
@@ -608,9 +634,8 @@ export function ExportDialog(): React.JSX.Element | null {
         <div className="flex items-center justify-end gap-2.5 border-t border-slate-100 pt-4">
           <button
             type="button"
-            onClick={closeExport}
-            disabled={isExporting}
-            className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors disabled:opacity-50"
+            onClick={handleCancel}
+            className="rounded-lg border border-slate-200 px-4 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
           >
             Cancel
           </button>

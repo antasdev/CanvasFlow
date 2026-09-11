@@ -16,6 +16,7 @@ import {
 import { useSearchDialog } from "../hooks/useSearchDialog";
 import { useInfiniteSearch } from "../hooks/useInfiniteSearch";
 import { SearchResultItem } from "./SearchResultItem";
+import { useExportDialogStore } from "@/features/export/store/export-dialog.store";
 import type {
   SearchResultItem as SearchResultItemType,
   SearchEntityType,
@@ -35,6 +36,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
     return true;
   }
   if (target.closest("[contenteditable='true']")) {
+    return true;
+  }
+  if (typeof target.closest === "function" && target.closest('[role="dialog"]') !== null) {
     return true;
   }
   return false;
@@ -67,7 +71,7 @@ export function SearchDialog(): React.JSX.Element | null {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        if (isEditableTarget(e.target)) {
+        if (isEditableTarget(e.target) || useExportDialogStore.getState().isOpen) {
           return;
         }
         e.preventDefault();

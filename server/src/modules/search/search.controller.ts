@@ -19,9 +19,14 @@ export class SearchController {
       boardId: req.query.boardId ? String(req.query.boardId) : undefined,
       types: Array.isArray(req.query.types)
         ? (req.query.types as SearchEntityType[])
+        : typeof req.query.types === "string"
+        ? (req.query.types.split(",").map((s) => s.trim()) as SearchEntityType[])
         : undefined,
       limit: req.query.limit ? Number(req.query.limit) : undefined,
-      cursor: req.query.cursor ? String(req.query.cursor) : undefined,
+      cursor:
+        req.query.cursor && String(req.query.cursor).trim().length > 0
+          ? String(req.query.cursor).trim()
+          : undefined,
     };
 
     const result = await searchService.search(userId, input);

@@ -25,6 +25,19 @@ describe("download.utils (Slice 48)", () => {
       expect(sanitizeFilename("", "png")).toBe("canvasflow-export.png");
       expect(sanitizeFilename("   ", "jpeg")).toBe("canvasflow-export.jpeg");
       expect(sanitizeFilename("///", "svg")).toBe("canvasflow-export.svg");
+      expect(sanitizeFilename(".....", "png")).toBe("canvasflow-export.png");
+    });
+
+    it("should strip trailing dots and unprintable control characters", () => {
+      expect(sanitizeFilename("my-diagram.", "png")).toBe("my-diagram.png");
+      expect(sanitizeFilename("my-board...", "jpeg")).toBe("my-board.jpeg");
+      expect(sanitizeFilename("hello\x00\x1f\x7fworld", "svg")).toBe("helloworld.svg");
+    });
+
+    it("should bound excessive filename lengths to prevent OS filesystem errors", () => {
+      const longName = "a".repeat(200);
+      const result = sanitizeFilename(longName, "png");
+      expect(result).toBe(`${"a".repeat(128)}.png`);
     });
   });
 

@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { socketClientService } from "@/services/socket";
 import type { PasteShapeItemPayload } from "@/services/socket";
 import { useSearchDialogStore } from "@/features/search";
+import { useExportDialogStore } from "@/features/export";
 
 import { mapShapeResponseToShape } from "../api";
 import { clipboardService } from "../services/clipboard.service";
@@ -281,8 +282,13 @@ export function useCanvasClipboard({
   // Global keyboard shortcuts listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
-      // Protect active native text editing context or open search dialog
-      if (useSearchDialogStore.getState().isOpen || isEditingText || isTextInputContext(e.target)) {
+      // Protect active native text editing context, open search dialog, or open export dialog
+      if (
+        useSearchDialogStore.getState().isOpen ||
+        useExportDialogStore.getState().isOpen ||
+        isEditingText ||
+        isTextInputContext(e.target)
+      ) {
         return;
       }
 
