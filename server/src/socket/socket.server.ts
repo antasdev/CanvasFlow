@@ -17,6 +17,7 @@ import { registerInteractionHandlers } from "./handlers/interaction.handler";
 import { presenceManager } from "./presence/presence.manager";
 import { interactionManager } from "./presence/interaction.manager";
 import { shapeLockManager } from "./locks/shape-lock.manager";
+import { socketRateLimiter } from "./services/socket-rate-limiter.service";
 import { getBoardRoom, getUserRoom } from "./socket.rooms";
 import {
   AuthSocket,
@@ -182,6 +183,9 @@ export class SocketServer {
             remainingSessions: 0,
           });
         }
+
+        // 4. Clean up per-socket rate limiter state
+        socketRateLimiter.cleanup(socket.id);
 
         console.log(
           `[Socket] Connection disconnected: ${socket.id} (Reason: ${reason})`

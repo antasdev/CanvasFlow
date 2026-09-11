@@ -1,7 +1,7 @@
 import React, { memo } from "react";
 import { Layer } from "react-konva";
 
-import { useCanvasStore } from "../store";
+import { useCanvasStore, usePresenceStore } from "../store";
 import type { Shape } from "../types";
 
 import CollaboratorCursor from "./CollaboratorCursor";
@@ -27,6 +27,7 @@ export const CollaboratorLayer = memo(function CollaboratorLayer({
   const remoteCursors = useCanvasStore((state) => state.remoteCursors);
   const remoteSelections = useCanvasStore((state) => state.remoteSelections);
   const remoteShapeLocks = useCanvasStore((state) => state.remoteShapeLocks);
+  const presenceCursors = usePresenceStore((state) => state.cursors);
 
   return (
     <Layer listening={false}>
@@ -46,12 +47,14 @@ export const CollaboratorLayer = memo(function CollaboratorLayer({
         />
       ))}
 
-      {Object.values(remoteCursors).map((cursor) => (
-        <CollaboratorCursor
-          key={cursor.userId}
-          cursor={cursor}
-        />
-      ))}
+      {Object.values(remoteCursors)
+        .filter((cursor) => !presenceCursors[cursor.userId])
+        .map((cursor) => (
+          <CollaboratorCursor
+            key={cursor.userId}
+            cursor={cursor}
+          />
+        ))}
 
       <RemoteCursorLayer />
     </Layer>

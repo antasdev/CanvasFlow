@@ -54,6 +54,7 @@ import {
 import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
 import { calculateCenterPan } from "../utils/viewport.utils";
 import { useRafScheduler } from "../utils/raf.utils";
+import { ScheduledChannel } from "../utils/collaboration-scheduler";
 import {
     getViewportWorldBounds,
     filterVisibleRootShapes,
@@ -120,9 +121,6 @@ export default function CanvasEditor({
 
     const hydratedCanvasIdRef =
         useRef<string | null>(null);
-
-    const lastCursorEmitTimeRef =
-        useRef<number>(0);
 
     const lastBroadcastSelectionRef =
         useRef<string>("");
@@ -214,19 +212,6 @@ export default function CanvasEditor({
     const updateShapeFormatting = useCanvasStore(
         (state) => state.updateShapeFormatting,
     );
-
-    // Broadcast selection changes to other collaborators over Socket.IO
-    useEffect(() => {
-        if (!boardId) {
-            return;
-        }
-
-        const currentKey = selectedShapeIds.slice().sort().join(",");
-        if (currentKey !== lastBroadcastSelectionRef.current) {
-            lastBroadcastSelectionRef.current = currentKey;
-            socketClientService.changeSelection(boardId, selectedShapeIds);
-        }
-    }, [boardId, selectedShapeIds]);
 
     const [size, setSize] = useState<CanvasSize>({
         width: 0,
@@ -452,6 +437,59 @@ export default function CanvasEditor({
         canEditCanvas,
         emitActivity,
     });
+
+    const selectionChannelRef = useRef<ScheduledChannel<string[]> | null>(null);
+
+    useEffect(() => {
+        if (!boardId) {
+            selectionChannelRef.current = null;
+            return;
+        }
+
+        const channel = new ScheduledChannel<string[]>({
+            intervalMs: 50, // 20 FPS coalescing for continuous marquee/lasso dragging
+            leading: false,
+            onEmit: (shapeIds) => {
+                socketClientService.changeSelection(boardId, shapeIds);
+            },
+        });
+        selectionChannelRef.current = channel;
+
+        return () => {
+            channel.cancel();
+            selectionChannelRef.current = null;
+        };
+    }, [boardId]);
+
+    // Broadcast selection changes to other collaborators over Socket.IO
+    // Discrete selection changes (clicks) emit immediately; continuous marquee/lasso coalesce at ~20 FPS
+    useEffect(() => {
+        if (!boardId) {
+            return;
+        }
+
+        const currentKey = selectedShapeIds.slice().sort().join(",");
+        if (currentKey === lastBroadcastSelectionRef.current) {
+            return;
+        }
+        lastBroadcastSelectionRef.current = currentKey;
+
+        if (isSelecting) {
+            selectionChannelRef.current?.schedule(selectedShapeIds);
+        } else {
+            selectionChannelRef.current?.cancel();
+            socketClientService.changeSelection(boardId, selectedShapeIds);
+        }
+    }, [boardId, selectedShapeIds, isSelecting]);
+
+    // Flush any pending coalesced selection immediately when continuous selection completes
+    const prevIsSelectingRef = useRef<boolean>(false);
+    useEffect(() => {
+        if (prevIsSelectingRef.current && !isSelecting) {
+            selectionChannelRef.current?.flush();
+        }
+        prevIsSelectingRef.current = isSelecting;
+    }, [isSelecting]);
 
     const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
     useEffect(() => {
@@ -1393,14 +1431,8 @@ export default function CanvasEditor({
             zoom,
         });
 
-        // Throttle cursor:move emissions to ~30 fps (~33ms)
-        const now = Date.now();
-        if (boardId && now - lastCursorEmitTimeRef.current >= 33) {
-            lastCursorEmitTimeRef.current = now;
-            socketClientService.moveCursor(boardId, {
-                x: worldPoint.x,
-                y: worldPoint.y,
-            });
+        // Emit scheduled presence cursor (consolidated pipeline with latest-value coalescing)
+        if (boardId) {
             emitCursor({
                 x: worldPoint.x,
                 y: worldPoint.y,
@@ -1479,6 +1511,7 @@ export default function CanvasEditor({
          */
         if (isSelecting) {
             endSelection();
+            selectionChannelRef.current?.flush();
             interactionController.endInteraction();
             return;
         }

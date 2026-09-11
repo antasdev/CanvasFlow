@@ -4,6 +4,7 @@ import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
 import { AuthSocket, SelectionChangePayload } from "../socket.types";
 import { selectionChangeSchema } from "../validation/selection.validation";
+import { socketRateLimiter } from "../services/socket-rate-limiter.service";
 
 /**
  * Registers real-time collaborator selection event handlers on an authenticated socket.
@@ -17,6 +18,10 @@ export const registerSelectionHandlers = (socket: AuthSocket): void => {
     SocketEvents.SELECTION_CHANGE,
     async (payload: SelectionChangePayload): Promise<void> => {
       try {
+        if (!socketRateLimiter.check(socket.id, "selection")) {
+          return;
+        }
+
         const parsed = selectionChangeSchema.safeParse(payload);
 
         if (!parsed.success) {
@@ -43,7 +48,6 @@ export const registerSelectionHandlers = (socket: AuthSocket): void => {
           );
 
           if (!isValid) {
-            // Reject selection change containing foreign or non-existent shape IDs
             return;
           }
         }
@@ -56,8 +60,8 @@ export const registerSelectionHandlers = (socket: AuthSocket): void => {
           boardId,
           shapeIds,
         });
-      } catch {
-        // Ephemeral error safety guarantee: never crash the socket server
+      } catch (err) {
+        console.error("[SelectionHandler] Error:", err);
       }
     }
   );

@@ -3,6 +3,7 @@ import { getBoardRoom } from "../socket.rooms";
 import { AuthSocket, CursorMovePayload } from "../socket.types";
 import { cursorMoveSchema } from "../validation/cursor.validation";
 import { presenceManager } from "../presence/presence.manager";
+import { socketRateLimiter } from "../services/socket-rate-limiter.service";
 
 /**
  * Registers real-time collaborator cursor event handlers on an authenticated socket.
@@ -14,6 +15,10 @@ export const registerCursorHandlers = (socket: AuthSocket): void => {
    */
   socket.on(SocketEvents.CURSOR_MOVE, (payload: CursorMovePayload): void => {
     try {
+      if (!socketRateLimiter.check(socket.id, "cursor")) {
+        return;
+      }
+
       const parsed = cursorMoveSchema.safeParse(payload);
 
       if (!parsed.success) {

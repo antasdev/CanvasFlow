@@ -4,6 +4,7 @@ import { boardService } from "@/modules/board";
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
 import { interactionManager } from "../presence/interaction.manager";
+import { socketRateLimiter } from "../services/socket-rate-limiter.service";
 import {
   AuthSocket,
   ClientToServerEvents,
@@ -133,6 +134,11 @@ export function registerInteractionHandlers(
   // -------------------------------------------------------------
   socket.on("interaction:update", (payload: InteractionUpdatePayload, callback) => {
     try {
+      if (!socketRateLimiter.check(socket.id, "interaction")) {
+        // Drop high-frequency ephemeral interaction update if burst exceeded
+        return;
+      }
+
       const parsed = interactionUpdateSchema.safeParse(payload);
       if (!parsed.success) {
         callback?.({

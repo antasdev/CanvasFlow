@@ -13,6 +13,7 @@ import {
 } from "../store";
 import type { Shape, SelectionMode } from "../types";
 import { getShapeWorldAABB } from "../utils/alignment.utils";
+import { ScheduledChannel } from "../utils/collaboration-scheduler";
 import { resolveSelectionWithModifiers } from "../utils/selection-policy.utils";
 import {
   findSmartGuideCandidates,
@@ -74,8 +75,7 @@ export const useShapeTransform = ({
 
   const isLockedByOther = Boolean(remoteLock);
 
-  const pendingFrameRef = useRef<TransformValues | null>(null);
-  const rafIdRef = useRef<number | null>(null);
+  const transformChannelRef = useRef<ScheduledChannel<TransformValues> | null>(null);
   const isLockedBySelfRef = useRef<boolean>(false);
 
   // Smart guide candidate and snap retention caches
@@ -152,15 +152,31 @@ export const useShapeTransform = ({
         rotation: shape.rotation,
       };
 
-  // Cleanup pending RAF on unmount
+  // Scheduled transformation preview channel (bounds network emission to ~30 FPS independently of display refresh rate)
   useEffect(() => {
+    if (!boardId) {
+      transformChannelRef.current = null;
+      return;
+    }
+
+    const channel = new ScheduledChannel<TransformValues>({
+      intervalMs: 33, // ~30 FPS
+      leading: true,
+      onEmit: (values) => {
+        socketClientService.transformShape({
+          boardId,
+          shapeId: shape.id,
+          ...values,
+        });
+      },
+    });
+    transformChannelRef.current = channel;
+
     return () => {
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
+      channel.cancel();
+      transformChannelRef.current = null;
     };
-  }, []);
+  }, [boardId, shape.id]);
 
   /**
    * Acquire soft-lock before beginning transformation.
@@ -187,35 +203,20 @@ export const useShapeTransform = ({
   }, [boardId, shape.id]);
 
   /**
-   * Emit high-frequency transformation frame scheduled via requestAnimationFrame.
+   * Emit high-frequency transformation frame scheduled via collaboration scheduler (~30 FPS).
    */
   const emitTransformFrame = useCallback(
     (transform: TransformValues): void => {
       if (!boardId || !isLockedBySelfRef.current) {
         return;
       }
-
-      pendingFrameRef.current = transform;
-
-      if (rafIdRef.current === null) {
-        rafIdRef.current = requestAnimationFrame(() => {
-          rafIdRef.current = null;
-          if (pendingFrameRef.current) {
-            socketClientService.transformShape({
-              boardId,
-              shapeId: shape.id,
-              ...pendingFrameRef.current,
-            });
-            pendingFrameRef.current = null;
-          }
-        });
-      }
+      transformChannelRef.current?.schedule(transform);
     },
-    [boardId, shape.id]
+    [boardId]
   );
 
   /**
-   * Conclude transformation: cancels pending RAF, commits final state locally,
+   * Conclude transformation: cancels pending preview frames, commits final state locally,
    * persists to MongoDB, emits shape:transform-end, and releases soft-lock.
    */
   const endTransform = useCallback(
@@ -223,12 +224,8 @@ export const useShapeTransform = ({
       finalTransform: TransformValues,
       delta?: { x: number; y: number }
     ): Promise<void> => {
-      // 1. Cancel pending RAF frame
-      if (rafIdRef.current !== null) {
-        cancelAnimationFrame(rafIdRef.current);
-        rafIdRef.current = null;
-      }
-      pendingFrameRef.current = null;
+      // 1. Cancel pending network preview frames
+      transformChannelRef.current?.cancel();
 
       // 2. Clear smart guides
       endDragGuides();
