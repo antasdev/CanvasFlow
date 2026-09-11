@@ -64,6 +64,7 @@ const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { keys: ["Ctrl", "G"], description: "Group shapes" },
       { keys: ["Ctrl", "Shift", "G"], description: "Ungroup shapes" },
       { keys: ["Enter"], description: "Enter group edit mode" },
+      { keys: ["Ctrl", "Shift", "E"], description: "Export canvas" },
     ],
   },
   {
