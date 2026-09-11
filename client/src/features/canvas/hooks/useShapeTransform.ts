@@ -4,7 +4,13 @@ import { toast } from "sonner";
 
 import { socketClientService } from "@/services/socket";
 
-import { useCanvasStore } from "../store";
+import {
+  useCanvasStore,
+  selectActiveTool,
+  selectIsShapeSelected,
+  selectRemoteShapeLock,
+  selectRemoteShapeTransform,
+} from "../store";
 import type { Shape, SelectionMode } from "../types";
 import { getShapeWorldAABB } from "../utils/alignment.utils";
 import { resolveSelectionWithModifiers } from "../utils/selection-policy.utils";
@@ -47,16 +53,11 @@ export const useShapeTransform = ({
   shape,
   boardId,
 }: UseShapeTransformOptions) => {
-  const activeTool = useCanvasStore((state) => state.activeTool);
-  const shapes = useCanvasStore((state) => state.shapes);
-  const zoom = useCanvasStore((state) => state.zoom);
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
-  const remoteShapeLocks = useCanvasStore((state) => state.remoteShapeLocks);
-  const remoteShapeTransforms = useCanvasStore(
-    (state) => state.remoteShapeTransforms
-  );
+  const activeTool = useCanvasStore(selectActiveTool);
+  const isSelected = useCanvasStore(selectIsShapeSelected(shape.id));
+  const remoteLock = useCanvasStore(selectRemoteShapeLock(shape.id));
+  const remoteTransform = useCanvasStore(selectRemoteShapeTransform(shape.id));
 
-  const editingGroupId = useCanvasStore((state) => state.editingGroupId);
   const setSelectedShapeIds = useCanvasStore((state) => state.setSelectedShapeIds);
   const selectShape = useCanvasStore((state) => state.selectShape);
   const toggleShapeSelection = useCanvasStore(
@@ -71,10 +72,7 @@ export const useShapeTransform = ({
   const setSmartGuides = useCanvasStore((state) => state.setSmartGuides);
   const clearSmartGuides = useCanvasStore((state) => state.clearSmartGuides);
 
-  const isSelected = selectedShapeIds.includes(shape.id);
-  const remoteLock = remoteShapeLocks[shape.id];
   const isLockedByOther = Boolean(remoteLock);
-  const remoteTransform = remoteShapeTransforms[shape.id];
 
   const pendingFrameRef = useRef<TransformValues | null>(null);
   const rafIdRef = useRef<number | null>(null);
@@ -85,10 +83,11 @@ export const useShapeTransform = ({
   const activeSnapRef = useRef<{ activeGuideX?: string; activeGuideY?: string }>({});
 
   const startDragGuides = useCallback((): void => {
+    const { shapes } = useCanvasStore.getState();
     const descendants = getAllDescendantIds(shape.id, shapes);
     candidatesRef.current = findSmartGuideCandidates(shape.id, shapes, descendants);
     activeSnapRef.current = {};
-  }, [shape.id, shapes]);
+  }, [shape.id]);
 
   const updateDragGuides = useCallback(
     (tentativeLocalX: number, tentativeLocalY: number): { snappedX: number; snappedY: number } => {
@@ -96,6 +95,8 @@ export const useShapeTransform = ({
         setSmartGuides([]);
         return { snappedX: tentativeLocalX, snappedY: tentativeLocalY };
       }
+
+      const { shapes, zoom } = useCanvasStore.getState();
 
       const tentativeShape: Shape = {
         ...shape,
@@ -123,7 +124,7 @@ export const useShapeTransform = ({
         snappedY: tentativeLocalY + snapDeltaY,
       };
     },
-    [shape, shapes, zoom, setSmartGuides]
+    [shape, setSmartGuides]
   );
 
   const endDragGuides = useCallback((): void => {
@@ -233,6 +234,7 @@ export const useShapeTransform = ({
       endDragGuides();
 
       // 3. Commit local state (records exactly ONE undo snapshot)
+      const { selectedShapeIds } = useCanvasStore.getState();
       if (delta && selectedShapeIds.length > 1) {
         moveSelectedShapes(delta.x, delta.y);
       } else {
@@ -263,7 +265,7 @@ export const useShapeTransform = ({
         }
       }
     },
-    [boardId, shape.id, selectedShapeIds.length, moveSelectedShapes, updateShapeTransform, endDragGuides]
+    [boardId, shape.id, moveSelectedShapes, updateShapeTransform, endDragGuides]
   );
 
   /**
@@ -277,8 +279,14 @@ export const useShapeTransform = ({
       const isShift = "shiftKey" in evt && evt.shiftKey;
       const mode: SelectionMode = isCtrlOrMeta ? "toggle" : isShift ? "add" : "replace";
 
+      const { currentSelectedIds, shapes, editingGroupId } = {
+        currentSelectedIds: useCanvasStore.getState().selectedShapeIds,
+        shapes: useCanvasStore.getState().shapes,
+        editingGroupId: useCanvasStore.getState().editingGroupId,
+      };
+
       const resolved = resolveSelectionWithModifiers({
-        currentSelectedIds: selectedShapeIds,
+        currentSelectedIds,
         hitIds: [shape.id],
         mode,
         shapes,
@@ -287,7 +295,7 @@ export const useShapeTransform = ({
 
       setSelectedShapeIds(resolved);
     },
-    [shape.id, shapes, selectedShapeIds, editingGroupId, setSelectedShapeIds]
+    [shape.id, setSelectedShapeIds]
   );
 
   return {

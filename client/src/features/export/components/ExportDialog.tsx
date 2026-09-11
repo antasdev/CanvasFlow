@@ -2,7 +2,6 @@ import React, {
   useState,
   useEffect,
   useRef,
-  useMemo,
   useCallback,
 } from "react";
 import {
@@ -19,7 +18,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useCanvasStore } from "@/features/canvas/store";
+import {
+  useCanvasStore,
+  selectShapeCount,
+  selectSelectedShapeCount,
+  selectHasSelection,
+} from "@/features/canvas/store";
 import { useSearchDialogStore } from "@/features/search/store/search-dialog.store";
 import type {
   ExportFormat,
@@ -45,7 +49,10 @@ function isEditableTarget(target: EventTarget | null): boolean {
   if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") {
     return true;
   }
-  if (target.isContentEditable || target.closest("[contenteditable='true']")) {
+  if (target.isContentEditable) {
+    return true;
+  }
+  if (typeof target.closest === "function" && target.closest('[contenteditable="true"]') !== null) {
     return true;
   }
   if (typeof target.closest === "function" && target.closest('[role="dialog"]') !== null) {
@@ -54,22 +61,27 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return false;
 }
 
-export function ExportDialog(): React.JSX.Element | null {
-  const { isOpen, boardName, closeExport, toggleExport } = useExportDialog();
+type ExportDialogModalProps = {
+  boardName?: string;
+  closeExport: () => void;
+};
 
-  const shapes = useCanvasStore((state) => state.shapes);
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
-  const zoom = useCanvasStore((state) => state.zoom);
-  const pan = useCanvasStore((state) => state.pan);
+function ExportDialogModal({
+  boardName,
+  closeExport,
+}: ExportDialogModalProps): React.JSX.Element {
+  const shapeCount = useCanvasStore(selectShapeCount);
+  const selectedShapeCount = useCanvasStore(selectSelectedShapeCount);
+  const hasSelection = useCanvasStore(selectHasSelection);
 
   // Form configuration state
   const [format, setFormat] = useState<ExportFormat>("png");
-  const [scope, setScope] = useState<ExportScope>("canvas");
+  const [scope, setScope] = useState<ExportScope>(hasSelection ? "selection" : "canvas");
   const [background, setBackground] = useState<ExportBackground>("canvas");
   const [customBgColor, setCustomBgColor] = useState<string>(DEFAULT_CANVAS_BACKGROUND_COLOR);
   const [scale, setScale] = useState<number>(DEFAULT_EXPORT_SCALE);
   const [quality, setQuality] = useState<number>(DEFAULT_EXPORT_QUALITY);
-  const [filenameInput, setFilenameInput] = useState<string>("");
+  const [filenameInput, setFilenameInput] = useState<string>(() => boardName?.trim() || "canvasflow-export");
 
   // Execution state
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -77,78 +89,25 @@ export function ExportDialog(): React.JSX.Element | null {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const isExportingRef = useRef<boolean>(false);
-  const prevIsOpenRef = useRef<boolean>(false);
-  const triggerRef = useRef<HTMLElement | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const filenameInputRef = useRef<HTMLInputElement>(null);
 
-  // Determine whether current canvas has an exportable selection
-  const hasSelection = useMemo(() => {
-    if (!selectedShapeIds || selectedShapeIds.length === 0) return false;
-    const selectedSet = new Set(selectedShapeIds);
-    return shapes.some((s) => selectedSet.has(s.id));
-  }, [shapes, selectedShapeIds]);
-
-  // Global Ctrl/Cmd + Shift + E shortcut listener
+  // Auto-focus filename input on mount and abort on unmount
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "e") {
-        if (isEditableTarget(e.target) || useSearchDialogStore.getState().isOpen) {
-          return;
-        }
-        e.preventDefault();
-        if (!isOpen && document.activeElement instanceof HTMLElement) {
-          triggerRef.current = document.activeElement;
-        }
-        toggleExport();
-      }
-    };
+    const timer = setTimeout(() => {
+      filenameInputRef.current?.focus();
+      filenameInputRef.current?.select();
+    }, 50);
 
-    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, toggleExport]);
-
-  // Reset form defaults only on transition from closed to open
-  useEffect(() => {
-    if (isOpen) {
-      if (!prevIsOpenRef.current) {
-        setFormat("png");
-        setScope(hasSelection ? "selection" : "canvas");
-        setBackground("canvas");
-        setCustomBgColor(DEFAULT_CANVAS_BACKGROUND_COLOR);
-        setScale(DEFAULT_EXPORT_SCALE);
-        setQuality(DEFAULT_EXPORT_QUALITY);
-        setErrorMessage(null);
-        setIsExporting(false);
-        isExportingRef.current = false;
-
-        const baseName = boardName?.trim() || "canvasflow-export";
-        setFilenameInput(baseName);
-
-        // Focus filename input on open
-        setTimeout(() => {
-          filenameInputRef.current?.focus();
-          filenameInputRef.current?.select();
-        }, 50);
-      }
-    } else {
-      // Abort any ongoing export if dialog closes
+      clearTimeout(timer);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
       isExportingRef.current = false;
-      setIsExporting(false);
-      // Restore focus to trigger element
-      if (triggerRef.current) {
-        triggerRef.current.focus();
-        triggerRef.current = null;
-      }
-    }
-    prevIsOpenRef.current = isOpen;
-  }, [isOpen, boardName, hasSelection]);
+    };
+  }, []);
 
   // If format changes to JPEG and background was transparent, adapt to canvas default
   useEffect(() => {
@@ -192,6 +151,8 @@ export function ExportDialog(): React.JSX.Element | null {
     isExportingRef.current = true;
     setIsExporting(true);
     setErrorMessage(null);
+
+    const { shapes, selectedShapeIds, zoom, pan } = useCanvasStore.getState();
 
     if (!shapes || shapes.length === 0) {
       setErrorMessage("Cannot export an empty canvas. Add shapes before exporting.");
@@ -267,8 +228,6 @@ export function ExportDialog(): React.JSX.Element | null {
       abortControllerRef.current = null;
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div
@@ -388,7 +347,7 @@ export function ExportDialog(): React.JSX.Element | null {
                 `}
               >
                 <span className="font-semibold">Full Canvas</span>
-                <span className="text-[10px] text-slate-400">All {shapes.length} shapes</span>
+                <span className="text-[10px] text-slate-400">All {shapeCount} shapes</span>
               </button>
 
               <button
@@ -412,7 +371,7 @@ export function ExportDialog(): React.JSX.Element | null {
                 <span className="font-semibold">Selection</span>
                 <span className="text-[10px]">
                   {hasSelection
-                    ? `${selectedShapeIds.length} selected`
+                    ? `${selectedShapeCount} selected`
                     : "None selected"}
                 </span>
               </button>
@@ -666,4 +625,42 @@ export function ExportDialog(): React.JSX.Element | null {
       </div>
     </div>
   );
+}
+
+export function ExportDialog(): React.JSX.Element | null {
+  const { isOpen, boardName, closeExport, toggleExport } = useExportDialog();
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  // Global Ctrl/Cmd + Shift + E shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "e") {
+        if (isEditableTarget(e.target) || useSearchDialogStore.getState().isOpen) {
+          return;
+        }
+        e.preventDefault();
+        if (!isOpen && document.activeElement instanceof HTMLElement) {
+          triggerRef.current = document.activeElement;
+        }
+        toggleExport();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, toggleExport]);
+
+  const handleClose = useCallback((): void => {
+    closeExport();
+    if (triggerRef.current) {
+      triggerRef.current.focus();
+      triggerRef.current = null;
+    }
+  }, [closeExport]);
+
+  if (!isOpen) return null;
+
+  return <ExportDialogModal boardName={boardName} closeExport={handleClose} />;
 }

@@ -132,22 +132,12 @@ export function useCanvasClipboard({
   handlePaste: () => Promise<void>;
   handleDuplicate: () => Promise<void>;
 } {
-  const shapes = useCanvasStore((state) => state.shapes);
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
-  const editingGroupId = useCanvasStore((state) => state.editingGroupId);
-
-  const pasteClonedShapes = useCanvasStore((state) => state.pasteClonedShapes);
-  const reconcileAuthoritativePastedShapes = useCanvasStore(
-    (state) => state.reconcileAuthoritativePastedShapes
-  );
-  const rollbackOptimisticPaste = useCanvasStore(
-    (state) => state.rollbackOptimisticPaste
-  );
-
   /**
    * Copy current selection to clipboard.
+   * Reads fresh state at invocation time to avoid reactive re-renders and stabilize callback identity.
    */
   const handleCopy = useCallback(async (): Promise<void> => {
+    const { selectedShapeIds, shapes } = useCanvasStore.getState();
     if (selectedShapeIds.length === 0) {
       return;
     }
@@ -159,10 +149,11 @@ export function useCanvasClipboard({
 
     await clipboardService.copy(extracted, canvasId ?? "default_canvas");
     toast.success(`Copied ${extracted.length} shape${extracted.length > 1 ? "s" : ""}`);
-  }, [selectedShapeIds, shapes, canvasId]);
+  }, [canvasId]);
 
   /**
    * Paste content from clipboard onto canvas.
+   * Reads fresh state at invocation time to avoid reactive re-renders and stabilize callback identity.
    */
   const handlePaste = useCallback(async (): Promise<void> => {
     if (!canEditCanvas || !canvasId) {
@@ -173,6 +164,14 @@ export function useCanvasClipboard({
     if (!clipboardData || clipboardData.shapes.length === 0) {
       return;
     }
+
+    const {
+      shapes,
+      editingGroupId,
+      pasteClonedShapes,
+      reconcileAuthoritativePastedShapes,
+      rollbackOptimisticPaste,
+    } = useCanvasStore.getState();
 
     const pasteCount = clipboardService.incrementConsecutivePasteCount();
     const destinationGroup = editingGroupId
@@ -211,21 +210,27 @@ export function useCanvasClipboard({
       rollbackOptimisticPaste(clonedShapes.map((s) => s.id));
       toast.error(err instanceof Error ? err.message : "Failed to paste shapes.");
     }
-  }, [
-    canEditCanvas,
-    canvasId,
-    editingGroupId,
-    shapes,
-    pasteClonedShapes,
-    reconcileAuthoritativePastedShapes,
-    rollbackOptimisticPaste,
-  ]);
+  }, [canEditCanvas, canvasId]);
 
   /**
    * Duplicate selection atomically without polluting system clipboard text.
+   * Reads fresh state at invocation time to avoid reactive re-renders and stabilize callback identity.
    */
   const handleDuplicate = useCallback(async (): Promise<void> => {
-    if (!canEditCanvas || !canvasId || selectedShapeIds.length === 0) {
+    if (!canEditCanvas || !canvasId) {
+      return;
+    }
+
+    const {
+      shapes,
+      selectedShapeIds,
+      editingGroupId,
+      pasteClonedShapes,
+      reconcileAuthoritativePastedShapes,
+      rollbackOptimisticPaste,
+    } = useCanvasStore.getState();
+
+    if (selectedShapeIds.length === 0) {
       return;
     }
 
@@ -268,16 +273,7 @@ export function useCanvasClipboard({
       rollbackOptimisticPaste(clonedShapes.map((s) => s.id));
       toast.error(err instanceof Error ? err.message : "Failed to duplicate shapes.");
     }
-  }, [
-    canEditCanvas,
-    canvasId,
-    selectedShapeIds,
-    editingGroupId,
-    shapes,
-    pasteClonedShapes,
-    reconcileAuthoritativePastedShapes,
-    rollbackOptimisticPaste,
-  ]);
+  }, [canEditCanvas, canvasId]);
 
   // Global keyboard shortcuts listener
   useEffect(() => {

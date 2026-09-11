@@ -24,7 +24,6 @@ export default function RectangleNode({
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
 
   const {
@@ -101,7 +100,7 @@ export default function RectangleNode({
           const isModifier = Boolean(
             event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
           );
-          if (isModifier || !selectedShapeIds.includes(shape.id)) {
+          if (isModifier || !isSelected) {
             handleSelectionClick(event);
           }
         }}
@@ -121,7 +120,7 @@ export default function RectangleNode({
             return;
           }
 
-          const isAlreadySelected = selectedShapeIds.includes(shape.id);
+          const isAlreadySelected = isSelected;
           if (!isAlreadySelected) {
             selectShape(shape.id);
           }
@@ -151,7 +150,7 @@ export default function RectangleNode({
           const currentX = snappedX;
           const currentY = snappedY;
 
-          if (selectedShapeIds.length > 1 && dragStartRef.current) {
+          if (useCanvasStore.getState().selectedShapeIds.length > 1 && dragStartRef.current) {
             const deltaX = currentX - dragStartRef.current.x;
             const deltaY = currentY - dragStartRef.current.y;
 

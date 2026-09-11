@@ -3,6 +3,8 @@ import React, { memo, useEffect, useRef } from "react";
 import { Group, Rect, Transformer } from "react-konva";
 import { toast } from "sonner";
 
+import { useShallow } from "zustand/react/shallow";
+
 import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
 import { useCanvasStore } from "../store";
@@ -27,16 +29,16 @@ function GroupNodeComponent({
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const shapes = useCanvasStore((state) => state.shapes);
   const editingGroupId = useCanvasStore((state) => state.editingGroupId);
   const enterGroup = useCanvasStore((state) => state.enterGroup);
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
   const updateShapePosition = useCanvasStore((state) => state.updateShapePosition);
   const updateShapeTransform = useCanvasStore((state) => state.updateShapeTransform);
 
-  // Immediate children of this group
-  const children = shapes.filter((s) => s.parentId === shape.id);
+  // Immediate children of this group with shallow equality check
+  const children = useCanvasStore(
+    useShallow((state) => state.shapes.filter((s) => s.parentId === shape.id))
+  );
   const isEditingThisGroup = editingGroupId === shape.id;
 
   const {
@@ -152,7 +154,7 @@ function GroupNodeComponent({
           node.x(snappedX);
           node.y(snappedY);
 
-          if (selectedShapeIds.length > 1 && isSelected && dragStartRef.current) {
+          if (useCanvasStore.getState().selectedShapeIds.length > 1 && isSelected && dragStartRef.current) {
             const currentX = snappedX;
             const currentY = snappedY;
             const deltaX = currentX - dragStartRef.current.x;
@@ -181,7 +183,7 @@ function GroupNodeComponent({
           const finalX = Math.round(node.x());
           const finalY = Math.round(node.y());
 
-          if (selectedShapeIds.length <= 1) {
+          if (useCanvasStore.getState().selectedShapeIds.length <= 1) {
             updateShapePosition(shape.id, { x: finalX, y: finalY });
           }
 

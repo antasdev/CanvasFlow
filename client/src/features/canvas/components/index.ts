@@ -18,3 +18,4 @@ export { SmartGuideOverlay } from "./SmartGuideOverlay";
 export { default as CanvasZoomControls } from "./CanvasZoomControls";
 export { default as KeyboardShortcutsModal } from "./KeyboardShortcutsModal";
 export { default as BoardSyncStatus } from "./BoardSyncStatus";
+export { default as CollaboratorLayer } from "./CollaboratorLayer";

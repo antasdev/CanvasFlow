@@ -1,18 +1,13 @@
 import Button from "@/components/ui/Button";
 
-import { useCanvasStore } from "../store";
+import { useCanvasStore, selectCanUndo, selectCanRedo } from "../store";
 
 export default function CanvasHistoryControls(): React.JSX.Element {
     const undo = useCanvasStore((state) => state.undo);
     const redo = useCanvasStore((state) => state.redo);
 
-    const canUndo = useCanvasStore(
-        (state) => state.canUndo(),
-    );
-
-    const canRedo = useCanvasStore(
-        (state) => state.canRedo(),
-    );
+    const canUndo = useCanvasStore(selectCanUndo);
+    const canRedo = useCanvasStore(selectCanRedo);
 
     return (
         <>

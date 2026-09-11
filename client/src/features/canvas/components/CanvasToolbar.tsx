@@ -19,13 +19,18 @@ import {
   Eye,
   History,
 } from "lucide-react";
-import React, { useMemo } from "react";
+import React from "react";
 
 import { useCommentStore } from "@/features/comments";
 import { useHistoryStore } from "@/features/history";
 
 import { CANVAS_TOOLS, type CanvasTool } from "../constants";
-import { useCanvasStore } from "../store";
+import {
+  useCanvasStore,
+  selectActiveTool,
+  selectCanUndo,
+  selectCanRedo,
+} from "../store";
 
 type CanvasToolbarProps = {
   canEditCanvas?: boolean;
@@ -43,26 +48,32 @@ export default function CanvasToolbar({
   canEditCanvas = true,
   className = "",
 }: CanvasToolbarProps): React.JSX.Element {
-  const activeTool = useCanvasStore((state) => state.activeTool);
+  const activeTool = useCanvasStore(selectActiveTool);
   const setActiveTool = useCanvasStore((state) => state.setActiveTool);
 
   const undo = useCanvasStore((state) => state.undo);
   const redo = useCanvasStore((state) => state.redo);
-  const canUndo = useCanvasStore((state) => state.canUndo());
-  const canRedo = useCanvasStore((state) => state.canRedo());
+  const canUndo = useCanvasStore(selectCanUndo);
+  const canRedo = useCanvasStore(selectCanRedo);
 
   const isPanelOpen = useCommentStore((state) => state.isPanelOpen);
   const togglePanel = useCommentStore((state) => state.togglePanel);
-  const comments = useCommentStore((state) => state.comments);
 
   const isHistoryOpen = useHistoryStore((state) => state.isPanelOpen);
   const toggleHistory = useHistoryStore((state) => state.togglePanel);
 
-  const openCommentsCount = useMemo(() => {
-    return Object.values(comments).filter(
-      (c) => !c.parentCommentId && !c.isResolved && !c.isDeleted
-    ).length;
-  }, [comments]);
+  // Derive primitive comment count directly in selector so CanvasToolbar
+  // does not re-render when comment bodies, replies, or resolved states of non-roots change
+  const openCommentsCount = useCommentStore((state) => {
+    let count = 0;
+    for (const id in state.comments) {
+      const c = state.comments[id];
+      if (c && !c.parentCommentId && !c.isResolved && !c.isDeleted) {
+        count++;
+      }
+    }
+    return count;
+  });
 
   const navTools: ToolItem[] = [
     {
