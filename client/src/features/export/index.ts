@@ -12,6 +12,12 @@ export type {
   ExportErrorCode,
 } from "./types/export.types";
 
+export type {
+  ExportResult,
+  ExportProcessorOptions,
+  ExportProcessor,
+} from "./types/export-processor.types";
+
 // Constants
 export {
   SUPPORTED_EXPORT_FORMATS,
@@ -55,3 +61,33 @@ export {
   normalizeExportShape,
   prepareExportScene,
 } from "./utils/export-geometry.utils";
+
+// Raster Canvas Adapter
+export {
+  renderSceneToRasterBlob,
+  renderPreparedShapeToCanvas,
+} from "./utils/export-canvas.adapter";
+
+// Format Processors
+export {
+  SvgExporter,
+  svgExporter,
+  escapeXmlText,
+  escapeXmlAttr,
+  sanitizeColor,
+} from "./processors/svg.exporter";
+
+export { PngExporter, pngExporter } from "./processors/png.exporter";
+
+export { JpegExporter, jpegExporter } from "./processors/jpeg.exporter";
+
+export {
+  PdfExporter,
+  pdfExporter,
+  buildPdfDocument,
+  parseColorToRgb,
+  escapePdfString,
+} from "./processors/pdf.exporter";
+
+// Export Service
+export { ExportService, exportService } from "./services/export.service";
