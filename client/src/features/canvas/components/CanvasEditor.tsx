@@ -53,6 +53,11 @@ import {
 } from "../utils/stroke-simplification";
 import { DEFAULT_TEXT_STYLE, estimateTextDimensions } from "../utils/text.utils";
 import { calculateCenterPan } from "../utils/viewport.utils";
+import {
+    getViewportWorldBounds,
+    filterVisibleRootShapes,
+    DEFAULT_VIEWPORT_CULLING_MARGIN,
+} from "../utils/viewport-culling.utils";
 
 import CanvasGrid from "./CanvasGrid";
 import CanvasZoomControls from "./CanvasZoomControls";
@@ -309,6 +314,18 @@ export default function CanvasEditor({
     );
 
     const setPan = useCanvasStore((state) => state.setPan);
+
+    // Compute visible viewport bounds in world coordinates with overscan cushion
+    const viewportBounds = useMemo(() => {
+        return getViewportWorldBounds(size, pan, zoom, DEFAULT_VIEWPORT_CULLING_MARGIN);
+    }, [size.width, size.height, pan.x, pan.y, zoom]);
+
+    // Viewport-culled visible root shapes (with selection override and preserved z-order)
+    const visibleRootShapes = useMemo(() => {
+        return filterVisibleRootShapes(shapes, viewportBounds, {
+            selectedShapeIds,
+        });
+    }, [shapes, viewportBounds, selectedShapeIds]);
 
     const handleNavigateToAnchor = useCallback(
         (position: { x: number; y: number }): void => {
@@ -1933,17 +1950,19 @@ export default function CanvasEditor({
                     onTouchMove={handlePointerMove}
                     onTouchEnd={handlePointerUp}
                 >
-                    <Layer>
+                    {/* Background Grid Layer - static grid background, non-interactive */}
+                    <Layer id="canvas-grid-layer" listening={false}>
                         <CanvasGrid
                             width={size.width}
                             height={size.height}
                             pan={pan}
                             zoom={zoom}
                         />
+                    </Layer>
 
-                        {shapes
-                            .filter((shape) => !shape.parentId)
-                            .map((shape) => (
+                    {/* Interactive Document Shapes Layer - viewport-culled root shapes */}
+                    <Layer id="canvas-shapes-layer">
+                        {visibleRootShapes.map((shape) => (
                             <ShapeRenderer
                                 key={shape.id}
                                 shape={shape}
@@ -1970,6 +1989,10 @@ export default function CanvasEditor({
                                 }}
                             />
                         ))}
+                    </Layer>
+
+                    {/* Ephemeral Interaction Overlays Layer - marquee, lasso, drawing previews, smart guides */}
+                    <Layer id="canvas-drafting-layer" listening={false}>
 
                         {marquee ? (
                             <Rect
