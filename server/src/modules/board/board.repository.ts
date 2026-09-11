@@ -5,8 +5,15 @@ import { BoardModel } from "./board.model";
 import {
   CreateBoardData,
   BoardDocument,
+  BoardVisibility,
 } from "./board.types";
 import { UpdateBoardDto } from "./board.dto";
+
+export interface BoardAuthSummary {
+  _id: Types.ObjectId;
+  visibility: BoardVisibility;
+  createdBy: Types.ObjectId;
+}
 
 export class BoardRepository {
   async create(
@@ -39,6 +46,22 @@ export class BoardRepository {
       workspaceId,
       isArchived: false,
     });
+  }
+
+  async findBoardAuthSummaries(
+    workspaceId: Types.ObjectId
+  ): Promise<BoardAuthSummary[]> {
+    return BoardModel.find({
+      workspaceId,
+      isArchived: false,
+    })
+      .select({
+        _id: 1,
+        visibility: 1,
+        createdBy: 1,
+      })
+      .lean<BoardAuthSummary[]>()
+      .exec();
   }
 
   async updateById(

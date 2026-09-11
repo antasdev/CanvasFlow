@@ -25,7 +25,8 @@
     "test:history-api": "tsx -r tsconfig-paths/register src/modules/history/tests/history.api.test.ts",
     "test:history-restore": "tsx -r tsconfig-paths/register src/modules/history/tests/history.restore.test.ts",
     "test:history-reliability": "tsx -r tsconfig-paths/register src/modules/history/tests/history.reliability.test.ts",
-    "test:search": "tsx -r tsconfig-paths/register src/modules/search/tests/search.validation.test.ts && tsx -r tsconfig-paths/register src/modules/search/tests/search.api.test.ts",
+    "test:search": "tsx -r tsconfig-paths/register src/modules/search/tests/search.validation.test.ts && tsx -r tsconfig-paths/register src/modules/search/tests/search.api.test.ts && tsx -r tsconfig-paths/register src/modules/search/tests/search.optimization.test.ts",
+    "test:search-optimization": "tsx -r tsconfig-paths/register src/modules/search/tests/search.optimization.test.ts",
     "test:run": "tsx -r tsconfig-paths/register src/modules/auth/tests/auth.test.ts && tsx -r tsconfig-paths/register src/modules/workspace/tests/rbac.test.ts"
   },
   "keywords": [],

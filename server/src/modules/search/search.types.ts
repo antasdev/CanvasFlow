@@ -6,6 +6,13 @@ export type SearchScopeType = "workspace" | "board";
 
 export type MatchedField = "name" | "description" | "text" | "content";
 
+export const ENTITY_TYPE_PRIORITY: Record<SearchEntityType, number> = {
+  board: 1,
+  canvas: 2,
+  shape: 3,
+  comment: 4,
+} as const;
+
 export interface SearchScopeFilter {
   scope: SearchScopeType;
   workspaceId?: Types.ObjectId;
@@ -22,9 +29,40 @@ export interface SearchQueryInput {
   cursor?: string;
 }
 
-export interface SearchCursorPayload {
+/**
+ * Entity-scoped cursor identifying progress within a single collection.
+ */
+export interface EntityCursor {
+  t: number;
+  id: string;
+}
+
+/**
+ * Legacy V1 cursor payload structure.
+ */
+export interface SearchCursorPayloadV1 {
   timestamp: number;
   id: string;
+}
+
+/**
+ * V2 Composite cursor payload representing per-entity progress.
+ */
+export interface CompositeCursorPayload {
+  v: 2;
+  b?: EntityCursor;
+  c?: EntityCursor;
+  s?: EntityCursor;
+  m?: EntityCursor;
+}
+
+/**
+ * Unified decoded search cursor filter.
+ */
+export interface SearchCursorFilter {
+  version: 1 | 2;
+  v1?: SearchCursorPayloadV1;
+  v2?: CompositeCursorPayload;
 }
 
 export interface SearchResultItem {
