@@ -3281,3 +3281,43 @@ Connected Collaborator Clients (useCanvasSocket / useCollaborationStore)
 1. **Zero New Events**: Completely avoids event-space pollution by reusing the canonical synchronization mechanism (`CANVAS_SYNC`).
 2. **Post-Commit Emission**: Broadcast occurs strictly after the MongoDB transaction commits; failed or aborted restore attempts emit zero socket events.
 3. **Room-Wide Re-synchronization**: Broadcast reaches all connected collaborators in the board room, ensuring instantaneous visual alignment without requiring manual page reloads.
+
+---
+
+## 49. Real-Time Collaboration Scaling & Rate Protection (Slice 54)
+
+### 49.1 Unified Ephemeral Cursor Pipeline
+
+Slice 54 eliminates duplicate cursor pipelines by standardizing on `presence:cursor`:
+1. **Producer**: `CanvasEditor` routes all cursor movement through `usePresenceSocket.emitCursor({ x, y })`. Redundant calls to `socketClientService.moveCursor` (`cursor:move`) were eliminated.
+2. **Client-Side Scheduler**: `ScheduledChannel<{ x: number; y: number }>` coalesces high-frequency mouse movements to ~30 FPS (`intervalMs: 33`, `leading: true`). A trailing timer guarantees delivery of the final stationary coordinate.
+3. **Gateway Broadcaster**: `presence.handler.ts` broadcasts exclusively `SocketEvents.PRESENCE_CURSOR` to the board room (excluding sender). The redundant broadcast of `CURSOR_MOVED` was removed.
+4. **Rendering Deduplication**: `CollaboratorLayer` filters out any `remoteCursors` whose `userId` is already managed by `usePresenceStore.cursors`.
+
+### 49.2 Selection Scheduling (Discrete vs Continuous)
+
+- **Continuous Marquee / Lasso Drag**: Coalesced via `ScheduledChannel<string[]>` with `intervalMs: 50` (~20 FPS) and `leading: false`. Intermediate selection sets are coalesced, reducing socket emission and MongoDB verification queries by ~75%. On pointerup (`endSelection`), `channel.flush()` synchronously delivers the final selected shape IDs.
+- **Discrete Selections (Click, Shift+Click, Ctrl/Cmd+Click, Select All)**: Bypasses the scheduler; cancels pending timers and emits immediately to ensure instantaneous visual feedback.
+
+### 49.3 Transform Preview Network Decoupling
+
+- **Local Display**: Renders smoothly at monitor refresh rate (60–240 FPS via rAF).
+- **Network Preview Frames**: `useShapeTransform` routes `shape:transforming` frames through `ScheduledChannel<TransformValues>` at ~30 FPS (`intervalMs: 33`, `leading: true`).
+- **Commit Phase**: On `endTransform`, the scheduled preview channel is cancelled (`channel.cancel()`), preventing late-arriving preview frames from racing with the authoritative `shape:update` mutation.
+
+### 49.4 Server-Side Token Bucket Rate Protection
+
+Implemented in `server/src/socket/services/socket-rate-limiter.service.ts`:
+- **Granular Category Isolation**: Per-socket token buckets isolated by `socketId:category`.
+- **Authoritative Mutations**: Document mutations (`shape:create`, `shape:update`, `shape:delete`) are **never silently dropped**. Excess requests return an explicit error acknowledgement `{ success: false, error: { code: "RATE_LIMITED", message: "..." } }`.
+- **Ephemeral Signals**: Excess cursor, selection, transform preview, or heartbeat events are dropped silently to protect server event-loop responsiveness.
+- **Lifecycle Cleanup**: On socket disconnection, all associated rate limiter state is purged immediately.
+
+| Category | Capacity (Burst) | Refill Rate | Dropped Action |
+| :--- | :--- | :--- | :--- |
+| `cursor` | 80 tokens | 60 tokens/sec | Silent drop |
+| `selection` | 40 tokens | 30 tokens/sec | Silent drop |
+| `transform` | 80 tokens | 60 tokens/sec | Silent drop |
+| `heartbeat` | 6 tokens | 2 tokens/sec | Silent drop |
+| `interaction` | 80 tokens | 60 tokens/sec | Silent drop |
+| `mutation` | 40 tokens | 25 tokens/sec | Structured Ack Error (`RATE_LIMITED`) |

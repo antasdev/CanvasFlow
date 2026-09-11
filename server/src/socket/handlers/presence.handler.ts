@@ -2,6 +2,7 @@ import { Server } from "socket.io";
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
 import { presenceManager } from "../presence/presence.manager";
+import { socketRateLimiter } from "../services/socket-rate-limiter.service";
 import {
   AuthSocket,
   ClientToServerEvents,
@@ -46,6 +47,17 @@ export const registerPresenceHandlers = (
       callback?: (response: SocketAck) => void
     ): void => {
       try {
+        if (!socketRateLimiter.check(socket.id, "heartbeat")) {
+          callback?.({
+            success: false,
+            error: {
+              code: "RATE_LIMITED",
+              message: "Heartbeat rate limit exceeded. Please slow down.",
+            },
+          });
+          return;
+        }
+
         const parsed = presenceHeartbeatSchema.safeParse(payload);
         if (!parsed.success) {
           callback?.({
@@ -91,6 +103,10 @@ export const registerPresenceHandlers = (
     SocketEvents.PRESENCE_CURSOR,
     (payload: PresenceCursorPayload): void => {
       try {
+        if (!socketRateLimiter.check(socket.id, "cursor")) {
+          return;
+        }
+
         const parsed = presenceCursorSchema.safeParse(payload);
         if (!parsed.success) {
           return;
@@ -116,14 +132,6 @@ export const registerPresenceHandlers = (
           x: cursor.x,
           y: cursor.y,
           updatedAt: cursor.updatedAt,
-        });
-
-        // Also emit legacy cursor:moved for backward compatibility
-        socket.to(room).emit(SocketEvents.CURSOR_MOVED, {
-          userId,
-          boardId: parsed.data.boardId,
-          x: cursor.x,
-          y: cursor.y,
         });
       } catch {
         // Ephemeral safety guarantee: never crash on cursor transport errors

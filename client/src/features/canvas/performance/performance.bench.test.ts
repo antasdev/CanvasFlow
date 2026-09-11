@@ -25,6 +25,7 @@ import {
   filterVisibleRootShapes,
 } from "../utils/viewport-culling.utils";
 import { createRafScheduler } from "../utils/raf.utils";
+import { ScheduledChannel } from "../utils/collaboration-scheduler";
 import { calculateContentBounds } from "@/features/export/utils/export-bounds.utils";
 import { sortShapesForExport } from "@/features/export/utils/export-order.utils";
 import type { AABB } from "../utils/alignment.utils";
@@ -581,6 +582,132 @@ describe("Slice 50: Performance Audit & Baselines", () => {
       // Ingesting 10k points into buffer without intermediate React state allocations should take < 5ms
       expect(durationMs).toBeLessThan(15);
       expect(pointBuffer.length).toBe(totalPoints * 2);
+    });
+  });
+
+  describe("Slice 54: Real-Time Collaboration Scaling & Scheduler (Synthetic)", () => {
+    it("measures ScheduledChannel high-frequency cursor burst coalescing (5,000 moves)", () => {
+      let emittedPayload: { x: number; y: number } | null = null;
+      let emitCount = 0;
+
+      const channel = new ScheduledChannel<{ x: number; y: number }>({
+        intervalMs: 33, // ~30 FPS
+        leading: false, // Pure burst coalescing
+        onEmit: (pos) => {
+          emittedPayload = pos;
+          emitCount++;
+        },
+      });
+
+      const burstCount = 5000;
+      const start = performance.now();
+
+      for (let i = 0; i < burstCount; i++) {
+        channel.schedule({ x: i, y: i * 2 });
+      }
+
+      const durationMs = performance.now() - start;
+
+      benchmarkResults.push({
+        operation: "Cursor Burst Coalescing (5K events into ScheduledChannel)",
+        shapeCount: burstCount,
+        durationMs,
+        itemsPerMs: burstCount / Math.max(0.001, durationMs),
+      });
+
+      // 5,000 schedule calls should complete in under 20ms
+      expect(durationMs).toBeLessThan(25);
+      expect(channel.isPending()).toBe(true);
+
+      // Flush synchronously as on mouseup/unmount
+      channel.flush();
+
+      expect(emitCount).toBe(1);
+      expect(emittedPayload).toEqual({ x: 4999, y: 4999 * 2 });
+      expect(channel.isPending()).toBe(false);
+
+      const coalescedPercent = ((burstCount - emitCount) / burstCount) * 100;
+      benchmarkResults.push({
+        operation: `Cursor Transport Reduction (${coalescedPercent.toFixed(2)}% coalesced)`,
+        shapeCount: burstCount,
+        durationMs: emitCount,
+        itemsPerMs: emitCount,
+      });
+
+      expect(coalescedPercent).toBeGreaterThanOrEqual(99.9);
+    });
+
+    it("evaluates continuous selection coalescing across a 60Hz marquee drag (60 ticks)", () => {
+      const emittedBatches: string[][] = [];
+
+      const channel = new ScheduledChannel<string[]>({
+        intervalMs: 50, // 20 FPS
+        leading: false,
+        onEmit: (ids) => {
+          emittedBatches.push(ids);
+        },
+      });
+
+      // Simulate 60 moves during a 1-second marquee selection drag
+      const totalTicks = 60;
+      const start = performance.now();
+
+      for (let tick = 0; tick < totalTicks; tick++) {
+        // As box expands, more shape IDs are selected
+        const currentSelection = Array.from({ length: Math.floor(tick / 5) + 1 }, (_, k) => `shape-${k}`);
+        channel.schedule(currentSelection);
+      }
+
+      const durationMs = performance.now() - start;
+
+      benchmarkResults.push({
+        operation: "Continuous Selection 60Hz Marquee Coalescing",
+        shapeCount: totalTicks,
+        durationMs,
+        itemsPerMs: totalTicks / Math.max(0.001, durationMs),
+      });
+
+      // Flush final marquee selection immediately on pointer release
+      channel.flush();
+
+      // Exactly 1 trailing emission delivered with the complete final selection set
+      expect(emittedBatches.length).toBe(1);
+      expect(emittedBatches[0]).toEqual(Array.from({ length: 12 }, (_, k) => `shape-${k}`));
+      expect(channel.isPending()).toBe(false);
+    });
+
+    it("models multi-collaborator room broadcast fan-out at 1, 10, 25, 50, and 100 users", () => {
+      // Synthetic broadcast model:
+      // Raw 120Hz unthrottled pointer rate vs 30Hz bounded ScheduledChannel rate
+      // Room fan-out: N collaborators * (N - 1) recipients * event_rate
+      const userCounts = [1, 10, 25, 50, 100];
+      const rawHz = 120;
+      const boundedHz = 30;
+      const avgCursorPayloadBytes = 64; // { userId, x, y, updatedAt }
+
+      for (const n of userCounts) {
+        const recipientsPerEvent = Math.max(0, n - 1);
+        const rawPacketsPerSec = n * recipientsPerEvent * rawHz;
+        const boundedPacketsPerSec = n * recipientsPerEvent * boundedHz;
+        const rawBandwidthKBs = (rawPacketsPerSec * avgCursorPayloadBytes) / 1024;
+        const boundedBandwidthKBs = (boundedPacketsPerSec * avgCursorPayloadBytes) / 1024;
+        const savingsPercent = rawPacketsPerSec > 0
+          ? ((rawPacketsPerSec - boundedPacketsPerSec) / rawPacketsPerSec) * 100
+          : 0;
+
+        benchmarkResults.push({
+          operation: `Synthetic Fan-Out [${n} users]: Raw 120Hz vs Bounded 30Hz (${savingsPercent.toFixed(0)}% saved)`,
+          shapeCount: n,
+          durationMs: boundedBandwidthKBs,
+          itemsPerMs: boundedPacketsPerSec,
+        });
+
+        if (n > 1) {
+          expect(savingsPercent).toBe(75);
+          expect(boundedPacketsPerSec).toBeLessThan(rawPacketsPerSec);
+          expect(boundedBandwidthKBs).toBeLessThan(rawBandwidthKBs);
+        }
+      }
     });
   });
 

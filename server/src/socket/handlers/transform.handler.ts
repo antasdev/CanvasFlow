@@ -1,6 +1,7 @@
 import { shapeLockManager } from "../locks/shape-lock.manager";
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
+import { socketRateLimiter } from "../services/socket-rate-limiter.service";
 import {
   AuthSocket,
   ShapeTransformEndPayload,
@@ -25,6 +26,10 @@ export const registerTransformHandlers = (socket: AuthSocket): void => {
     SocketEvents.SHAPE_TRANSFORMING,
     (payload: TransformingShapePayload): void => {
       try {
+        if (!socketRateLimiter.check(socket.id, "transform")) {
+          return;
+        }
+
         const parsed = transformingShapeSchema.safeParse(payload);
         if (!parsed.success) {
           return;

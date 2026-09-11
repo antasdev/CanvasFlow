@@ -20,6 +20,7 @@ import { HttpStatus, Messages } from "@/shared/constants";
 import { SocketEvents } from "../socket.events";
 import { getBoardRoom } from "../socket.rooms";
 import { collaborationVersionService } from "../services/collaboration-version.service";
+import { socketRateLimiter } from "../services/socket-rate-limiter.service";
 import {
   AuthSocket,
   CreateShapePayload,
@@ -202,6 +203,18 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
     ) => {
       const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
+        if (!socketRateLimiter.check(socket.id, "mutation")) {
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "RATE_LIMITED",
+              message: "Mutation rate limit exceeded. Please slow down.",
+            },
+          });
+          return;
+        }
+
         const parsed = createShapeSocketSchema.safeParse(payload);
 
         if (!parsed.success) {
@@ -370,6 +383,18 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
     ) => {
       const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
+        if (!socketRateLimiter.check(socket.id, "mutation")) {
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "RATE_LIMITED",
+              message: "Mutation rate limit exceeded. Please slow down.",
+            },
+          });
+          return;
+        }
+
         const parsed = updateShapeSocketSchema.safeParse(payload);
 
         if (!parsed.success) {
@@ -580,6 +605,18 @@ export const registerShapeHandlers = (socket: AuthSocket): void => {
     ) => {
       const fallbackMutationId = typeof payload?.mutationId === "string" ? payload.mutationId : undefined;
       try {
+        if (!socketRateLimiter.check(socket.id, "mutation")) {
+          callback?.({
+            success: false,
+            mutationId: fallbackMutationId,
+            error: {
+              code: "RATE_LIMITED",
+              message: "Mutation rate limit exceeded. Please slow down.",
+            },
+          });
+          return;
+        }
+
         const parsed = deleteShapeSocketSchema.safeParse(payload);
 
         if (!parsed.success) {

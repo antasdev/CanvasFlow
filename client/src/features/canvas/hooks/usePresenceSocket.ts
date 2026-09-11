@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { socketClientService, type PresenceActivity } from "@/services/socket";
 
 import { useCollaborationStore, usePresenceStore } from "../store";
+import { ScheduledChannel } from "../utils/collaboration-scheduler";
 
 const HEARTBEAT_INTERVAL_MS = 20000;
 const CURSOR_THROTTLE_MS = 33; // ~30 FPS
@@ -28,22 +29,38 @@ export const usePresenceSocket = (boardId?: string): UsePresenceSocketReturn => 
 
   const connectionEpoch = useCollaborationStore((state) => state.connectionEpoch);
 
-  const lastCursorEmitRef = useRef<number>(0);
+  const cursorChannelRef = useRef<ScheduledChannel<{ x: number; y: number }> | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // -------------------------------------------------------------
-  // Throttled Cursor Broadcasting
+  // Scheduled Cursor Broadcasting Channel (Latest-Value Coalescing)
   // -------------------------------------------------------------
+  useEffect(() => {
+    if (!boardId) {
+      cursorChannelRef.current = null;
+      return;
+    }
+
+    const channel = new ScheduledChannel<{ x: number; y: number }>({
+      intervalMs: CURSOR_THROTTLE_MS,
+      leading: true,
+      onEmit: (position) => {
+        socketClientService.sendPresenceCursor(boardId, position);
+      },
+    });
+    cursorChannelRef.current = channel;
+
+    return () => {
+      channel.cancel();
+      cursorChannelRef.current = null;
+    };
+  }, [boardId]);
+
   const emitCursor = useCallback(
     (position: { x: number; y: number }): void => {
       if (!boardId) return;
-
-      const now = Date.now();
-      if (now - lastCursorEmitRef.current >= CURSOR_THROTTLE_MS) {
-        lastCursorEmitRef.current = now;
-        socketClientService.sendPresenceCursor(boardId, position);
-      }
+      cursorChannelRef.current?.schedule(position);
     },
     [boardId]
   );
