@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 
 import { useCanvasStore } from "../store";
+import { useSearchDialogStore } from "@/features/search";
 
 export function useCanvasHistory(): void {
     const undo = useCanvasStore((state) => state.undo);
@@ -8,6 +9,10 @@ export function useCanvasHistory(): void {
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent): void => {
+            if (useSearchDialogStore.getState().isOpen) {
+                return;
+            }
+
             const target = event.target;
 
             if (
@@ -15,7 +20,7 @@ export function useCanvasHistory(): void {
                 target instanceof HTMLTextAreaElement ||
                 target instanceof HTMLSelectElement ||
                 (target instanceof HTMLElement &&
-                    target.isContentEditable)
+                    (target.isContentEditable || target.closest('[role="dialog"]') !== null))
             ) {
                 return;
             }

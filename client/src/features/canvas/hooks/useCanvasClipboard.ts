@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { socketClientService } from "@/services/socket";
 import type { PasteShapeItemPayload } from "@/services/socket";
+import { useSearchDialogStore } from "@/features/search";
 
 import { mapShapeResponseToShape } from "../api";
 import { clipboardService } from "../services/clipboard.service";
@@ -43,7 +44,8 @@ function isTextInputContext(target: EventTarget | null): boolean {
     tagName === "INPUT" ||
     tagName === "TEXTAREA" ||
     target.isContentEditable ||
-    target.closest("[contenteditable='true']") !== null
+    target.closest("[contenteditable='true']") !== null ||
+    target.closest('[role="dialog"]') !== null
   );
 }
 
@@ -279,8 +281,8 @@ export function useCanvasClipboard({
   // Global keyboard shortcuts listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
-      // Protect active native text editing context
-      if (isEditingText || isTextInputContext(e.target)) {
+      // Protect active native text editing context or open search dialog
+      if (useSearchDialogStore.getState().isOpen || isEditingText || isTextInputContext(e.target)) {
         return;
       }
 

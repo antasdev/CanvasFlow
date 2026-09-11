@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 
 import { useBoard } from "@/features/board/hooks";
 import { useWorkspace, useWorkspacePermissions } from "@/features/workspace";
@@ -9,6 +9,7 @@ import { workspaceQueryKeys } from "@/features/workspace/constants";
 import { socketClientService } from "@/services/socket";
 
 import { NotificationBell } from "@/features/notifications";
+import { SearchButton, useSearchDialog } from "@/features/search";
 
 import BoardSyncStatus from "../components/BoardSyncStatus";
 import CanvasEditor from "../components/CanvasEditor";
@@ -22,7 +23,11 @@ export default function BoardCanvasPage(): React.JSX.Element {
     boardId: string;
   }>();
 
+  const [searchParams] = useSearchParams();
+  const canvasIdParam = searchParams.get("canvasId");
+
   const queryClient = useQueryClient();
+  const { setContextualScope } = useSearchDialog();
 
   const {
     data: canvases,
@@ -34,6 +39,19 @@ export default function BoardCanvasPage(): React.JSX.Element {
   const { data: board } = useBoard(boardId ?? "");
   const { data: workspace } = useWorkspace(board?.workspaceId ?? "");
   const { canEditCanvas } = useWorkspacePermissions(workspace?.role);
+
+  // Synchronize contextual search scope for global search triggers
+  useEffect(() => {
+    if (boardId) {
+      setContextualScope({
+        scope: "board",
+        boardId,
+        workspaceId: board?.workspaceId,
+        boardName: board?.name,
+        workspaceName: workspace?.name,
+      });
+    }
+  }, [boardId, board?.workspaceId, board?.name, workspace?.name, setContextualScope]);
 
   // Dynamic real-time role change synchronization
   useEffect(() => {
@@ -89,7 +107,8 @@ export default function BoardCanvasPage(): React.JSX.Element {
     );
   }
 
-  const activeCanvas = canvases[0];
+  const activeCanvas =
+    canvases.find((c) => c.id === canvasIdParam) || canvases[0];
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-slate-700 relative select-none">
@@ -131,8 +150,15 @@ export default function BoardCanvasPage(): React.JSX.Element {
         <CanvasToolbar canEditCanvas={canEditCanvas} />
       </div>
 
-      {/* Top Right: Notifications & Collaborators Presence */}
+      {/* Top Right: Search, Notifications & Collaborators Presence */}
       <div className="absolute right-4 top-4 z-10 flex items-center gap-2">
+        <SearchButton
+          scope="board"
+          boardId={boardId}
+          workspaceId={board?.workspaceId}
+          boardName={board?.name}
+          workspaceName={workspace?.name}
+        />
         <NotificationBell />
         <PresenceAvatars />
       </div>

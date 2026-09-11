@@ -15,6 +15,8 @@ import {
 import { VersionHistoryPanel } from "@/features/history";
 import { socketClientService } from "@/services/socket";
 
+import { useSearchDialogStore } from "@/features/search";
+
 import { mapShapeResponseToShape, shapeApi, type CreateShapeRequest } from "../api";
 import { CANVAS_TOOLS, type CanvasTool } from "../constants";
 import {
@@ -136,7 +138,9 @@ export default function CanvasEditor({
 
     const [searchParams] = useSearchParams();
     const commentIdParam = searchParams.get("commentId");
+    const shapeIdParam = searchParams.get("shapeId");
     const handledDeepLinkRef = useRef<string | null>(null);
+    const handledShapeDeepLinkRef = useRef<string | null>(null);
 
     // Initialize real-time comments subscriptions and data loading
     const { isLoading: isCommentsLoading } = useComments(boardId);
@@ -353,6 +357,19 @@ export default function CanvasEditor({
         }
     }, [commentIdParam, comments, size, zoom, setPan, handleNavigateToShape]);
 
+    // Asynchronously resolve deep-link shape query param once shapes load
+    useEffect(() => {
+        if (!shapeIdParam || handledShapeDeepLinkRef.current === shapeIdParam) {
+            return;
+        }
+
+        const targetShape = shapes.find((s) => s.id === shapeIdParam);
+        if (targetShape && size.width > 0 && size.height > 0) {
+            handledShapeDeepLinkRef.current = shapeIdParam;
+            handleNavigateToShape(shapeIdParam);
+        }
+    }, [shapeIdParam, shapes, size, handleNavigateToShape]);
+
     const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
 
     const {
@@ -371,11 +388,14 @@ export default function CanvasEditor({
     const [isSpacePressed, setIsSpacePressed] = useState<boolean>(false);
     useEffect(() => {
         const handleSpaceDown = (e: KeyboardEvent) => {
+            if (useSearchDialogStore.getState().isOpen) return;
+
             const target = e.target as HTMLElement;
             const isTyping =
                 target.tagName === "INPUT" ||
                 target.tagName === "TEXTAREA" ||
-                target.isContentEditable;
+                target.isContentEditable ||
+                (typeof target.closest === "function" && target.closest('[role="dialog"]') !== null);
             if (isTyping) return;
 
             if (e.code === "Space") {
@@ -623,6 +643,10 @@ export default function CanvasEditor({
         const handleKeyDown = (
             event: KeyboardEvent,
         ): void => {
+            if (useSearchDialogStore.getState().isOpen) {
+                return;
+            }
+
             const target = event.target as HTMLElement;
 
             const isTyping =

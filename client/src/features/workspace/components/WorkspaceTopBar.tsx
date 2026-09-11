@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { NotificationBell } from "@/features/notifications";
+import { SearchButton, useSearchDialog } from "@/features/search";
 
 import { useWorkspacePermissions } from "../hooks";
 import type { WorkspaceRole } from "../types";
@@ -19,6 +21,17 @@ export default function WorkspaceTopBar({
   const { workspaceId = "" } = useParams<{ workspaceId: string }>();
   const navigate = useNavigate();
   const permissions = useWorkspacePermissions(role as WorkspaceRole);
+  const { setContextualScope } = useSearchDialog();
+
+  useEffect(() => {
+    if (workspaceId) {
+      setContextualScope({
+        scope: "workspace",
+        workspaceId,
+        workspaceName: name,
+      });
+    }
+  }, [workspaceId, name, setContextualScope]);
 
   return (
     <header
@@ -82,6 +95,12 @@ export default function WorkspaceTopBar({
         >
           {role}
         </span>
+
+        <SearchButton
+          scope="workspace"
+          workspaceId={workspaceId}
+          workspaceName={name}
+        />
 
         <NotificationBell />
 

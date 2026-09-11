@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuthStore } from "@/store";
+import { SearchDialog } from "@/features/search";
 
 import { ROUTES } from "./route.constants";
 
@@ -18,6 +19,10 @@ export default function ProtectedRoute(): React.JSX.Element {
     return <Navigate to={ROUTES.LOGIN} replace />;
   }
 
-
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <SearchDialog />
+    </>
+  );
 }
