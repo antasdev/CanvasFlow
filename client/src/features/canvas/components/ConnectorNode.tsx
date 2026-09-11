@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { CANVAS_TOOLS } from "../constants";
 import { useShapeTransform } from "../hooks";
-import { useCanvasStore } from "../store";
+import { useCanvasStore, selectShapeById } from "../store";
 import type { ConnectorShape } from "../types";
 import { getShapeWorldAnchorPoint } from "../utils/anchor.utils";
 import { getKonvaStyleProps } from "../utils/shape-style.utils";
@@ -26,8 +26,6 @@ function ConnectorNodeComponent({
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const shapes = useCanvasStore((state) => state.shapes);
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
 
   const {
@@ -45,14 +43,10 @@ function ConnectorNodeComponent({
 
   const styleProps = getKonvaStyleProps(shape, isLockedByOther);
 
-  // Resolve connected source and target shapes from canvas store
+  // Resolve connected source and target shapes via narrow selectors
   const connector = shape.connector;
-  const sourceShape = connector?.sourceShapeId
-    ? shapes.find((s) => s.id === connector.sourceShapeId)
-    : undefined;
-  const targetShape = connector?.targetShapeId
-    ? shapes.find((s) => s.id === connector.targetShapeId)
-    : undefined;
+  const sourceShape = useCanvasStore(selectShapeById(connector?.sourceShapeId));
+  const targetShape = useCanvasStore(selectShapeById(connector?.targetShapeId));
 
   const isAttached = Boolean(connector?.sourceShapeId || connector?.targetShapeId);
 
@@ -64,12 +58,12 @@ function ConnectorNodeComponent({
 
   const startWorld =
     sourceShape && connector?.sourceAnchor
-      ? getShapeWorldAnchorPoint(sourceShape, shapes, connector.sourceAnchor)
+      ? getShapeWorldAnchorPoint(sourceShape, useCanvasStore.getState().shapes, connector.sourceAnchor)
       : { x: fallbackStartX, y: fallbackStartY };
 
   const endWorld =
     targetShape && connector?.targetAnchor
-      ? getShapeWorldAnchorPoint(targetShape, shapes, connector.targetAnchor)
+      ? getShapeWorldAnchorPoint(targetShape, useCanvasStore.getState().shapes, connector.targetAnchor)
       : { x: fallbackEndX, y: fallbackEndY };
 
   // Attach Transformer when selected and completely unattached
@@ -149,7 +143,7 @@ function ConnectorNodeComponent({
           const isModifier = Boolean(
             event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
           );
-          if (isModifier || !selectedShapeIds.includes(shape.id)) {
+          if (isModifier || !isSelected) {
             handleSelectionClick(event);
           }
         }}
@@ -209,7 +203,7 @@ function ConnectorNodeComponent({
           const isModifier = Boolean(
             event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
           );
-          if (isModifier || !selectedShapeIds.includes(shape.id)) {
+          if (isModifier || !isSelected) {
             handleSelectionClick(event);
           }
         }}
@@ -229,7 +223,7 @@ function ConnectorNodeComponent({
             return;
           }
 
-          if (!selectedShapeIds.includes(shape.id)) {
+          if (!isSelected) {
             selectShape(shape.id);
           }
 
@@ -254,7 +248,7 @@ function ConnectorNodeComponent({
           const dx = currentX - dragStart.x;
           const dy = currentY - dragStart.y;
 
-          if (selectedShapeIds.length > 1) {
+          if (useCanvasStore.getState().selectedShapeIds.length > 1) {
             moveSelectedShapes(dx, dy);
             dragStartRef.current = { x: currentX, y: currentY };
           }

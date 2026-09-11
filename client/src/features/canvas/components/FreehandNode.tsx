@@ -25,7 +25,6 @@ export default function FreehandNode({
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
 
   const {
@@ -109,7 +108,7 @@ export default function FreehandNode({
           const isModifier = Boolean(
             event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
           );
-          if (isModifier || !selectedShapeIds.includes(shape.id)) {
+          if (isModifier || !isSelected) {
             handleSelectionClick(event);
           }
         }}
@@ -148,7 +147,7 @@ export default function FreehandNode({
             rotation: shape.rotation,
           });
 
-          if (selectedShapeIds.length > 1 && dragStartRef.current) {
+          if (useCanvasStore.getState().selectedShapeIds.length > 1 && dragStartRef.current) {
             const deltaX = currentX - dragStartRef.current.x;
             const deltaY = currentY - dragStartRef.current.y;
             moveSelectedShapes(deltaX, deltaY);

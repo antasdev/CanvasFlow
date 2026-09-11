@@ -2,7 +2,7 @@ import { Group, Rect, Text } from "react-konva";
 
 import type { RemoteShapeLock } from "@/services/socket";
 
-import { useCanvasStore } from "../store";
+import { useCanvasStore, selectRemoteShapeTransform } from "../store";
 import type { Shape } from "../types";
 
 type CollaboratorShapeLockProps = {
@@ -40,15 +40,12 @@ export default function CollaboratorShapeLock({
   shapes,
 }: CollaboratorShapeLockProps): React.JSX.Element | null {
   const shape = shapes.find((s) => s.id === lock.shapeId);
-  const remoteShapeTransforms = useCanvasStore(
-    (state) => state.remoteShapeTransforms
-  );
+  const liveTransform = useCanvasStore(selectRemoteShapeTransform(lock.shapeId));
 
   if (!shape) {
     return null;
   }
 
-  const liveTransform = remoteShapeTransforms[lock.shapeId];
   const isTransformLive = Boolean(liveTransform);
 
   const { width: defaultWidth, height: defaultHeight } = getShapeDimensions(shape);

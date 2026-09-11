@@ -51,7 +51,7 @@ type RectangleTransformUpdate = ShapeTransformUpdate;
 
 type ShapeSnapshot = Shape[];
 
-type CanvasStore = {
+export type CanvasStore = {
   activeTool: CanvasTool;
 
   shapes: Shape[];
@@ -584,25 +584,50 @@ export const useCanvasStore = create<CanvasStore>(
     },
 
     selectShape: (shapeId: string): void => {
-      set({
-        selectedShapeIds: [shapeId],
+      set((state) => {
+        if (
+          state.selectedShapeIds.length === 1 &&
+          state.selectedShapeIds[0] === shapeId
+        ) {
+          return state;
+        }
+        return {
+          selectedShapeIds: [shapeId],
+        };
       });
     },
 
     selectAllShapes: (): void => {
-      set((state) => ({
-        selectedShapeIds: resolveSelectAll(
+      set((state) => {
+        const nextSelected = resolveSelectAll(
           state.shapes,
           state.editingGroupId
-        ),
-      }));
+        );
+        if (
+          state.selectedShapeIds.length === nextSelected.length &&
+          state.selectedShapeIds.every((id, idx) => id === nextSelected[idx])
+        ) {
+          return state;
+        }
+        return {
+          selectedShapeIds: nextSelected,
+        };
+      });
     },
 
     setSelectedShapeIds: (
       shapeIds: string[],
     ): void => {
-      set({
-        selectedShapeIds: shapeIds,
+      set((state) => {
+        if (
+          state.selectedShapeIds.length === shapeIds.length &&
+          state.selectedShapeIds.every((id, idx) => id === shapeIds[idx])
+        ) {
+          return state;
+        }
+        return {
+          selectedShapeIds: shapeIds,
+        };
       });
     },
 
@@ -634,14 +659,24 @@ export const useCanvasStore = create<CanvasStore>(
     },
 
     clearSelection: (): void => {
-      set({
-        selectedShapeIds: [],
+      set((state) => {
+        if (state.selectedShapeIds.length === 0) {
+          return state;
+        }
+        return {
+          selectedShapeIds: [],
+        };
       });
     },
 
     setZoom: (zoom: number): void => {
-      set({
-        zoom,
+      set((state) => {
+        if (state.zoom === zoom) {
+          return state;
+        }
+        return {
+          zoom,
+        };
       });
     },
 
@@ -649,11 +684,16 @@ export const useCanvasStore = create<CanvasStore>(
       x: number,
       y: number,
     ): void => {
-      set({
-        pan: {
-          x,
-          y,
-        },
+      set((state) => {
+        if (state.pan.x === x && state.pan.y === y) {
+          return state;
+        }
+        return {
+          pan: {
+            x,
+            y,
+          },
+        };
       });
     },
 

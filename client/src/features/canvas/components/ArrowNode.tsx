@@ -25,7 +25,6 @@ function ArrowNodeComponent({
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
 
-  const selectedShapeIds = useCanvasStore((state) => state.selectedShapeIds);
   const moveSelectedShapes = useCanvasStore((state) => state.moveSelectedShapes);
 
   const {
@@ -119,7 +118,7 @@ function ArrowNodeComponent({
           const isModifier = Boolean(
             event.evt.shiftKey || event.evt.ctrlKey || event.evt.metaKey
           );
-          if (isModifier || !selectedShapeIds.includes(shape.id)) {
+          if (isModifier || !isSelected) {
             handleSelectionClick(event);
           }
         }}
@@ -139,7 +138,7 @@ function ArrowNodeComponent({
             return;
           }
 
-          if (!selectedShapeIds.includes(shape.id)) {
+          if (!isSelected) {
             selectShape(shape.id);
           }
 
@@ -164,7 +163,7 @@ function ArrowNodeComponent({
           const dx = currentX - dragStart.x;
           const dy = currentY - dragStart.y;
 
-          if (selectedShapeIds.length > 1) {
+          if (useCanvasStore.getState().selectedShapeIds.length > 1) {
             moveSelectedShapes(dx, dy);
             dragStartRef.current = { x: currentX, y: currentY };
           }

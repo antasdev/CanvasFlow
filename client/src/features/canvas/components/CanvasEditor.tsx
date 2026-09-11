@@ -62,12 +62,9 @@ import {
 
 import CanvasGrid from "./CanvasGrid";
 import CanvasZoomControls from "./CanvasZoomControls";
-import CollaboratorCursor from "./CollaboratorCursor";
-import CollaboratorSelection from "./CollaboratorSelection";
-import CollaboratorShapeLock from "./CollaboratorShapeLock";
+import CollaboratorLayer from "./CollaboratorLayer";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { RecoveryStatusIndicator } from "./RecoveryStatusIndicator";
-import RemoteCursorLayer from "./RemoteCursorLayer";
 import ShapeRenderer from "./ShapeRenderer";
 import ShapeStyleToolbar from "./ShapeStyleToolbar";
 import { SmartGuideOverlay } from "./SmartGuideOverlay";
@@ -204,18 +201,6 @@ export default function CanvasEditor({
 
     const selectedShapeIds = useCanvasStore(
         (state) => state.selectedShapeIds,
-    );
-
-    const remoteCursors = useCanvasStore(
-        (state) => state.remoteCursors,
-    );
-
-    const remoteSelections = useCanvasStore(
-        (state) => state.remoteSelections,
-    );
-
-    const remoteShapeLocks = useCanvasStore(
-        (state) => state.remoteShapeLocks,
     );
 
     const setActiveTool = useCanvasStore(
@@ -2272,32 +2257,7 @@ export default function CanvasEditor({
                     </Layer>
 
                     {/* Dedicated Collaborator Overlay Layer */}
-                    <Layer listening={false}>
-                        {Object.values(remoteSelections).map((selection) => (
-                            <CollaboratorSelection
-                                key={selection.userId}
-                                selection={selection}
-                                shapes={shapes}
-                            />
-                        ))}
-
-                        {Object.values(remoteShapeLocks).map((lock) => (
-                            <CollaboratorShapeLock
-                                key={lock.shapeId}
-                                lock={lock}
-                                shapes={shapes}
-                            />
-                        ))}
-
-                        {Object.values(remoteCursors).map((cursor) => (
-                            <CollaboratorCursor
-                                key={cursor.userId}
-                                cursor={cursor}
-                            />
-                        ))}
-
-                        <RemoteCursorLayer />
-                    </Layer>
+                    <CollaboratorLayer shapes={shapes} />
                 </Stage>
             ) : null}
 
