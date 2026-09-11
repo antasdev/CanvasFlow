@@ -20,6 +20,10 @@ import {
 import { screenToWorld, worldToScreen } from "../utils/canvas.coordinates";
 import { calculateCenterPan } from "../utils/viewport.utils";
 import { simplifyStroke } from "../utils/stroke-simplification";
+import {
+  getViewportWorldBounds,
+  filterVisibleRootShapes,
+} from "../utils/viewport-culling.utils";
 import { calculateContentBounds } from "@/features/export/utils/export-bounds.utils";
 import { sortShapesForExport } from "@/features/export/utils/export-order.utils";
 import type { AABB } from "../utils/alignment.utils";
@@ -414,6 +418,84 @@ describe("Slice 50: Performance Audit & Baselines", () => {
       expect(hasBroadShapesSubscription).toBe(true);
       expect(hasBroadZoomSubscription).toBe(true);
       expect(hasBroadSelectionSubscription).toBe(true);
+    });
+  });
+
+  describe("9. Slice 51: Viewport Culling & Rendered Node Reduction Benchmarks", () => {
+    const scales = [1000, 5000, 10000];
+
+    for (const count of scales) {
+      it(`measures viewport culling and candidate node reduction for ${count.toLocaleString()} shapes`, () => {
+        const shapes = generatePerformanceBoard(count);
+        const vp = getViewportWorldBounds({ width: 1920, height: 1080 }, { x: 0, y: 0 }, 1, 100);
+
+        const start = performance.now();
+        const visibleShapes = filterVisibleRootShapes(shapes, vp);
+        const durationMs = performance.now() - start;
+
+        const visibleCount = visibleShapes.length;
+        const reductionPercent = ((count - visibleCount) / count) * 100;
+
+        benchmarkResults.push({
+          operation: "Viewport Culling Filter",
+          shapeCount: count,
+          durationMs,
+          itemsPerMs: count / Math.max(0.001, durationMs),
+        });
+
+        benchmarkResults.push({
+          operation: `Rendered Node Reduction (${reductionPercent.toFixed(1)}% saved)`,
+          shapeCount: count,
+          durationMs: visibleCount,
+          itemsPerMs: visibleCount,
+        });
+
+        // The culling filter must run efficiently even for 10k shapes
+        expect(durationMs).toBeLessThan(50);
+        // On a 1080p viewport, vast majority of shapes on a large board must be culled
+        expect(reductionPercent).toBeGreaterThan(60);
+      });
+    }
+
+    it("measures viewport culling during camera panning (10 successive frames across 10k shapes)", () => {
+      const shapes = generatePerformanceBoard(10000);
+      const panSteps = 10;
+      let totalDuration = 0;
+
+      for (let i = 0; i < panSteps; i++) {
+        const pan = { x: i * 50, y: i * 30 };
+        const vp = getViewportWorldBounds({ width: 1920, height: 1080 }, pan, 1, 100);
+
+        const start = performance.now();
+        const visible = filterVisibleRootShapes(shapes, vp);
+        totalDuration += performance.now() - start;
+        expect(visible.length).toBeGreaterThan(0);
+      }
+
+      const avgDurationPerPan = totalDuration / panSteps;
+
+      benchmarkResults.push({
+        operation: "Successive Pan Frame Recalc (Avg)",
+        shapeCount: 10000,
+        durationMs: avgDurationPerPan,
+        itemsPerMs: 10000 / Math.max(0.001, avgDurationPerPan),
+      });
+
+      // Recalculating visible shapes per pan frame should be fast
+      expect(avgDurationPerPan).toBeLessThan(25);
+    });
+
+    it("measures viewport culling during camera zoom (zoom in and zoom out across 10k shapes)", () => {
+      const shapes = generatePerformanceBoard(10000);
+      const vpZoomIn = getViewportWorldBounds({ width: 1920, height: 1080 }, { x: 0, y: 0 }, 2, 100);
+      const vpZoomOut = getViewportWorldBounds({ width: 1920, height: 1080 }, { x: 0, y: 0 }, 0.5, 100);
+
+      const visibleZoomIn = filterVisibleRootShapes(shapes, vpZoomIn);
+      const visibleZoomOut = filterVisibleRootShapes(shapes, vpZoomOut);
+
+      // Zooming in shrinks visible world bounds -> fewer shapes visible
+      // Zooming out expands visible world bounds -> more shapes visible
+      expect(visibleZoomIn.length).toBeLessThan(visibleZoomOut.length);
     });
   });
 
