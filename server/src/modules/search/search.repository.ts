@@ -4,6 +4,7 @@ import { CanvasModel } from "../canvas/canvas.model";
 import { ShapeModel } from "../shape/shape.model";
 import { CommentModel } from "../comment/comment.model";
 import {
+  EntityCursor,
   RawBoardSearchResult,
   RawCanvasSearchResult,
   RawShapeSearchResult,
@@ -12,28 +13,48 @@ import {
 
 export interface CursorFilter {
   timestamp: Date;
-  id: string;
+  id?: string;
+}
+
+export type EntityQueryCursor = EntityCursor | CursorFilter;
+
+export interface QueryPlanExecutionStats {
+  winningPlan: Record<string, unknown>;
+  keysExamined: number;
+  docsExamined: number;
+  nReturned: number;
+  executionTimeMillis: number;
+  stages: string[];
 }
 
 export class SearchRepository {
   /**
    * Builds the Mongoose cursor condition for deterministic createdAt DESC, _id DESC ordering.
    */
-  private buildCursorCondition(
-    cursor?: CursorFilter
+  buildCursorCondition(
+    cursor?: EntityQueryCursor
   ): Record<string, unknown> | null {
     if (!cursor) {
       return null;
     }
 
+    const date = "t" in cursor ? new Date(cursor.t) : cursor.timestamp;
+    const id = cursor.id;
+
+    if (id) {
+      return {
+        $or: [
+          { createdAt: { $lt: date } },
+          {
+            createdAt: date,
+            _id: { $lt: new Types.ObjectId(id) },
+          },
+        ],
+      };
+    }
+
     return {
-      $or: [
-        { createdAt: { $lt: cursor.timestamp } },
-        {
-          createdAt: cursor.timestamp,
-          _id: { $lt: new Types.ObjectId(cursor.id) },
-        },
-      ],
+      createdAt: { $lt: date },
     };
   }
 
@@ -44,7 +65,7 @@ export class SearchRepository {
     accessibleBoardIds: Types.ObjectId[],
     escapedRegex: string,
     limit: number,
-    cursor?: CursorFilter
+    cursor?: EntityQueryCursor
   ): Promise<RawBoardSearchResult[]> {
     if (accessibleBoardIds.length === 0) {
       return [];
@@ -84,7 +105,7 @@ export class SearchRepository {
     accessibleBoardIds: Types.ObjectId[],
     escapedRegex: string,
     limit: number,
-    cursor?: CursorFilter
+    cursor?: EntityQueryCursor
   ): Promise<RawCanvasSearchResult[]> {
     if (accessibleBoardIds.length === 0) {
       return [];
@@ -122,7 +143,7 @@ export class SearchRepository {
     accessibleCanvasIds: Types.ObjectId[],
     escapedRegex: string,
     limit: number,
-    cursor?: CursorFilter
+    cursor?: EntityQueryCursor
   ): Promise<RawShapeSearchResult[]> {
     if (accessibleCanvasIds.length === 0) {
       return [];
@@ -161,7 +182,7 @@ export class SearchRepository {
     accessibleBoardIds: Types.ObjectId[],
     escapedRegex: string,
     limit: number,
-    cursor?: CursorFilter
+    cursor?: EntityQueryCursor
   ): Promise<RawCommentSearchResult[]> {
     if (accessibleBoardIds.length === 0) {
       return [];
@@ -266,6 +287,77 @@ export class SearchRepository {
     }
 
     return map;
+  }
+
+  /**
+   * Diagnostic test-only helper to inspect MongoDB execution plans with executionStats.
+   * Internal / test-only - never exposed via public endpoints.
+   */
+  async explainQuery(
+    entity: "board" | "canvas" | "shape" | "comment",
+    filter: Record<string, unknown>,
+    sort: Record<string, 1 | -1> = { createdAt: -1, _id: -1 },
+    limit: number = 20
+  ): Promise<QueryPlanExecutionStats> {
+    let rawExplain: Record<string, unknown>;
+
+    switch (entity) {
+      case "board":
+        rawExplain = (await BoardModel.find(filter)
+          .sort(sort)
+          .limit(limit)
+          .explain("executionStats")) as unknown as Record<string, unknown>;
+        break;
+      case "canvas":
+        rawExplain = (await CanvasModel.find(filter)
+          .sort(sort)
+          .limit(limit)
+          .explain("executionStats")) as unknown as Record<string, unknown>;
+        break;
+      case "shape":
+        rawExplain = (await ShapeModel.find(filter)
+          .sort(sort)
+          .limit(limit)
+          .explain("executionStats")) as unknown as Record<string, unknown>;
+        break;
+      case "comment":
+        rawExplain = (await CommentModel.find(filter)
+          .sort(sort)
+          .limit(limit)
+          .explain("executionStats")) as unknown as Record<string, unknown>;
+        break;
+    }
+
+    const executionStats = (rawExplain.executionStats || {}) as Record<string, unknown>;
+    const queryPlanner = (rawExplain.queryPlanner || {}) as Record<string, unknown>;
+    const winningPlan = (queryPlanner.winningPlan || {}) as Record<string, unknown>;
+
+    const stages: string[] = [];
+    const collectStages = (plan: Record<string, unknown>) => {
+      if (typeof plan.stage === "string") {
+        stages.push(plan.stage);
+      }
+      if (plan.inputStage && typeof plan.inputStage === "object") {
+        collectStages(plan.inputStage as Record<string, unknown>);
+      }
+      if (Array.isArray(plan.inputStages)) {
+        for (const inputStage of plan.inputStages) {
+          if (typeof inputStage === "object" && inputStage !== null) {
+            collectStages(inputStage as Record<string, unknown>);
+          }
+        }
+      }
+    };
+    collectStages(winningPlan);
+
+    return {
+      winningPlan,
+      keysExamined: Number(executionStats.totalKeysExamined || 0),
+      docsExamined: Number(executionStats.totalDocsExamined || 0),
+      nReturned: Number(executionStats.nReturned || 0),
+      executionTimeMillis: Number(executionStats.executionTimeMillis || 0),
+      stages,
+    };
   }
 }
 

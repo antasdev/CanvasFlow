@@ -7,16 +7,19 @@ import { workspaceRepository } from "../workspace/workspace.repository";
 import { workspaceMemberRepository } from "../workspace/workspaceMember.repository";
 import { WorkspaceRole, WorkspaceVisibility } from "../workspace/workspace.types";
 import { BoardVisibility } from "../board/board.types";
-import { searchRepository, CursorFilter } from "./search.repository";
+import { searchRepository, CursorFilter, EntityQueryCursor } from "./search.repository";
 import {
   SearchEntityType,
   SearchResultItem,
   SearchResponseDto,
   SearchQueryInput,
+  EntityCursor,
+  CompositeCursorPayload,
+  ENTITY_TYPE_PRIORITY,
 } from "./search.types";
 import {
   escapeRegex,
-  encodeCursor,
+  encodeV2Cursor,
   decodeCursor,
 } from "./search.validation";
 
@@ -64,6 +67,7 @@ export class SearchService {
 
   /**
    * Authorizes the user and determines the accessible board IDs for the search request.
+   * Leverages lightweight projections to avoid hydrating full Board documents.
    */
   private async resolveAccessibleBoardIds(
     userId: Types.ObjectId,
@@ -123,7 +127,8 @@ export class SearchService {
       );
     }
 
-    const allBoards = await boardRepository.findByWorkspaceId(wsObjId);
+    // Optimization: query lightweight auth summaries ({ _id, visibility, createdBy })
+    const allBoards = await boardRepository.findBoardAuthSummaries(wsObjId);
 
     if (isOwner || memberRole === WorkspaceRole.OWNER || memberRole === WorkspaceRole.ADMIN) {
       return allBoards.map((b) => b._id);
@@ -146,6 +151,20 @@ export class SearchService {
   }
 
   /**
+   * Converts a cursor to an EntityCursor if possible.
+   */
+  private toEntityCursor(
+    c?: EntityQueryCursor
+  ): EntityCursor | undefined {
+    if (!c) return undefined;
+    if ("t" in c) return c;
+    if (c.id) {
+      return { t: c.timestamp.getTime(), id: c.id };
+    }
+    return undefined;
+  }
+
+  /**
    * Primary search execution entry point.
    */
   async search(
@@ -162,13 +181,50 @@ export class SearchService {
 
     const limit = Math.min(Math.max(input.limit ?? 20, 1), 50);
 
-    let cursorFilter: CursorFilter | undefined;
+    const requestedTypes =
+      input.types && input.types.length > 0
+        ? input.types
+        : DEFAULT_ENTITY_TYPES;
+
+    let cursorBoard: EntityQueryCursor | undefined;
+    let cursorCanvas: EntityQueryCursor | undefined;
+    let cursorShape: EntityQueryCursor | undefined;
+    let cursorComment: EntityQueryCursor | undefined;
+
     if (input.cursor) {
       const decoded = decodeCursor(input.cursor);
       if (!decoded) {
         throw new ApiError(HttpStatus.BAD_REQUEST, "Invalid cursor.");
       }
-      cursorFilter = decoded;
+
+      if (decoded.version === 2 && decoded.v2) {
+        cursorBoard = decoded.v2.b;
+        cursorCanvas = decoded.v2.c;
+        cursorShape = decoded.v2.s;
+        cursorComment = decoded.v2.m;
+      } else if (decoded.version === 1 && decoded.v1) {
+        const v1Date = new Date(decoded.v1.timestamp);
+        const isSingleEntity = requestedTypes.length === 1;
+
+        if (isSingleEntity) {
+          const v1Filter: CursorFilter = {
+            timestamp: v1Date,
+            id: decoded.v1.id,
+          };
+          cursorBoard = v1Filter;
+          cursorCanvas = v1Filter;
+          cursorShape = v1Filter;
+          cursorComment = v1Filter;
+        } else {
+          const v1Filter: CursorFilter = {
+            timestamp: v1Date,
+          };
+          cursorBoard = v1Filter;
+          cursorCanvas = v1Filter;
+          cursorShape = v1Filter;
+          cursorComment = v1Filter;
+        }
+      }
     }
 
     const accessibleBoardIds = await this.resolveAccessibleBoardIds(
@@ -189,11 +245,6 @@ export class SearchService {
       };
     }
 
-    const requestedTypes =
-      input.types && input.types.length > 0
-        ? input.types
-        : DEFAULT_ENTITY_TYPES;
-
     const escapedQuery = escapeRegex(trimmedQuery);
     const queryLimit = limit + 1;
 
@@ -206,7 +257,7 @@ export class SearchService {
         accessibleBoardIds,
         escapedQuery,
         queryLimit,
-        cursorFilter
+        cursorBoard
       );
 
       if (rawBoards.length > limit) {
@@ -241,7 +292,7 @@ export class SearchService {
         accessibleBoardIds,
         escapedQuery,
         queryLimit,
-        cursorFilter
+        cursorCanvas
       );
 
       if (rawCanvases.length > limit) {
@@ -275,7 +326,7 @@ export class SearchService {
           canvasIds,
           escapedQuery,
           queryLimit,
-          cursorFilter
+          cursorShape
         );
 
         if (rawShapes.length > limit) {
@@ -309,7 +360,7 @@ export class SearchService {
         accessibleBoardIds,
         escapedQuery,
         queryLimit,
-        cursorFilter
+        cursorComment
       );
 
       if (rawComments.length > limit) {
@@ -339,12 +390,20 @@ export class SearchService {
       }
     }
 
-    // Deterministic ordering: createdAt DESC, id DESC
+    // Deterministic ordering:
+    // 1. createdAt DESC
+    // 2. ENTITY_TYPE_PRIORITY (board=1, canvas=2, shape=3, comment=4)
+    // 3. id DESC (within same entity type)
     candidateItems.sort((a, b) => {
       const timeA = new Date(a.createdAt).getTime();
       const timeB = new Date(b.createdAt).getTime();
       if (timeA !== timeB) {
         return timeB - timeA;
+      }
+      const priorityA = ENTITY_TYPE_PRIORITY[a.entityType];
+      const priorityB = ENTITY_TYPE_PRIORITY[b.entityType];
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
       }
       return b.id.localeCompare(a.id);
     });
@@ -394,10 +453,46 @@ export class SearchService {
       }
     }
 
+    // Determine per-entity cursor progress:
+    // Every item consumed advances ONLY the cursor belonging to its own collection.
+    // Unconsumed entities retain their incoming progress.
+    let lastConsumedBoard: SearchResultItem | undefined;
+    let lastConsumedCanvas: SearchResultItem | undefined;
+    let lastConsumedShape: SearchResultItem | undefined;
+    let lastConsumedComment: SearchResultItem | undefined;
+
+    for (const item of paginatedItems) {
+      if (item.entityType === "board") lastConsumedBoard = item;
+      else if (item.entityType === "canvas") lastConsumedCanvas = item;
+      else if (item.entityType === "shape") lastConsumedShape = item;
+      else if (item.entityType === "comment") lastConsumedComment = item;
+    }
+
+    const nextB: EntityCursor | undefined = lastConsumedBoard
+      ? { t: new Date(lastConsumedBoard.createdAt).getTime(), id: lastConsumedBoard.id }
+      : this.toEntityCursor(cursorBoard);
+
+    const nextC: EntityCursor | undefined = lastConsumedCanvas
+      ? { t: new Date(lastConsumedCanvas.createdAt).getTime(), id: lastConsumedCanvas.id }
+      : this.toEntityCursor(cursorCanvas);
+
+    const nextS: EntityCursor | undefined = lastConsumedShape
+      ? { t: new Date(lastConsumedShape.createdAt).getTime(), id: lastConsumedShape.id }
+      : this.toEntityCursor(cursorShape);
+
+    const nextM: EntityCursor | undefined = lastConsumedComment
+      ? { t: new Date(lastConsumedComment.createdAt).getTime(), id: lastConsumedComment.id }
+      : this.toEntityCursor(cursorComment);
+
     let nextCursor: string | null = null;
     if (hasMore && paginatedItems.length > 0) {
-      const lastItem = paginatedItems[paginatedItems.length - 1];
-      nextCursor = encodeCursor(new Date(lastItem.createdAt), lastItem.id);
+      const v2Payload: CompositeCursorPayload = { v: 2 };
+      if (nextB) v2Payload.b = nextB;
+      if (nextC) v2Payload.c = nextC;
+      if (nextS) v2Payload.s = nextS;
+      if (nextM) v2Payload.m = nextM;
+
+      nextCursor = encodeV2Cursor(v2Payload);
     }
 
     return {

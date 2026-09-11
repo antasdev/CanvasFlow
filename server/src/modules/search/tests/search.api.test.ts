@@ -71,7 +71,6 @@ async function runSearchIntegrationTests(): Promise<void> {
     createdUserIds.push(userA._id);
     const tokenA = generateAccessToken({
       userId: userA._id.toString(),
-      email: userA.email,
       role: userA.role,
     });
 
@@ -85,7 +84,6 @@ async function runSearchIntegrationTests(): Promise<void> {
     createdUserIds.push(userB._id);
     const tokenB = generateAccessToken({
       userId: userB._id.toString(),
-      email: userB.email,
       role: userB.role,
     });
 
@@ -99,7 +97,6 @@ async function runSearchIntegrationTests(): Promise<void> {
     createdUserIds.push(userC._id);
     const tokenC = generateAccessToken({
       userId: userC._id.toString(),
-      email: userC.email,
       role: userC.role,
     });
 
