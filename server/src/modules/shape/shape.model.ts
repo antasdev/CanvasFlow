@@ -202,6 +202,28 @@ shapeSchema.index({
   text: 1,
 });
 
+shapeSchema.index(
+  {
+    parentId: 1,
+    zIndex: 1,
+  },
+  { sparse: true }
+);
+
+shapeSchema.index(
+  {
+    "connector.sourceShapeId": 1,
+  },
+  { sparse: true }
+);
+
+shapeSchema.index(
+  {
+    "connector.targetShapeId": 1,
+  },
+  { sparse: true }
+);
+
 export const ShapeModel = model<Shape>(
   "Shape",
   shapeSchema

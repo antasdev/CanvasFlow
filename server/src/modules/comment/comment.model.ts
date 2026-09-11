@@ -134,5 +134,6 @@ commentSchema.index({ boardId: 1, shapeId: 1, createdAt: 1 });
 commentSchema.index({ parentCommentId: 1, createdAt: 1 });
 commentSchema.index({ authorId: 1, createdAt: -1 });
 commentSchema.index({ boardId: 1, deletedAt: 1, createdAt: -1 });
+commentSchema.index({ boardId: 1, canvasId: 1, isResolved: 1, deletedAt: 1 });
 
 export const CommentModel = model<Comment>("Comment", commentSchema);

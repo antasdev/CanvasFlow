@@ -37,8 +37,8 @@ const workspaceMemberSchema = new Schema(
  * Indexes
  */
 
-// Find all members of a workspace
-workspaceMemberSchema.index({ workspaceId: 1 });
+// Find all members of a workspace sorted by join/creation date
+workspaceMemberSchema.index({ workspaceId: 1, createdAt: 1 });
 
 // Find all workspaces for a user
 workspaceMemberSchema.index({ userId: 1 });

@@ -8,7 +8,6 @@ const boardSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Workspace",
       required: true,
-      index: true,
     },
 
     name: {
@@ -56,7 +55,7 @@ const boardSchema = new Schema(
   }
 );
 
-// Compound index
+// Compound indexes
 boardSchema.index({
   workspaceId: 1,
   isArchived: 1,
@@ -66,6 +65,12 @@ boardSchema.index({
   workspaceId: 1,
   isArchived: 1,
   name: 1,
+});
+
+boardSchema.index({
+  workspaceId: 1,
+  isArchived: 1,
+  createdAt: -1,
 });
 
 const MODEL_NAME = "Board";
