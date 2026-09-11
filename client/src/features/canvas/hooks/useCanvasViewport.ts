@@ -9,6 +9,7 @@ import {
 } from "../constants";
 import { useCanvasStore } from "../store";
 import type { CanvasPoint } from "../utils/canvas.coordinates";
+import { useRafScheduler } from "../utils/raf.utils";
 import {
   calculatePointerZoom,
   calculateWheelTransform,
@@ -29,42 +30,50 @@ export function useCanvasViewport({ stageRef }: UseCanvasViewportOptions = {}) {
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ startPan: CanvasPoint; pointerStart: CanvasPoint } | null>(null);
 
+  // Coalesce high-frequency panning events to animation frames
+  const panRaf = useRafScheduler<CanvasPoint>((screenPoint) => {
+    if (!panStartRef.current) return;
+    const nextPan = calculatePanDelta(
+      panStartRef.current.startPan,
+      panStartRef.current.pointerStart,
+      screenPoint,
+    );
+    setPan(nextPan.x, nextPan.y);
+  });
+
   const startPan = useCallback(
     (screenPoint: CanvasPoint): void => {
+      panRaf.cancel();
       panStartRef.current = {
         startPan: { ...pan },
         pointerStart: { ...screenPoint },
       };
       setIsPanning(true);
     },
-    [pan],
+    [pan, panRaf],
   );
 
   const updatePan = useCallback(
     (screenPoint: CanvasPoint): void => {
-      if (!panStartRef.current) return;
-      const nextPan = calculatePanDelta(
-        panStartRef.current.startPan,
-        panStartRef.current.pointerStart,
-        screenPoint,
-      );
-      setPan(nextPan.x, nextPan.y);
+      panRaf.schedule(screenPoint);
     },
-    [setPan],
+    [panRaf],
   );
 
   const endPan = useCallback((): void => {
+    panRaf.flush();
     panStartRef.current = null;
     setIsPanning(false);
-  }, []);
+  }, [panRaf]);
 
   const cancelPan = useCallback((): void => {
+    panRaf.cancel();
     if (panStartRef.current) {
       setPan(panStartRef.current.startPan.x, panStartRef.current.startPan.y);
       panStartRef.current = null;
     }
     setIsPanning(false);
-  }, [setPan]);
+  }, [panRaf, setPan]);
 
   const handleWheel = useCallback(
     (event: Konva.KonvaEventObject<WheelEvent>): void => {

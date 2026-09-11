@@ -11,7 +11,7 @@ import type {
   SelectionPoint,
   SelectionMode,
 } from "../types";
-
+import { useRafScheduler } from "../utils/raf.utils";
 
 export interface UseCanvasSelectionReturn {
   marquee: MarqueeState | null;
@@ -84,31 +84,38 @@ export function useCanvasSelection(
     setIsSelecting(controller.isSelecting());
   }, [controller]);
 
+  // Coalesce high-frequency selection preview state synchronization to animation frames
+  const selectionRaf = useRafScheduler<void>(() => {
+    syncStateFromController();
+  });
+
   const startSelection = useCallback(
     (
       worldPoint: SelectionPoint,
       event: Konva.KonvaEventObject<MouseEvent | TouchEvent>
     ): boolean => {
+      selectionRaf.cancel();
       const mode = getSelectionMode(event);
       const started = controller.startSelection(worldPoint, mode);
       syncStateFromController();
       return started;
     },
-    [controller, getSelectionMode, syncStateFromController]
+    [controller, getSelectionMode, selectionRaf, syncStateFromController]
   );
 
   const updateSelection = useCallback(
     (worldPoint: SelectionPoint): void => {
       controller.updateSelection(worldPoint);
-      syncStateFromController();
+      selectionRaf.schedule();
     },
-    [controller, syncStateFromController]
+    [controller, selectionRaf]
   );
 
   const endSelection = useCallback((): void => {
+    selectionRaf.cancel();
     controller.endSelection();
     syncStateFromController();
-  }, [controller, syncStateFromController]);
+  }, [controller, selectionRaf, syncStateFromController]);
 
   const handleShapeClick = useCallback(
     (
